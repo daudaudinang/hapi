@@ -17,6 +17,7 @@ import { reduceChatBlocks } from '@/chat/reducer'
 import { reconcileChatBlocks } from '@/chat/reconcile'
 import { HappyComposer } from '@/components/AssistantChat/HappyComposer'
 import { HappyThread } from '@/components/AssistantChat/HappyThread'
+import { ResumeLoading } from '@/components/AssistantChat/ResumeLoading'
 import { useHappyRuntime } from '@/lib/assistant-runtime'
 import { createAttachmentAdapter } from '@/lib/attachmentAdapter'
 import { findUnsupportedCodexBuiltinSlashCommand } from '@/lib/codexSlashCommands'
@@ -39,6 +40,7 @@ export function SessionChat(props: {
     isLoadingMessages: boolean
     isLoadingMoreMessages: boolean
     isSending: boolean
+    isResuming?: boolean
     pendingCount: number
     messagesVersion: number
     onBack: () => void
@@ -378,6 +380,7 @@ export function SessionChat(props: {
                         active={props.session.active}
                         allowSendWhenInactive
                         thinking={props.session.thinking}
+                        resuming={props.isResuming}
                         agentState={props.session.agentState}
                         contextSize={reduced.latestUsage?.contextSize}
                         controlledByUser={controlledByUser}

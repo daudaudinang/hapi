@@ -1,3 +1,5 @@
+import type { PermissionMode } from '@hapi/protocol/types'
+
 export interface SpawnSessionOptions {
     machineId?: string
     directory: string
@@ -9,6 +11,7 @@ export interface SpawnSessionOptions {
     effort?: string
     modelReasoningEffort?: string
     yolo?: boolean
+    permissionMode?: PermissionMode
     token?: string
     sessionType?: 'simple' | 'worktree'
     worktreeName?: string

@@ -25,10 +25,13 @@ import {
     type RpcUploadFileResponse
 } from './rpcGateway'
 import { SessionCache } from './sessionCache'
+import { MessageQueue, type EnqueueResult, type MessagePayload } from '../queue/messageQueue'
+import { AutoResumeOrchestrator } from '../resume/autoResumeOrchestrator'
 
 export type { Session, SyncEvent } from '@hapi/protocol/types'
 export type { Machine } from './machineCache'
 export type { SyncEventListener } from './eventPublisher'
+export type { EnqueueResult, MessagePayload } from '../queue/messageQueue'
 export type {
     RpcCommandResponse,
     RpcDeleteUploadResponse,
@@ -37,6 +40,7 @@ export type {
     RpcReadFileResponse,
     RpcUploadFileResponse
 } from './rpcGateway'
+import type { QueueMetrics } from '../queue/messageQueue'
 
 export type ResumeSessionResult =
     | { type: 'success'; sessionId: string }
@@ -48,6 +52,8 @@ export class SyncEngine {
     private readonly machineCache: MachineCache
     private readonly messageService: MessageService
     private readonly rpcGateway: RpcGateway
+    private readonly messageQueue: MessageQueue
+    private readonly autoResumeOrchestrator: AutoResumeOrchestrator
     private inactivityTimer: NodeJS.Timeout | null = null
 
     constructor(
@@ -61,6 +67,19 @@ export class SyncEngine {
         this.machineCache = new MachineCache(store, this.eventPublisher)
         this.messageService = new MessageService(store, io, this.eventPublisher)
         this.rpcGateway = new RpcGateway(io, rpcRegistry)
+        this.messageQueue = new MessageQueue(
+            store.pendingMessages,
+            async (sessionId: string) => this.archiveSession(sessionId)
+        )
+        this.autoResumeOrchestrator = new AutoResumeOrchestrator(
+            store.getDatabase(),
+            this.messageQueue,
+            store.pendingMessages,
+            async (sessionId: string, namespace: string) => this.resumeSession(sessionId, namespace),
+            (sessionId: string) => this.getSession(sessionId) ?? null,
+            async (sessionId: string) => this.archiveSession(sessionId),
+            async (sessionId: string, payload: MessagePayload) => this.messageService.sendMessage(sessionId, payload)
+        )
         this.reloadAll()
         this.inactivityTimer = setInterval(() => this.expireInactive(), 5_000)
     }
@@ -243,6 +262,77 @@ export class SyncEngine {
             sentFrom?: 'telegram-bot' | 'webapp'
         }
     ): Promise<void> {
+        // Check if session is active
+        const session = this.getSession(sessionId)
+
+        if (!session) {
+            // Session doesn't exist, queue the message
+            const result = await this.messageQueue.enqueue(sessionId, payload as MessagePayload)
+
+            if ('archived' in result && result.archived) {
+                // Session was archived due to overflow
+                // Note: Using 'any' to avoid modifying SyncEventSchema in shared package
+                this.eventPublisher.emit({
+                    type: 'session-updated' as any,
+                    sessionId,
+                    data: { archived: true, reason: result.reason }
+                })
+                return
+            }
+
+            if ('rejected' in result && result.rejected) {
+                throw new Error(result.reason)
+            }
+
+            // Message queued successfully
+            // Note: Using 'any' to avoid modifying SyncEventSchema in shared package
+            if ('queueDepth' in result) {
+                this.eventPublisher.emit({
+                    type: 'message-received' as any,
+                    sessionId,
+                    data: { queued: true, queueDepth: result.queueDepth }
+                } as any)
+            }
+            return
+        }
+
+        if (!session.active) {
+            // Session exists but is inactive, queue the message
+            const result = await this.messageQueue.enqueue(sessionId, payload as MessagePayload)
+
+            if ('archived' in result && result.archived) {
+                // Session was archived due to overflow
+                this.eventPublisher.emit({
+                    type: 'session-updated' as any,
+                    sessionId,
+                    data: { archived: true, reason: result.reason }
+                })
+                return
+            }
+
+            if ('rejected' in result && result.rejected) {
+                throw new Error(result.reason)
+            }
+
+            // Message queued successfully
+            if ('queueDepth' in result) {
+                this.eventPublisher.emit({
+                    type: 'session-updated' as any,
+                    sessionId,
+                    data: { queued: true, queueDepth: result.queueDepth }
+                } as any)
+
+                // Trigger auto-resume on first pending message
+                if (result.queueDepth === 1) {
+                    this.triggerResume(sessionId, session.namespace).catch((error) => {
+                        console.error(`[AutoResume] Failed to trigger resume for session ${sessionId}:`, error)
+                    })
+                }
+            }
+            return
+        }
+
+        // Session is active, send message directly
         await this.messageService.sendMessage(sessionId, payload)
     }
 
@@ -325,7 +415,8 @@ export class SyncEngine {
         sessionType?: 'simple' | 'worktree',
         worktreeName?: string,
         resumeSessionId?: string,
-        effort?: string
+        effort?: string,
+        permissionMode?: PermissionMode
     ): Promise<{ type: 'success'; sessionId: string } | { type: 'error'; message: string }> {
         return await this.rpcGateway.spawnSession(
             machineId,
@@ -337,7 +428,8 @@ export class SyncEngine {
             sessionType,
             worktreeName,
             resumeSessionId,
-            effort
+            effort,
+            permissionMode
         )
     }
 
@@ -409,7 +501,8 @@ export class SyncEngine {
             undefined,
             undefined,
             resumeToken,
-            session.effort ?? undefined
+            session.effort ?? undefined,
+            session.permissionMode ?? undefined
         )
 
         if (spawnResult.type !== 'success') {
@@ -419,6 +512,17 @@ export class SyncEngine {
         const becameActive = await this.waitForSessionActive(spawnResult.sessionId)
         if (!becameActive) {
             return { type: 'error', message: 'Session failed to become active', code: 'resume_failed' }
+        }
+
+        try {
+            await this.applySessionConfig(spawnResult.sessionId, {
+                permissionMode: session.permissionMode,
+                model: session.model,
+                effort: session.effort,
+                collaborationMode: session.collaborationMode
+            })
+        } catch {
+            // Best-effort sync: resume already succeeded, spawn-time args should preserve mode for supported flavors.
         }
 
         if (spawnResult.sessionId !== access.sessionId) {
@@ -495,5 +599,64 @@ export class SyncEngine {
         error?: string
     }> {
         return await this.rpcGateway.listSkills(sessionId)
+    }
+
+    // Message Queue methods for AUTO_RESUME_INACTIVE_SESSIONS feature
+
+    getPendingMessages(sessionId: string) {
+        return this.messageQueue.getPending(sessionId)
+    }
+
+    getQueueMetrics(): QueueMetrics {
+        return this.messageQueue.getMetrics()
+    }
+
+    getQueueDepth(sessionId: string): number {
+        return this.messageQueue.getQueueDepth(sessionId)
+    }
+
+    hasPendingMessages(sessionId: string): boolean {
+        return this.messageQueue.hasPendingMessages(sessionId)
+    }
+
+    /**
+     * Queue a message for an inactive session (auto-resume flow)
+     * @param sessionId - Session ID to queue message for
+     * @param payload - Message payload to queue
+     * @returns EnqueueResult indicating success, archival, or rejection
+     */
+    async enqueueMessage(sessionId: string, payload: MessagePayload): Promise<EnqueueResult> {
+        return await this.messageQueue.enqueue(sessionId, payload)
+    }
+
+    /**
+     * Trigger background resume for an inactive session
+     * Does not wait for resume to complete - returns immediately
+     * @param sessionId - Session ID to resume
+     * @param namespace - Namespace for access control
+     */
+    async triggerResume(sessionId: string, namespace: string): Promise<void> {
+        try {
+            // Check if session has pending messages before triggering resume
+            const hasPending = this.messageQueue.hasPendingMessages(sessionId)
+
+            if (!hasPending) {
+                console.log(`[AutoResume] No pending messages for session ${sessionId}, skipping resume`)
+                return
+            }
+
+            console.log(`[AutoResume] Triggering resume for session ${sessionId}`)
+
+            // Delegate all resume/retry policies to orchestrator.
+            this.autoResumeOrchestrator.triggerResume(sessionId, namespace).then((result) => {
+                if (result.status === 'failed') {
+                    console.error(`[AutoResume] Failed to resume session ${sessionId}: ${result.reason}`)
+                }
+            }).catch((error) => {
+                console.error(`[AutoResume] Unexpected orchestrator error for session ${sessionId}:`, error)
+            })
+        } catch (error) {
+            console.error(`[AutoResume] Error triggering resume for session ${sessionId}:`, error)
+        }
     }
 }

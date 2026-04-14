@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "skill": "create-plan",
+  "version": "1.0",
+  "workflow_id": "WF_20260411_000001",
+  "step": "create-plan",
+  "status": "completed",
+  "output_type": "plan",
+  "agent": "create-plan",
+  "started_at": "2026-04-11T10:26:23+07:00",
+  "completed_at": "2026-04-11T10:26:23+07:00",
+  "deliverables": {
+    "plan_file": "/home/huynq/notebooks/hapi/plans/20260411-0940-auto-resume-inactive-sessions/plan.md",
+    "plan_name": "AUTO_RESUME_INACTIVE_SESSIONS",
+    "total_phases": 7,
+    "estimated_hours": 23
+  },
+  "summary": {
+    "problem": "Session becomes inactive after 30s timeout, user sends message → 409 error, no auto-resume",
+    "solution": "Implement auto-resume mechanism with SQLite-based message queue",
+    "phases": [
+      "Database Schema",
+      "Message Queue Service",
+      "Guard Modification",
+      "Auto-Resume Orchestrator",
+      "Frontend Changes",
+      "Testing & Validation",
+      "Monitoring & Rollback"
+    ]
+  }
+}

@@ -62,3 +62,13 @@ Nếu phát hiện lesson có giá trị nhưng chưa muốn close task ngay:
 ```text
 /lp:lesson-capture
 ```
+
+## F. LittlePea pipeline (SQLite + `lp_pipeline.py`)
+
+Khi dùng orchestrator có `workflow_id` / `sync-output` / delivery loop (`review-implement` → `qa-automation`):
+
+```text
+Xem: .agents/commands/lp:implement.md
+```
+
+**Tóm tắt:** `/lp:implement` mô tả vòng delivery đầy đủ; `/lp:implement-plan` chỉ là skill implement từ file plan (không bắt buộc SQLite).

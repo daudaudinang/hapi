@@ -274,15 +274,39 @@ export class ApiClient {
         return response.sessionId
     }
 
-    async sendMessage(sessionId: string, text: string, localId?: string | null, attachments?: AttachmentMetadata[]): Promise<void> {
-        await this.request(`/api/sessions/${encodeURIComponent(sessionId)}/messages`, {
+    async sendMessage(sessionId: string, text: string, localId?: string | null, attachments?: AttachmentMetadata[]): Promise<{ status: 'sent' } | { status: 'resuming'; sessionId: string } | { status: 'failed'; error: string; archived: boolean; reason?: string }> {
+        const res = await fetch(this.buildUrl(`/api/sessions/${encodeURIComponent(sessionId)}/messages`), {
             method: 'POST',
+            headers: {
+                'authorization': `Bearer ${this.token}`,
+                'content-type': 'application/json'
+            },
             body: JSON.stringify({
                 text,
                 localId: localId ?? undefined,
                 attachments: attachments ?? undefined
             })
         })
+
+        // Handle 202 - Auto-resume started, message queued
+        if (res.status === 202) {
+            const body = await res.json() as { queued: boolean; resuming: boolean; sessionId: string; message: string }
+            return { status: 'resuming', sessionId: body.sessionId }
+        }
+
+        // Handle 503 - Resume failed, session archived
+        if (res.status === 503) {
+            const body = await res.json() as { error: string; archived: boolean; reason?: string }
+            return { status: 'failed', error: body.error, archived: body.archived, reason: body.reason }
+        }
+
+        // Handle other errors
+        if (!res.ok) {
+            const bodyText = await res.text().catch(() => '')
+            throw new ApiError(`HTTP ${res.status} ${res.statusText}`, res.status, undefined, bodyText || undefined)
+        }
+
+        return { status: 'sent' }
     }
 
     async abortSession(sessionId: string): Promise<void> {

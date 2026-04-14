@@ -1,11 +1,13 @@
 import type { MiddlewareHandler } from 'hono'
 import { z } from 'zod'
 import { jwtVerify } from 'jose'
+import { getFeatureFlags, type FeatureFlags } from '../../config/features'
 
 export type WebAppEnv = {
     Variables: {
         userId: number
         namespace: string
+        features: FeatureFlags
     }
 }
 
@@ -40,6 +42,7 @@ export function createAuthMiddleware(jwtSecret: Uint8Array): MiddlewareHandler<W
 
             c.set('userId', parsed.data.uid)
             c.set('namespace', parsed.data.ns)
+            c.set('features', getFeatureFlags())
             await next()
             return
         } catch {

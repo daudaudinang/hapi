@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "skill": "review-implement",
+  "plan": "20260411-0940-auto-resume-inactive-sessions",
+  "ticket": null,
+  "status": "FAIL",
+  "timestamp": "2026-04-13T12:30:00.000Z",
+  "duration_min": 18,
+  "score": {
+    "total": 84.4,
+    "max": 130,
+    "percentage": 64.9,
+    "verdict": "CHANGES REQUESTED",
+    "has_critical": true
+  },
+  "artifacts": {
+    "primary": "/home/huynq/notebooks/hapi/.codex/pipeline/20260411-0940-auto-resume-inactive-sessions/04-review-implement.output.md",
+    "secondary": []
+  },
+  "next": {
+    "recommended_skill": "implement-plan",
+    "input_for_next": "/home/huynq/notebooks/hapi/plans/20260411-0940-auto-resume-inactive-sessions/plan.md",
+    "handoff_note": "Fix hub typecheck; wire AutoResumeOrchestrator into triggerResume; await enqueue and return correct HTTP 202/503/400; extend WebAppEnv.features."
+  },
+  "blockers": [
+    "bun typecheck fails on hub",
+    "AutoResumeOrchestrator not wired to production triggerResume path (C1)",
+    "enqueueMessage async/sync mismatch in guards"
+  ],
+  "pending_questions": {
+    "questions": [
+      "Confirm guard returns 503 on queue overflow per PLAN_FIXES?"
+    ],
+    "resume_from": null,
+    "user_answers": null
+  }
+}

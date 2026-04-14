@@ -24,6 +24,9 @@ type UseSendMessageOptions = {
     resolveSessionId?: (sessionId: string) => Promise<string>
     onSessionResolved?: (sessionId: string) => void
     onBlocked?: (reason: BlockedReason) => void
+    onResuming?: (sessionId: string) => void
+    onResumed?: () => void
+    onArchiveFailed?: (reason?: string) => void
 }
 
 function findMessageByLocalId(
@@ -48,9 +51,11 @@ export function useSendMessage(
     sendMessage: (text: string, attachments?: AttachmentMetadata[]) => void
     retryMessage: (localId: string) => void
     isSending: boolean
+    isResuming: boolean
 } {
     const { haptic } = usePlatform()
     const [isResolving, setIsResolving] = useState(false)
+    const [isResuming, setIsResuming] = useState(false)
     const resolveGuardRef = useRef(false)
 
     const mutation = useMutation({
@@ -58,7 +63,24 @@ export function useSendMessage(
             if (!api) {
                 throw new Error('API unavailable')
             }
-            await api.sendMessage(input.sessionId, input.text, input.localId, input.attachments)
+            const result = await api.sendMessage(input.sessionId, input.text, input.localId, input.attachments)
+
+            // Handle auto-resume responses
+            if (result.status === 'resuming') {
+                setIsResuming(true)
+                options?.onResuming?.(result.sessionId)
+                // After a delay, assume resume completed and refresh
+                setTimeout(() => {
+                    setIsResuming(false)
+                    options?.onResumed?.()
+                }, 3000) // 3 second delay for resume
+            } else if (result.status === 'failed') {
+                setIsResuming(false)
+                options?.onArchiveFailed?.(result.reason)
+                throw new Error(result.error)
+            }
+
+            return result
         },
         onMutate: async (input) => {
             const optimisticMessage: DecryptedMessage = {
@@ -80,9 +102,12 @@ export function useSendMessage(
 
             appendOptimisticMessage(input.sessionId, optimisticMessage)
         },
-        onSuccess: (_, input) => {
-            updateMessageStatus(input.sessionId, input.localId, 'sent')
-            haptic.notification('success')
+        onSuccess: (result, input) => {
+            if (result.status === 'sent') {
+                updateMessageStatus(input.sessionId, input.localId, 'sent')
+                haptic.notification('success')
+            }
+            // If status is 'resuming', we keep the message as 'sending' until resume completes
         },
         onError: (_, input) => {
             updateMessageStatus(input.sessionId, input.localId, 'failed')
@@ -170,5 +195,6 @@ export function useSendMessage(
         sendMessage,
         retryMessage,
         isSending: mutation.isPending || isResolving,
+        isResuming,
     }
 }

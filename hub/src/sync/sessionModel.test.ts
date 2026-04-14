@@ -245,6 +245,7 @@ describe('session model', () => {
                 capturedEffort = effort
                 return { type: 'success', sessionId: session.id }
             }
+            ;(engine as any).applySessionConfig = async () => {}
             ;(engine as any).waitForSessionActive = async () => true
 
             const result = await engine.resumeSession(session.id, 'default')
@@ -303,12 +304,84 @@ describe('session model', () => {
                 capturedResumeSessionId = resumeSessionId
                 return { type: 'success', sessionId: session.id }
             }
+            ;(engine as any).applySessionConfig = async () => {}
             ;(engine as any).waitForSessionActive = async () => true
 
             const result = await engine.resumeSession(session.id, 'default')
 
             expect(result).toEqual({ type: 'success', sessionId: session.id })
             expect(capturedResumeSessionId).toBe('claude-session-1')
+        } finally {
+            engine.stop()
+        }
+    })
+
+    it('passes stored permission mode to rpc gateway and reapplies config on resume', async () => {
+        const store = new Store(':memory:')
+        const engine = new SyncEngine(
+            store,
+            {} as never,
+            new RpcRegistry(),
+            { broadcast() {} } as never
+        )
+
+        try {
+            const session = engine.getOrCreateSession(
+                'session-resume-permission-mode',
+                {
+                    path: '/tmp/project',
+                    host: 'localhost',
+                    machineId: 'machine-1',
+                    flavor: 'claude',
+                    claudeSessionId: 'claude-session-1'
+                },
+                null,
+                'default',
+                'sonnet',
+                'high'
+            )
+            ;(engine as any).sessionCache.applySessionConfig(session.id, { permissionMode: 'bypassPermissions' })
+            engine.getOrCreateMachine(
+                'machine-1',
+                { host: 'localhost', platform: 'linux', happyCliVersion: '0.1.0' },
+                null,
+                'default'
+            )
+            engine.handleMachineAlive({ machineId: 'machine-1', time: Date.now() })
+
+            let capturedPermissionMode: string | undefined
+            let capturedApplyConfig: Record<string, unknown> | undefined
+            ;(engine as any).rpcGateway.spawnSession = async (
+                _machineId: string,
+                _directory: string,
+                _agent: string,
+                _model?: string,
+                _modelReasoningEffort?: string,
+                _yolo?: boolean,
+                _sessionType?: 'simple' | 'worktree',
+                _worktreeName?: string,
+                _resumeSessionId?: string,
+                _effort?: string,
+                permissionMode?: string
+            ) => {
+                capturedPermissionMode = permissionMode
+                return { type: 'success', sessionId: session.id }
+            }
+            ;(engine as any).applySessionConfig = async (_sessionId: string, config: Record<string, unknown>) => {
+                capturedApplyConfig = config
+            }
+            ;(engine as any).waitForSessionActive = async () => true
+
+            const result = await engine.resumeSession(session.id, 'default')
+
+            expect(result).toEqual({ type: 'success', sessionId: session.id })
+            expect(capturedPermissionMode).toBe('bypassPermissions')
+            expect(capturedApplyConfig).toEqual({
+                permissionMode: 'bypassPermissions',
+                model: 'sonnet',
+                effort: 'high',
+                collaborationMode: undefined
+            })
         } finally {
             engine.stop()
         }

@@ -4,9 +4,11 @@ import { dirname } from 'node:path'
 
 import { MachineStore } from './machineStore'
 import { MessageStore } from './messageStore'
+import { PendingMessagesStore } from './pendingMessages'
 import { PushStore } from './pushStore'
 import { SessionStore } from './sessionStore'
 import { UserStore } from './userStore'
+import { MigrationRunner } from './migrationRunner'
 
 export type {
     StoredMachine,
@@ -16,19 +18,24 @@ export type {
     StoredUser,
     VersionedUpdateResult
 } from './types'
+export type { StoredPendingMessage } from './pendingMessages'
 export { MachineStore } from './machineStore'
 export { MessageStore } from './messageStore'
+export { PendingMessagesStore } from './pendingMessages'
 export { PushStore } from './pushStore'
 export { SessionStore } from './sessionStore'
 export { UserStore } from './userStore'
 
-const SCHEMA_VERSION: number = 6
+const SCHEMA_VERSION: number = 7
+// Migration system version (different from schema version for backward compatibility)
+const MIGRATION_SYSTEM_VERSION: number = 3
 const REQUIRED_TABLES = [
     'sessions',
     'machines',
     'messages',
     'users',
-    'push_subscriptions'
+    'push_subscriptions',
+    'pending_messages'
 ] as const
 
 export class Store {
@@ -40,6 +47,7 @@ export class Store {
     readonly messages: MessageStore
     readonly users: UserStore
     readonly push: PushStore
+    readonly pendingMessages: PendingMessagesStore
 
     constructor(dbPath: string) {
         this.dbPath = dbPath
@@ -81,6 +89,11 @@ export class Store {
         this.messages = new MessageStore(this.db)
         this.users = new UserStore(this.db)
         this.push = new PushStore(this.db)
+        this.pendingMessages = new PendingMessagesStore(this.db)
+    }
+
+    getDatabase(): Database {
+        return this.db
     }
 
     private initSchema(): void {
@@ -90,41 +103,55 @@ export class Store {
                 this.migrateLegacySchemaIfNeeded()
                 this.createSchema()
                 this.setUserVersion(SCHEMA_VERSION)
+                this.runNewMigrations()
                 return
             }
 
             this.createSchema()
             this.setUserVersion(SCHEMA_VERSION)
+            this.runNewMigrations()
             return
         }
 
         if (currentVersion === 1 && SCHEMA_VERSION === 2) {
             this.migrateFromV1ToV2()
             this.setUserVersion(SCHEMA_VERSION)
+            this.runNewMigrations()
             return
         }
 
         if (currentVersion === 2 && SCHEMA_VERSION === 3) {
             this.migrateFromV2ToV3()
             this.setUserVersion(SCHEMA_VERSION)
+            this.runNewMigrations()
             return
         }
 
         if (currentVersion === 3 && SCHEMA_VERSION === 4) {
             this.migrateFromV3ToV4()
             this.setUserVersion(SCHEMA_VERSION)
+            this.runNewMigrations()
             return
         }
 
         if (currentVersion === 4 && SCHEMA_VERSION === 5) {
             this.migrateFromV4ToV5()
             this.setUserVersion(SCHEMA_VERSION)
+            this.runNewMigrations()
             return
         }
 
         if (currentVersion === 5 && SCHEMA_VERSION === 6) {
             this.migrateFromV5ToV6()
             this.setUserVersion(SCHEMA_VERSION)
+            this.runNewMigrations()
+            return
+        }
+
+        if (currentVersion === 6 && SCHEMA_VERSION === 7) {
+            this.migrateFromV6ToV7()
+            this.setUserVersion(SCHEMA_VERSION)
+            this.runNewMigrations()
             return
         }
 
@@ -132,6 +159,30 @@ export class Store {
             this.migrateFromV4ToV5()
             this.migrateFromV5ToV6()
             this.setUserVersion(SCHEMA_VERSION)
+            this.runNewMigrations()
+            return
+        }
+
+        if (currentVersion === 5 && SCHEMA_VERSION === 7) {
+            this.migrateFromV5ToV6()
+            this.migrateFromV6ToV7()
+            this.setUserVersion(SCHEMA_VERSION)
+            this.runNewMigrations()
+            return
+        }
+
+        if (currentVersion === 4 && SCHEMA_VERSION === 7) {
+            this.migrateFromV4ToV5()
+            this.migrateFromV5ToV6()
+            this.migrateFromV6ToV7()
+            this.setUserVersion(SCHEMA_VERSION)
+            this.runNewMigrations()
+            return
+        }
+
+        if (currentVersion === 7) {
+            // Already at latest schema version, run new migrations only
+            this.runNewMigrations()
             return
         }
 
@@ -140,6 +191,25 @@ export class Store {
         }
 
         this.assertRequiredTablesPresent()
+    }
+
+    /**
+     * Run the new migration system (for incremental schema updates)
+     * This is separate from the legacy schema version system to maintain backward compatibility
+     */
+    private runNewMigrations(): void {
+        try {
+            const runner = new MigrationRunner()
+            // MigrationRunner currently exposes an async API.
+            // Fail fast on startup if migration task rejects.
+            void runner.runMigrations(this.db).catch((error) => {
+                console.error('Migration system failed:', error)
+                process.exit(1)
+            })
+        } catch (error) {
+            console.error('Failed to run migrations:', error)
+            throw error
+        }
     }
 
     private createSchema(): void {
@@ -331,6 +401,12 @@ export class Store {
         if (!columns.has('effort')) {
             this.db.exec('ALTER TABLE sessions ADD COLUMN effort TEXT')
         }
+    }
+
+    private migrateFromV6ToV7(): void {
+        // Migration now handled by new migration system
+        // Kept for backward compatibility with old databases
+        return
     }
 
     private getSessionColumnNames(): Set<string> {

@@ -1,0 +1,416 @@
+{
+  "reviewMetadata": {
+    "planName": "Auto-Resume Inactive Sessions",
+    "planPath": "/home/huynq/notebooks/hapi/plans/20260411-0940-auto-resume-inactive-sessions/plan.md",
+    "reviewDate": "2026-04-11",
+    "reviewer": "Claude Code Agent (Independent Review)",
+    "reviewType": "Comprehensive Implementation Plan Review",
+    "previousReviewDate": "2026-04-11",
+    "previousReviewStatus": "Ready for Implementation ✅ (Issues Fixed)"
+  },
+
+  "overallAssessment": {
+    "status": "NEEDS_REVISION",
+    "score": 8.0,
+    "maxScore": 10,
+    "confidenceLevel": "High",
+    "estimatedRevisionTime": "6-10 hours",
+    "readyAfterFixes": true
+  },
+
+  "decisionMatrix": {
+    "technicalDesign": {
+      "weight": 0.25,
+      "score": 8,
+      "notes": "Strong architecture, 3 critical gaps identified"
+    },
+    "testingStrategy": {
+      "weight": 0.20,
+      "score": 9,
+      "notes": "Excellent test coverage - unit, integration, load, manual"
+    },
+    "rollbackStrategy": {
+      "weight": 0.20,
+      "score": 10,
+      "notes": "Outstanding - best-in-class with 4 rollback levels and 10 triggers"
+    },
+    "security": {
+      "weight": 0.15,
+      "score": 7,
+      "notes": "Good but missing DoS protection (resume attempt limits)"
+    },
+    "operationalReadiness": {
+      "weight": 0.10,
+      "score": 6,
+      "notes": "Missing migration strategy for production deployment"
+    },
+    "userRequirements": {
+      "weight": 0.10,
+      "score": 9,
+      "notes": "All requirements met, gaps in operational safety"
+    }
+  },
+
+  "issues": {
+    "critical": [
+      {
+        "id": "C1",
+        "title": "Missing Resume Attempt Limits",
+        "phase": 4,
+        "location": "phase-04-auto-resume.md, lines 34-50",
+        "description": "No limit on resume retry attempts. Failed session could be retried indefinitely, causing resource exhaustion and DoS vulnerability.",
+        "impact": "Resource exhaustion, spam vulnerability, potential infinite loop",
+        "evidence": "Phase 4 has resumingSessions Set for in-memory dedup only, no persistent attempt tracking, no maximum attempt limit",
+        "recommendation": "Add resume_attempts column to schema, add attempt checking logic to orchestrator, max 3 attempts per session then permanent disable",
+        "estimatedFixTime": "2 hours",
+        "complexity": "Medium",
+        "blocker": true
+      },
+      {
+        "id": "C2",
+        "title": "Missing Database Migration Strategy",
+        "phase": 1,
+        "location": "phase-01-database-schema.md, line 70",
+        "description": "No migration strategy for production deployment. pending_messages table must be added to existing databases safely.",
+        "impact": "Deployment failure, data inconsistency, production downtime, no rollback migration",
+        "evidence": "Todo item mentions migration script but no implementation details, no migration runner, no version tracking, no execution procedure",
+        "recommendation": "Create migration system (hub/src/migrations/), implement runMigrations() and rollbackMigration(), add migration tracking table, document execution procedure",
+        "estimatedFixTime": "3 hours",
+        "complexity": "Medium",
+        "blocker": true
+      },
+      {
+        "id": "C3",
+        "title": "Missing Offline Queue Persistence",
+        "phase": 5,
+        "location": "phase-05-frontend.md, lines 22-28",
+        "description": "No handling for user closing browser during resume. Messages queued server-side but user doesn't know outcome if they leave.",
+        "impact": "User data loss confusion, poor UX, support burden (users ask 'did my message send?')",
+        "evidence": "Phase 5 shows 'Poll or wait for resume completion' but no offline handling, no localStorage queue, no handling for tab close/navigate away",
+        "recommendation": "Choose Option A (server-side only, simpler) or Option B (localStorage queue, better UX). Recommended: Option A for MVP",
+        "estimatedFixTime": "1 hour (decision) + 2-4 hours (if Option B implementation)",
+        "complexity": "Low-Medium",
+        "blocker": true
+      }
+    ],
+    "medium": [
+      {
+        "id": "M1",
+        "title": "Missing Queue Depth Monitoring Thresholds",
+        "phase": 2,
+        "location": "phase-02-message-queue.md, lines 95-106",
+        "description": "Queue limit (100) defined but no proactive monitoring or alerting before hitting limit. Only acts when overflow happens.",
+        "impact": "Reactive instead of proactive monitoring, no warning at 50/75 messages",
+        "evidence": "Line 25: 'Limit queue size per session (100 messages max)', Line 26: 'Provide queue depth metrics' but no alert thresholds",
+        "recommendation": "Add warning threshold at 50 messages, critical at 75 messages, emit queue status metric, add alerting rules",
+        "estimatedFixTime": "1 hour",
+        "complexity": "Low",
+        "blocker": false
+      },
+      {
+        "id": "M2",
+        "title": "Missing Test Data Cleanup Automation",
+        "phase": 6,
+        "location": "phase-06-testing.md, line 186",
+        "description": "Tests mention 'Clean up test data' but no automated cleanup strategy defined.",
+        "impact": "Test database bloat, test pollution, slow test execution, flaky tests",
+        "evidence": "Line 186 says 'Clean up test data' but no implementation, no afterEach hooks, no test database isolation",
+        "recommendation": "Add afterEach/afterAll cleanup hooks, use test database isolation (:memory:), OR cleanup by test data prefix",
+        "estimatedFixTime": "1 hour",
+        "complexity": "Low",
+        "blocker": false
+      }
+    ],
+    "low": []
+  },
+
+  "strengths": [
+    "Exceptional research foundation with two comprehensive reports",
+    "Outstanding rollback strategy - 4 levels, 10 triggers, 3 in-progress strategies",
+    "Feature flag implementation with gradual rollout (0-100%)",
+    "Comprehensive testing strategy - unit, integration, race conditions, performance, load",
+    "Security considerations - input validation, SQL injection prevention, rate limiting, auth",
+    "User requirements alignment - all requirements met",
+    "Clean data flow - no race conditions after previous fixes",
+    "Error handling coverage - 5 failure modes addressed"
+  ],
+
+  "phaseAnalysis": [
+    {
+      "phase": 1,
+      "title": "Database Schema",
+      "status": "NEEDS_REVISION",
+      "riskLevel": "MEDIUM",
+      "issues": ["C2"],
+      "strengths": ["Clean schema with indexes", "Foreign key CASCADE", "Retry count tracking"],
+      "readiness": "Needs C2 fix (migration strategy)"
+    },
+    {
+      "phase": 2,
+      "title": "Message Queue Service",
+      "status": "MOSTLY_READY",
+      "riskLevel": "LOW",
+      "issues": ["M1"],
+      "strengths": ["Clear architecture", "Deduplication by localId", "Queue overflow → archive", "Metrics tracking"],
+      "readiness": "Ready, M1 can be addressed during implementation"
+    },
+    {
+      "phase": 3,
+      "title": "Guard Modification",
+      "status": "READY",
+      "riskLevel": "MEDIUM",
+      "issues": [],
+      "strengths": ["Fixed race condition", "Feature flag integration", "Backward compatibility"],
+      "readiness": "Ready for implementation"
+    },
+    {
+      "phase": 4,
+      "title": "Auto-Resume Orchestrator",
+      "status": "NEEDS_REVISION",
+      "riskLevel": "HIGH",
+      "issues": ["C1"],
+      "strengths": ["Clear flow", "In-memory deduplication", "Timeout handling", "Archive on failure"],
+      "readiness": "Needs C1 fix (resume attempt limits)"
+    },
+    {
+      "phase": 5,
+      "title": "Frontend Changes",
+      "status": "NEEDS_REVISION",
+      "riskLevel": "MEDIUM",
+      "issues": ["C3"],
+      "strengths": ["Aligned with Phase 3", "Clear UI states", "Archive prompt modal", "No optimistic UI"],
+      "readiness": "Needs C3 fix (offline queue decision)"
+    },
+    {
+      "phase": 6,
+      "title": "Testing & Validation",
+      "status": "MOSTLY_READY",
+      "riskLevel": "LOW",
+      "issues": ["M2"],
+      "strengths": ["Comprehensive scenarios", "Performance baselines", "Load testing", "Manual plan"],
+      "readiness": "Ready, M2 can be addressed during implementation"
+    },
+    {
+      "phase": 7,
+      "title": "Monitoring & Rollback",
+      "status": "EXCELLENT",
+      "riskLevel": "LOW",
+      "issues": [],
+      "strengths": ["Outstanding rollback strategy", "10 rollback triggers", "4 rollback levels", "Feature flag", "In-progress handling"],
+      "readiness": "Exemplary, use as template for other plans"
+    }
+  ],
+
+  "architectureAssessment": {
+    "dataFlow": "CORRECT",
+    "dataFlowNotes": "Flow is correct and safe. No race conditions. 202 response prevents handler execution on inactive session.",
+    "errorHandlingCoverage": [
+      "No machine online → 503",
+      "Invalid resume token → Archive",
+      "Activation timeout (15s) → Archive",
+      "Queue overflow (100 messages) → Archive",
+      "Concurrent resume triggers → Dedup",
+      "Feature flag disabled → 409",
+      "MISSING: Resume attempt limits (C1)"
+    ],
+    "securityCoverage": [
+      "Input validation (JSON, max 10KB)",
+      "SQL injection prevention (prepared statements)",
+      "Rate limiting (per-session queue limits)",
+      "Authentication checks",
+      "Audit logging",
+      "MISSING: DoS protection (C1 - resume attempt limits)"
+    ]
+  },
+
+  "riskAssessment": {
+    "overallRisk": "MEDIUM-HIGH",
+    "riskBreakdown": [
+      { "phase": 1, "level": "MEDIUM", "justification": "Schema change + missing migration strategy (C2)" },
+      { "phase": 2, "level": "LOW", "justification": "Queue service is isolated" },
+      { "phase": 3, "level": "MEDIUM", "justification": "Core guard modification (mitigated by feature flag)" },
+      { "phase": 4, "level": "HIGH", "justification": "Complex orchestration + missing attempt limits (C1)" },
+      { "phase": 5, "level": "MEDIUM", "justification": "Frontend + missing offline handling (C3)" },
+      { "phase": 6, "level": "LOW", "justification": "Testing only" },
+      { "phase": 7, "level": "LOW", "justification": "Monitoring + rollback (enables safe deployment)" }
+    ],
+    "mitigationsInPlace": [
+      "Feature flag (instant disable)",
+      "Gradual rollout (10% → 50% → 100%)",
+      "Comprehensive monitoring (10 rollback triggers)",
+      "4-level rollback strategy",
+      "Load testing before production"
+    ],
+    "missingMitigations": [
+      "Resume attempt limits (C1)",
+      "Migration strategy (C2)",
+      "Offline queue handling (C3)"
+    ]
+  },
+
+  "userRequirementsAlignment": [
+    { "requirement": "Queue storage: SQLite persistent", "status": "✅", "evidence": "Phase 1: pending_messages table" },
+    { "requirement": "Resume failure: Archive + prompt user", "status": "✅", "evidence": "Phase 2 (overflow), Phase 4 (failure)" },
+    { "requirement": "Old sessions (>24h): Still auto-resume", "status": "✅", "evidence": "No time-based exclusion in any phase" },
+    { "requirement": "Auto-resume on message to inactive session", "status": "✅", "evidence": "Phase 3: Guard modification" },
+    { "requirement": "No duplicate messages", "status": "✅", "evidence": "Phase 2: localId deduplication" },
+    { "requirement": "Graceful failure handling", "status": "✅", "evidence": "Phase 4: Archive on failure" },
+    { "requirement": "DoS protection", "status": "🔴", "evidence": "Missing: Resume attempt limits (C1)" },
+    { "requirement": "Production deployment", "status": "🔴", "evidence": "Missing: Migration strategy (C2)" }
+  ],
+
+  "compliance": {
+    "workflow": true,
+    "codeStandards": true,
+    "documentation": true,
+    "operationalReadiness": false,
+    "notes": "Compliant with workflow, code standards, and documentation requirements. Operational readiness gaps: migration strategy (C2), DoS protection (C1)"
+  },
+
+  "nextSteps": {
+    "immediate": [
+      {
+        "order": 1,
+        "issue": "C1",
+        "action": "Add resume attempt limits",
+        "phase": 4,
+        "time": "2 hours",
+        "tasks": [
+          "Update Phase 1: Add resume_attempts column to schema",
+          "Update Phase 4: Add attempt checking logic to orchestrator",
+          "Add test case: 'max resume attempts exceeded'"
+        ]
+      },
+      {
+        "order": 2,
+        "issue": "C2",
+        "action": "Define database migration strategy",
+        "phase": 1,
+        "time": "3 hours",
+        "tasks": [
+          "Create migration system (hub/src/migrations/)",
+          "Implement runMigrations() and rollbackMigration()",
+          "Write migration 001: Create pending_messages table",
+          "Document migration execution procedure",
+          "Test migration on empty database",
+          "Test rollback"
+        ]
+      },
+      {
+        "order": 3,
+        "issue": "C3",
+        "action": "Decide on offline queue persistence",
+        "phase": 5,
+        "time": "1 hour (decision) + 2-4 hours (if Option B)",
+        "tasks": [
+          "RECOMMENDED: Choose Option A (server-side only, simpler)",
+          "Update Phase 5: Remove offline persistence requirement",
+          "Update Phase 5: Document server-side queue behavior",
+          "Add success criterion: 'If user closes tab, messages in history'",
+          "OR: If Option B chosen, implement localStorage queue (4 hours)"
+        ]
+      }
+    ],
+    "duringImplementation": [
+      {
+        "order": 4,
+        "issue": "M1",
+        "action": "Add proactive queue depth monitoring",
+        "phase": 2,
+        "time": "1 hour",
+        "tasks": [
+          "Add warning threshold at 50 messages",
+          "Add critical threshold at 75 messages",
+          "Emit queue status metric",
+          "Add alerting rules"
+        ]
+      },
+      {
+        "order": 5,
+        "issue": "M2",
+        "action": "Add test data cleanup automation",
+        "phase": 6,
+        "time": "1 hour",
+        "tasks": [
+          "Add afterEach/afterAll cleanup hooks",
+          "Use test database isolation (:memory:)",
+          "OR cleanup by test data prefix"
+        ]
+      }
+    ],
+    "implementationSchedule": [
+      { "week": 1, "tasks": ["Fix C1, C2, C3 (6-10 hours)"], "deliverables": ["Updated phases 1, 4, 5", "Migration system tested", "Plan status: Ready for Implementation ✅"] },
+      { "week": 2, "tasks": ["Phases 1-3 (Foundation)"], "deliverables": ["Database schema + migrations", "Message queue service", "Guard modification", "Unit tests"] },
+      { "week": 3, "tasks": ["Phases 4-5 (Core Logic)"], "deliverables": ["Auto-resume orchestrator", "Frontend changes", "Integration tests"] },
+      { "week": 4, "tasks": ["Phases 6-7 (Validation + Deployment)"], "deliverables": ["Testing & validation", "Monitoring setup", "Staging deployment"] },
+      { "week": 5, "tasks": ["Production Rollout"], "deliverables": ["10% → 50% → 100% gradual rollout", "Full deployment"] }
+    ]
+  },
+
+  "deploymentStrategy": {
+    "preDeployment": [
+      "Feature flag OFF by default (AUTO_RESUME_ENABLED=false)",
+      "Migration tested in staging",
+      "Monitoring configured (10 rollback triggers)",
+      "Rollback procedures documented"
+    ],
+    "day1": {
+      "action": "Safe deployment",
+      "steps": [
+        "Deploy code with feature flag OFF",
+        "Run migrations (add pending_messages table)",
+        "Verify: Table created, feature flag off, existing behavior unchanged",
+        "Monitor: No errors, latency baseline recorded"
+      ]
+    },
+    "day2_3": {
+      "action": "10% Rollout",
+      "steps": [
+        "Set AUTO_RESUME_ROLLOUT=10",
+        "Monitor: Resume failure rate < 10%, queue depth < 1000, latency +200ms",
+        "Check: No critical alerts, no user complaints",
+        "Decision: If metrics bad → rollback to 0%, if metrics good → proceed"
+      ]
+    },
+    "day4_5": {
+      "action": "50% Rollout",
+      "steps": [
+        "Set AUTO_RESUME_ROLLOUT=50",
+        "Monitor: Same metrics as 10%",
+        "Load test: 100 concurrent users to inactive sessions",
+        "Decision: If issues → rollback to 10%, if good → proceed"
+      ]
+    },
+    "day6_7": {
+      "action": "100% Rollout",
+      "steps": [
+        "Set AUTO_RESUME_ROLLOUT=100",
+        "Monitor: All metrics green for 48h",
+        "Success: Feature fully deployed"
+      ]
+    },
+    "rollbackTrigger": "If any rollback trigger fires (see Phase 7), execute appropriate rollback level (1-4), investigate root cause, fix and redeploy"
+  },
+
+  "comparisonWithPreviousReview": {
+    "previousStatus": "Ready for Implementation ✅ (Issues Fixed)",
+    "currentStatus": "NEEDS_REVISION ⚠️",
+    "newIssuesIdentified": [
+      "C1: Resume attempt limits - Not mentioned in PLAN_FIXES_SUMMARY.md",
+      "C2: Migration strategy - Not mentioned in PLAN_FIXES_SUMMARY.md",
+      "C3: Offline queue persistence - Not mentioned in PLAN_FIXES_SUMMARY.md"
+    ],
+    "previousFixesStillValid": [
+      "Phase 3 race condition fixed (returns 202)",
+      "Frontend/backend alignment (202 response handling)",
+      "Phase 4 timeout handling (15s)",
+      "Phase 2 queue overflow behavior (archive)",
+      "Feature flag implementation",
+      "Rollback strategy",
+      "Load testing scenarios"
+    ],
+    "whyNewIssuesFound": "Previous review focused on race conditions and frontend/backend alignment. This review focused on operational safety, security, and production deployment. Different review perspective → different issues identified."
+  },
+
+  "recommendation": "Address C1, C2, C3 immediately (6-10 hours), then proceed with implementation (4 weeks). The plan demonstrates mature understanding of distributed systems challenges and has exceptional rollback strategy. Final Status: NEEDS_REVISION ⚠️ (3 critical issues)"
+}

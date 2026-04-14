@@ -8,6 +8,7 @@
  * - Optional Telegram bot for notifications and Mini App entrypoint
  */
 
+import 'dotenv/config'
 import { createConfiguration, type ConfigSource } from './configuration'
 import { Store } from './store'
 import { SyncEngine, type SyncEvent } from './sync/syncEngine'

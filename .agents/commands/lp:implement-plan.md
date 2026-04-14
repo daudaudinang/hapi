@@ -33,3 +33,5 @@ description: Alias /lp:implement-plan → skill implement-plan. Wrapper mỏng c
 ```text
 /lp:review-implement <plan_file_path>
 ```
+
+**Vòng delivery LittlePea** (state + `lp_pipeline.py` + follow-up QA): xem `.agents/commands/lp:implement.md`.

@@ -26,9 +26,12 @@ export function requireSession(
         const error = access.reason === 'access-denied' ? 'Session access denied' : 'Session not found'
         return c.json({ error }, status)
     }
+
+    // Backward compatible: requireActive still blocks inactive sessions
     if (options?.requireActive && !access.session.active) {
         return c.json({ error: 'Session is inactive' }, 409)
     }
+
     return { sessionId: access.sessionId, session: access.session }
 }
 
@@ -39,7 +42,9 @@ export function requireSessionFromParam(
 ): { sessionId: string; session: Session } | Response {
     const paramName = options?.paramName ?? 'id'
     const sessionId = c.req.param(paramName)
-    const result = requireSession(c, engine, sessionId, { requireActive: options?.requireActive })
+    const result = requireSession(c, engine, sessionId, {
+        requireActive: options?.requireActive
+    })
     if (result instanceof Response) {
         return result
     }

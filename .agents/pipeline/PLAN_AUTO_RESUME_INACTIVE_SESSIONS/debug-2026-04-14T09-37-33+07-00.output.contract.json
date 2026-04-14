@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "skill": "debug-investigator",
+  "plan": "PLAN_AUTO_RESUME_INACTIVE_SESSIONS",
+  "ticket": null,
+  "status": "PASS",
+  "timestamp": "2026-04-14T09:37:33+07:00",
+  "duration_min": 12,
+  "artifacts": {
+    "primary": ".agents/pipeline/PLAN_AUTO_RESUME_INACTIVE_SESSIONS/debug-2026-04-14T09-37-33+07-00.report.md",
+    "secondary": []
+  },
+  "next": {
+    "recommended_skill": null,
+    "input_for_next": null,
+    "handoff_note": "Resume flow in syncEngine drops yolo by passing undefined into rpcGateway.spawnSession(...). Runner only appends --yolo when options.yolo===true, and Claude only enters bypassPermissions when started with --yolo/--dangerously-skip-permissions. Fix by mapping stored session.permissionMode back into resume spawn args, then optionally applySessionConfig after session becomes active."
+  },
+  "blockers": [],
+  "pending_questions": {
+    "questions": [
+      "Với non-Claude flavors, có muốn preserve full permission mode khi resume hay chỉ preserve behavior tương đương yolo?"
+    ],
+    "resume_from": null,
+    "user_answers": null
+  }
+}

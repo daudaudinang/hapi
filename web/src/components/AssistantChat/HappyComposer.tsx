@@ -27,6 +27,7 @@ import { Autocomplete } from '@/components/ChatInput/Autocomplete'
 import { StatusBar } from '@/components/AssistantChat/StatusBar'
 import { ComposerButtons } from '@/components/AssistantChat/ComposerButtons'
 import { AttachmentItem } from '@/components/AssistantChat/AttachmentItem'
+import { ResumeLoading } from '@/components/AssistantChat/ResumeLoading'
 import { useTranslation } from '@/lib/use-translation'
 import { getModelOptionsForFlavor, getNextModelForFlavor } from './modelOptions'
 import { getClaudeComposerEffortOptions } from './claudeEffortOptions'
@@ -47,6 +48,7 @@ export function HappyComposer(props: {
     active?: boolean
     allowSendWhenInactive?: boolean
     thinking?: boolean
+    resuming?: boolean
     agentState?: AgentState | null
     contextSize?: number
     controlledByUser?: boolean
@@ -76,6 +78,7 @@ export function HappyComposer(props: {
         active = true,
         allowSendWhenInactive = false,
         thinking = false,
+        resuming = false,
         agentState,
         contextSize,
         controlledByUser = false,
@@ -107,7 +110,7 @@ export function HappyComposer(props: {
     const threadIsRunning = useAssistantState(({ thread }) => thread.isRunning)
     const threadIsDisabled = useAssistantState(({ thread }) => thread.isDisabled)
 
-    const controlsDisabled = disabled || (!active && !allowSendWhenInactive) || threadIsDisabled
+    const controlsDisabled = disabled || (!active && !allowSendWhenInactive) || threadIsDisabled || resuming
     const trimmed = composerText.trim()
     const hasText = trimmed.length > 0
     const hasAttachments = attachments.length > 0
@@ -283,15 +286,6 @@ export function HappyComposer(props: {
 
         // Avoid intercepting IME composition keystrokes (Enter, arrows, etc.)
         if (e.nativeEvent.isComposing) {
-            return
-        }
-
-        // Shift+Enter sends the message (works on all platforms including iPadOS with keyboard)
-        if (key === 'Enter' && e.shiftKey) {
-            e.preventDefault()
-            if (!canSend) return
-            api.composer().send()
-            setShowContinueHint(false)
             return
         }
 
@@ -675,6 +669,12 @@ export function HappyComposer(props: {
                         agentFlavor={agentFlavor}
                         voiceStatus={voiceStatus}
                     />
+
+                    {resuming && (
+                        <div className="mb-2 overflow-hidden rounded-[20px] bg-[var(--app-secondary-bg)]">
+                            <ResumeLoading />
+                        </div>
+                    )}
 
                     <div className="overflow-hidden rounded-[20px] bg-[var(--app-secondary-bg)]">
                         {attachments.length > 0 ? (

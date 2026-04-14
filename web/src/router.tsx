@@ -224,50 +224,30 @@ function SessionPage() {
         sendMessage,
         retryMessage,
         isSending,
+        isResuming,
     } = useSendMessage(api, sessionId, {
-        resolveSessionId: async (currentSessionId) => {
-            if (!api || !session || session.active) {
-                return currentSessionId
-            }
-            try {
-                return await api.resumeSession(currentSessionId)
-            } catch (error) {
-                const message = error instanceof Error ? error.message : 'Resume failed'
-                addToast({
-                    title: 'Resume failed',
-                    body: message,
-                    sessionId: currentSessionId,
-                    url: ''
-                })
-                throw error
-            }
+        // Note: With auto-resume, we let the backend handle session resuming
+        // The frontend will receive 202 if resuming starts, 503 if it fails
+        onResuming: (resumingSessionId) => {
+            // Session is being resumed in the background
+            // The UI will show "Resuming..." state
+            // We'll refresh the session when resume completes
+            console.log('Session resuming:', resumingSessionId)
         },
-        onSessionResolved: (resolvedSessionId) => {
-            void (async () => {
-                if (api) {
-                    if (session && resolvedSessionId !== session.id) {
-                        seedMessageWindowFromSession(session.id, resolvedSessionId)
-                        queryClient.setQueryData(queryKeys.session(resolvedSessionId), {
-                            session: { ...session, id: resolvedSessionId, active: true }
-                        })
-                    }
-                    try {
-                        await Promise.all([
-                            queryClient.prefetchQuery({
-                                queryKey: queryKeys.session(resolvedSessionId),
-                                queryFn: () => api.getSession(resolvedSessionId),
-                            }),
-                            fetchLatestMessages(api, resolvedSessionId),
-                        ])
-                    } catch {
-                    }
-                }
-                navigate({
-                    to: '/sessions/$sessionId',
-                    params: { sessionId: resolvedSessionId },
-                    replace: true
-                })
-            })()
+        onResumed: () => {
+            // Resume completed successfully
+            // Refresh session data
+            refreshSelectedSession()
+        },
+        onArchiveFailed: (reason) => {
+            // Resume failed, session was archived
+            // Show archive prompt
+            addToast({
+                title: 'Session Archived',
+                body: reason || 'This session could not be resumed and has been archived.',
+                sessionId: sessionId || '',
+                url: ''
+            })
         },
         onBlocked: (reason) => {
             if (reason === 'no-api') {
@@ -322,6 +302,7 @@ function SessionPage() {
             isLoadingMessages={messagesLoading}
             isLoadingMoreMessages={messagesLoadingMore}
             isSending={isSending}
+            isResuming={isResuming}
             pendingCount={pendingCount}
             messagesVersion={messagesVersion}
             onBack={goBack}

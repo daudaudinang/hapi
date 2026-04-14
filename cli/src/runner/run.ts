@@ -196,6 +196,7 @@ export async function startRunner(): Promise<void> {
 
       const { directory, sessionId, machineId, approvedNewDirectoryCreation = true } = options;
       const agent = options.agent ?? 'claude';
+      const permissionMode = options.permissionMode;
       const yolo = options.yolo === true;
       const sessionType = options.sessionType ?? 'simple';
       const worktreeName = options.worktreeName;
@@ -369,8 +370,42 @@ export async function startRunner(): Promise<void> {
         if (options.modelReasoningEffort && agent === 'codex') {
           args.push('--model-reasoning-effort', options.modelReasoningEffort);
         }
-        if (yolo) {
-          args.push('--yolo');
+
+        const effectivePermissionMode = permissionMode
+          ?? (agent === 'claude'
+            ? (yolo ? 'bypassPermissions' : undefined)
+            : (yolo ? 'yolo' : undefined));
+
+        if (agent === 'claude') {
+          if (effectivePermissionMode === 'bypassPermissions') {
+            args.push('--yolo');
+          }
+        } else if (agent === 'codex') {
+          if (effectivePermissionMode === 'read-only') {
+            args.push('--ask-for-approval', 'never', '--sandbox', 'read-only');
+          } else if (effectivePermissionMode === 'safe-yolo') {
+            args.push('--ask-for-approval', 'on-failure', '--sandbox', 'workspace-write');
+          } else if (effectivePermissionMode === 'yolo') {
+            args.push('--yolo');
+          }
+        } else if (agent === 'cursor') {
+          if (effectivePermissionMode === 'plan' || effectivePermissionMode === 'ask') {
+            args.push('--mode', effectivePermissionMode);
+          } else if (effectivePermissionMode === 'yolo') {
+            args.push('--yolo');
+          }
+        } else if (agent === 'gemini') {
+          if (effectivePermissionMode === 'safe-yolo') {
+            args.push('--approval-mode', 'auto_edit');
+          } else if (effectivePermissionMode === 'yolo') {
+            args.push('--yolo');
+          } else if (effectivePermissionMode === 'default' || effectivePermissionMode === 'read-only') {
+            args.push('--approval-mode', 'default');
+          }
+        } else if (agent === 'opencode') {
+          if (effectivePermissionMode === 'yolo') {
+            args.push('--yolo');
+          }
         }
 
         // sessionId reserved for future use
