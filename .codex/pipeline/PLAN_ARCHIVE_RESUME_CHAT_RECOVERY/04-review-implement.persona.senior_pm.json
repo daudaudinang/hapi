@@ -1,0 +1,12 @@
+{
+  "persona": "senior_pm",
+  "criteria": {
+    "feature_completeness": 4.0,
+    "requirement_fidelity": 5.0,
+    "scope_adherence": 6.0,
+    "business_value_delivery_clarity": 4.0
+  },
+  "score": 4.75,
+  "verdict_hint": "REQUEST_CHANGES",
+  "source": "subagent:019d9721-f5f4-7f00-ace4-3098739852c5"
+}

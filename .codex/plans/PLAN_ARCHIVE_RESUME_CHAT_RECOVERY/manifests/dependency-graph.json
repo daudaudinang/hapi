@@ -1,0 +1,37 @@
+{
+  "schema_version": 2,
+  "plan": "PLAN_ARCHIVE_RESUME_CHAT_RECOVERY",
+  "plan_profile": "standard",
+  "nodes": [
+    {
+      "id": "phase-01-backend-canonical-queue-and-contract",
+      "title": "Backend Canonical Queue And Contract",
+      "depends_on": []
+    },
+    {
+      "id": "phase-02-frontend-canonical-rebind",
+      "title": "Frontend Canonical Rebind",
+      "depends_on": [
+        "phase-01-backend-canonical-queue-and-contract"
+      ]
+    },
+    {
+      "id": "phase-03-regression-tests-and-qa",
+      "title": "Regression Tests And QA",
+      "depends_on": [
+        "phase-01-backend-canonical-queue-and-contract",
+        "phase-02-frontend-canonical-rebind"
+      ]
+    }
+  ],
+  "critical_path": [
+    "phase-01-backend-canonical-queue-and-contract",
+    "phase-02-frontend-canonical-rebind",
+    "phase-03-regression-tests-and-qa"
+  ],
+  "notes": [
+    "Phase 01 defines the authoritative sessionId contract and atomic merge semantics.",
+    "Phase 02 must consume that exact contract; no fallback contract branch is allowed.",
+    "Phase 03 freezes assertions only after backend/frontend semantics are stable."
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "schema_version": 2,
+  "skill": "qa-automation",
+  "workflow": "WF_20260416_D3242758",
+  "plan": "PLAN_ARCHIVE_RESUME_CHAT_RECOVERY",
+  "status": "PASS",
+  "evidence": {
+    "commands": [
+      "cd hub && bun test src/web/routes/messages.test.ts",
+      "cd hub && bun test src/store/pendingMessages.test.ts",
+      "cd hub && bun test src/resume/autoResumeOrchestrator.test.ts",
+      "cd web && bun run typecheck"
+    ],
+    "all_passed": true
+  },
+  "ac_verification": [
+    {
+      "ac": "After resume canonicalization, pending queue remains deliverable to canonical session",
+      "status": "PASS"
+    },
+    {
+      "ac": "Messages API returns canonical session id for client rebind",
+      "status": "PASS"
+    },
+    {
+      "ac": "Frontend mutation/router can resolve and follow canonical resumed session id",
+      "status": "PASS"
+    }
+  ],
+  "next": {
+    "recommended_skill": null
+  }
+}

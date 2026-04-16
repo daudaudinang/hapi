@@ -1,0 +1,141 @@
+{
+  "schema_version": 1,
+  "skill": "review-implement",
+  "plan": "PLAN_ARCHIVE_RESUME_CHAT_RECOVERY",
+  "workflow": "WF_20260416_D3242758",
+  "status": "FAIL",
+  "timestamp": "2026-04-16T23:45:00+07:00",
+  "duration_min": 24,
+  "artifacts": {
+    "primary": ".codex/pipeline/PLAN_ARCHIVE_RESUME_CHAT_RECOVERY/04-review-implement.output.md",
+    "secondary": []
+  },
+  "next": {
+    "recommended_skill": "implement-plan",
+    "input_for_next": ".codex/plans/PLAN_ARCHIVE_RESUME_CHAT_RECOVERY/plan.md",
+    "handoff_note": "Add AC8 web rebind tests + AC9 manual QA evidence, harden merge atomicity, and provide full touched_files/scope_violations in implement contract."
+  },
+  "blockers": [
+    "Missing AC8 web rebind test coverage and gating commands evidence.",
+    "Implement artifact contract missing touched_files and scope_violations required by review model."
+  ],
+  "pending_questions": {
+    "questions": [],
+    "resume_from": null,
+    "user_answers": null
+  },
+  "review_summary": {
+    "weighted_score": 5.68,
+    "persona_scores": {
+      "senior_pm": 4.75,
+      "senior_uiux_designer": 6.0,
+      "senior_developer": 6.25,
+      "system_architecture": 5.5
+    },
+    "severity_counts": {
+      "blocker": 2,
+      "major": 3,
+      "minor": 0,
+      "info": 0
+    },
+    "scope_violations": []
+  },
+  "review_audit": {
+    "triage_basis": "Plan vs implementation artifacts vs touched code + tests",
+    "personas_requested": [
+      "senior_pm",
+      "senior_uiux_designer",
+      "senior_developer",
+      "system_architecture"
+    ],
+    "personas_run": [
+      "senior_pm",
+      "senior_uiux_designer",
+      "senior_developer",
+      "system_architecture"
+    ],
+    "persona_outputs": {
+      "senior_pm": ".codex/pipeline/PLAN_ARCHIVE_RESUME_CHAT_RECOVERY/04-review-implement.persona.senior_pm.json",
+      "senior_uiux_designer": ".codex/pipeline/PLAN_ARCHIVE_RESUME_CHAT_RECOVERY/04-review-implement.persona.senior_uiux_designer.json",
+      "senior_developer": ".codex/pipeline/PLAN_ARCHIVE_RESUME_CHAT_RECOVERY/04-review-implement.persona.senior_developer.json",
+      "system_architecture": ".codex/pipeline/PLAN_ARCHIVE_RESUME_CHAT_RECOVERY/04-review-implement.persona.system_architecture.json"
+    },
+    "persona_scores": {
+      "senior_pm": 4.75,
+      "senior_uiux_designer": 6.0,
+      "senior_developer": 6.25,
+      "system_architecture": 5.5
+    }
+  },
+  "finding_validation": {
+    "business_context_validated": true,
+    "validated_findings": [
+      {
+        "id": "FI-001",
+        "severity": "blocker",
+        "summary": "Missing AC8 web rebind tests and verify command evidence.",
+        "evidence": [
+          ".codex/plans/PLAN_ARCHIVE_RESUME_CHAT_RECOVERY/plan.md:39",
+          ".codex/plans/PLAN_ARCHIVE_RESUME_CHAT_RECOVERY/plan.md:103",
+          ".codex/pipeline/PLAN_ARCHIVE_RESUME_CHAT_RECOVERY/03-implement-plan.output.md",
+          "web/src/hooks/mutations/useSendMessage.rebind.test.tsx (missing)",
+          "web/src/routes/sessions/session-rebind-flow.test.tsx (missing)"
+        ],
+        "validation_note": "Cross-persona consensus; direct mismatch against plan AC and verify contract.",
+        "confidence": "high",
+        "conflict_status": "resolved"
+      },
+      {
+        "id": "FI-002",
+        "severity": "blocker",
+        "summary": "Implement artifact lacks touched_files and scope_violations required for boundary audit.",
+        "evidence": [
+          ".codex/pipeline/PLAN_ARCHIVE_RESUME_CHAT_RECOVERY/03-implement-plan.output.contract.json"
+        ],
+        "validation_note": "Required fields are absent; review model explicitly treats this as artifact-quality blocker.",
+        "confidence": "high",
+        "conflict_status": "resolved"
+      },
+      {
+        "id": "FI-003",
+        "severity": "major",
+        "summary": "Merge flow does not enforce a single end-to-end atomic boundary across multi-store updates.",
+        "evidence": [
+          ".codex/plans/PLAN_ARCHIVE_RESUME_CHAT_RECOVERY/plan.md:80",
+          "hub/src/sync/sessionCache.ts:369",
+          "hub/src/sync/sessionCache.ts:370",
+          "hub/src/sync/sessionCache.ts:429"
+        ],
+        "validation_note": "High write-sequence coupling; partial state risk remains if failure occurs mid-merge.",
+        "confidence": "medium",
+        "conflict_status": "resolved"
+      },
+      {
+        "id": "FI-004",
+        "severity": "major",
+        "summary": "Manual-resume entrypoint ownership in SessionPage remains coupled to send flow.",
+        "evidence": [
+          ".codex/plans/PLAN_ARCHIVE_RESUME_CHAT_RECOVERY/plan.md:35",
+          "web/src/router.tsx:248",
+          "web/src/router.tsx:275"
+        ],
+        "validation_note": "Entrypoint exists as helper but lacks dedicated callable surface for manual-resume path/testing parity.",
+        "confidence": "medium",
+        "conflict_status": "resolved"
+      },
+      {
+        "id": "FI-005",
+        "severity": "major",
+        "summary": "Manual QA evidence for AC9 is not present in implement artifact.",
+        "evidence": [
+          ".codex/plans/PLAN_ARCHIVE_RESUME_CHAT_RECOVERY/plan.md:40",
+          ".codex/pipeline/PLAN_ARCHIVE_RESUME_CHAT_RECOVERY/03-implement-plan.output.md"
+        ],
+        "validation_note": "Manual verification is explicitly required by plan but missing from implementation evidence package.",
+        "confidence": "high",
+        "conflict_status": "resolved"
+      }
+    ],
+    "unresolved_conflicts": []
+  }
+}

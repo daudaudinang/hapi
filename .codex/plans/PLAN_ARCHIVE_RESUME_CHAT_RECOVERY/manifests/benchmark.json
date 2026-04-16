@@ -1,0 +1,27 @@
+{
+  "schema_version": 2,
+  "plan": "PLAN_ARCHIVE_RESUME_CHAT_RECOVERY",
+  "workflow": "WF_20260416_D3242758",
+  "baseline": {
+    "problem": "Archive/resume regression loses or strands pending messages when canonical session id changes, and the web client continues operating on old session route/cache.",
+    "focus_metrics": [
+      "pending messages survive old-id -> new-id merge",
+      "/resume and POST /messages return consistent authoritative sessionId semantics",
+      "send after archive continues chat on canonical session",
+      "route/query/message-window stay consistent when old session is removed"
+    ],
+    "preflight_commands": [
+      "bun run typecheck"
+    ],
+    "gating_commands": [
+      "cd hub && bun test src/store/pendingMessages.test.ts src/resume/autoResumeOrchestrator.test.ts src/resume/autoResumeOrchestrator.integration.test.ts src/web/routes/messages.test.ts src/web/routes/sessions.test.ts",
+      "cd web && bun test src/hooks/mutations/useSendMessage.rebind.test.tsx src/routes/sessions/session-rebind-flow.test.tsx"
+    ],
+    "preflight_note": "Current repository baseline may already fail typecheck; treat preflight as informational and use targeted gating commands for regression scope."
+  },
+  "success_signals": [
+    "No pending_messages row is deleted or stranded solely because mergeSessions removed the old session id.",
+    "Frontend rebind is driven by authoritative sessionId from backend responses and survives session-removed ordering.",
+    "Regression tests explicitly cover oldSessionId != resumedSessionId and route-level inactive-send contract."
+  ]
+}

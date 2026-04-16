@@ -42,3 +42,6 @@ execplan/
 cli/npm/main/
 .ace-tool/
 .gitnexus
+
+.claude/worktrees
+.codex/tmp

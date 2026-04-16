@@ -3,6 +3,7 @@ import type { ApiClient } from '@/api/client'
 import type { Machine } from '@/types/api'
 import { usePlatform } from '@/hooks/usePlatform'
 import { useMachinePathsExists } from '@/hooks/useMachinePathsExists'
+import { useMachineCodexModels } from '@/hooks/queries/useMachineCodexModels'
 import { useSpawnSession } from '@/hooks/mutations/useSpawnSession'
 import { useSessions } from '@/hooks/queries/useSessions'
 import { useActiveSuggestions, type Suggestion } from '@/hooks/useActiveSuggestions'
@@ -10,6 +11,7 @@ import { useDirectorySuggestions } from '@/hooks/useDirectorySuggestions'
 import { useRecentPaths } from '@/hooks/useRecentPaths'
 import { useTranslation } from '@/lib/use-translation'
 import type { AgentType, ClaudeEffort, CodexReasoningEffort, SessionType } from './types'
+import { MODEL_OPTIONS } from './types'
 import { ActionButtons } from './ActionButtons'
 import { AgentSelector } from './AgentSelector'
 import { DirectorySection } from './DirectorySection'
@@ -118,11 +120,44 @@ export function NewSession(props: {
     )
 
     const { pathExistence, checkPathsExists } = useMachinePathsExists(props.api, machineId, pathsToCheck)
+    const { models: fetchedCodexModels } = useMachineCodexModels(props.api, machineId, agent === 'codex')
 
     const verifiedPaths = useMemo(
         () => allPaths.filter((path) => pathExistence[path]),
         [allPaths, pathExistence]
     )
+
+    const modelOptions = useMemo(() => {
+        const fallbackOptions = MODEL_OPTIONS[agent]
+        if (agent !== 'codex') {
+            return fallbackOptions
+        }
+
+        const dynamicOptions = fetchedCodexModels.length > 0
+            ? [
+                { value: 'auto', label: 'Auto' },
+                ...fetchedCodexModels
+                    .filter((entry) => !entry.hidden)
+                    .map((entry) => ({
+                        value: entry.model,
+                        label: entry.displayName
+                    }))
+            ]
+            : MODEL_OPTIONS.codex
+
+        const uniqueOptions = dynamicOptions.filter((option, index, options) => (
+            options.findIndex((candidate) => candidate.value === option.value) === index
+        ))
+
+        if (model !== 'auto' && !uniqueOptions.some((option) => option.value === model)) {
+            return [
+                ...uniqueOptions,
+                { value: model, label: model }
+            ]
+        }
+
+        return uniqueOptions
+    }, [agent, fetchedCodexModels, model])
 
     const currentDirectoryExists = trimmedDirectory ? pathExistence[trimmedDirectory] : undefined
     const needsDirectoryCreationWarning = sessionType === 'simple' && trimmedDirectory !== '' && currentDirectoryExists === false
@@ -326,6 +361,7 @@ export function NewSession(props: {
             <ModelSelector
                 agent={agent}
                 model={model}
+                options={modelOptions}
                 isDisabled={isFormDisabled}
                 onModelChange={setModel}
             />

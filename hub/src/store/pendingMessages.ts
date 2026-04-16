@@ -131,4 +131,18 @@ export class PendingMessagesStore {
         `)
         stmt.run(messageId)
     }
+
+    reassignSession(oldSessionId: string, newSessionId: string): number {
+        if (!oldSessionId || !newSessionId || oldSessionId === newSessionId) {
+            return 0
+        }
+
+        const stmt = this.db.prepare(`
+            UPDATE pending_messages
+            SET session_id = ?
+            WHERE session_id = ? AND status = 'pending'
+        `)
+        const result = stmt.run(newSessionId, oldSessionId)
+        return result.changes
+    }
 }

@@ -1,12 +1,12 @@
 {
   "repoPath": "/home/huynq/notebooks/hapi",
-  "lastCommit": "f4c2bb8e2c758d5b2e9459f15e32db656ddc66ca",
-  "indexedAt": "2026-04-13T02:26:19.532Z",
+  "lastCommit": "19c2064f8effa3e88e568fe23d21fe5952b42a74",
+  "indexedAt": "2026-04-16T13:46:06.886Z",
   "stats": {
-    "files": 770,
-    "nodes": 5985,
-    "edges": 17237,
-    "communities": 392,
+    "files": 772,
+    "nodes": 6045,
+    "edges": 17211,
+    "communities": 419,
     "processes": 300,
     "embeddings": 0
   }

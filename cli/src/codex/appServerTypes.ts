@@ -144,3 +144,14 @@ export interface TurnInterruptResponse {
     ok: boolean;
     [key: string]: unknown;
 }
+
+export interface ModelListParams {
+    cursor?: string;
+    limit?: number;
+}
+
+export interface ModelListResponse {
+    data?: unknown[];
+    nextCursor?: string | null;
+    [key: string]: unknown;
+}

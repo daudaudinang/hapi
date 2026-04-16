@@ -1,0 +1,70 @@
+{
+  "schema_version": 2,
+  "skill": "create-plan",
+  "workflow": "WF_20260416_D3242758",
+  "plan": "PLAN_ARCHIVE_RESUME_CHAT_RECOVERY",
+  "revision": 2,
+  "status": "REVISED",
+  "plan_path": "/home/huynq/notebooks/hapi/.codex/plans/PLAN_ARCHIVE_RESUME_CHAT_RECOVERY/plan.md",
+  "phase_files": [
+    "/home/huynq/notebooks/hapi/.codex/plans/PLAN_ARCHIVE_RESUME_CHAT_RECOVERY/phase-01-backend-canonical-queue.md",
+    "/home/huynq/notebooks/hapi/.codex/plans/PLAN_ARCHIVE_RESUME_CHAT_RECOVERY/phase-02-frontend-session-rebind.md",
+    "/home/huynq/notebooks/hapi/.codex/plans/PLAN_ARCHIVE_RESUME_CHAT_RECOVERY/phase-03-regression-tests-and-qa.md"
+  ],
+  "plan_profile": "standard",
+  "owned_files": [
+    "hub/src/store/pendingMessages.ts",
+    "hub/src/store/pendingMessages.test.ts",
+    "hub/src/sync/sessionCache.ts",
+    "hub/src/sync/syncEngine.ts",
+    "hub/src/web/routes/messages.ts",
+    "hub/src/web/routes/messages.test.ts",
+    "hub/src/web/routes/sessions.ts",
+    "hub/src/web/routes/sessions.test.ts",
+    "hub/src/web/routes/guards.test.ts",
+    "hub/src/resume/autoResumeOrchestrator.ts",
+    "hub/src/resume/autoResumeOrchestrator.test.ts",
+    "hub/src/resume/autoResumeOrchestrator.integration.test.ts",
+    "hub/integration/auto-resume.test.ts",
+    "web/src/api/client.ts",
+    "web/src/hooks/mutations/useSendMessage.ts",
+    "web/src/router.tsx",
+    "web/src/hooks/useSSE.ts",
+    "web/src/lib/message-window-store.ts",
+    "web/src/hooks/mutations/useSendMessage.rebind.test.tsx",
+    "web/src/routes/sessions/session-rebind-flow.test.tsx"
+  ],
+  "dependencies": [
+    {
+      "phase": "phase-02-frontend-canonical-rebind",
+      "depends_on": [
+        "phase-01-backend-canonical-queue-and-contract"
+      ]
+    },
+    {
+      "phase": "phase-03-regression-tests-and-qa",
+      "depends_on": [
+        "phase-01-backend-canonical-queue-and-contract",
+        "phase-02-frontend-canonical-rebind"
+      ]
+    }
+  ],
+  "review_blockers_resolved": [
+    "single authoritative contract for inactive-send/manual-resume",
+    "manual-resume ownership clarified in backend and frontend",
+    "baseline-aware verify strategy replaces aspirational gates",
+    "web verification expanded to route/SSE/message-window sequence",
+    "backend merge atomicity requirement made explicit",
+    "test surface corrected toward messages route path"
+  ],
+  "next": {
+    "recommended_skill": "review-plan"
+  },
+  "plan_artifacts": {
+    "final_plan_path": "/home/huynq/notebooks/hapi/.codex/plans/PLAN_ARCHIVE_RESUME_CHAT_RECOVERY/plan.md",
+    "plan_root_path": "/home/huynq/notebooks/hapi/.codex/plans/PLAN_ARCHIVE_RESUME_CHAT_RECOVERY",
+    "ownership_manifest_path": "/home/huynq/notebooks/hapi/.codex/plans/PLAN_ARCHIVE_RESUME_CHAT_RECOVERY/manifests/ownership.json",
+    "dependency_graph_path": "/home/huynq/notebooks/hapi/.codex/plans/PLAN_ARCHIVE_RESUME_CHAT_RECOVERY/manifests/dependency-graph.json",
+    "benchmark_manifest_path": "/home/huynq/notebooks/hapi/.codex/plans/PLAN_ARCHIVE_RESUME_CHAT_RECOVERY/manifests/benchmark.json"
+  }
+}

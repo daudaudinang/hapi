@@ -11,7 +11,7 @@ import type {
     SyncEvent
 } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
-import { clearMessageWindow, ingestIncomingMessages } from '@/lib/message-window-store'
+import { ingestIncomingMessages } from '@/lib/message-window-store'
 
 type SSESubscription = {
     all?: boolean
@@ -501,7 +501,8 @@ export function useSSE(options: {
                 if (event.type === 'session-removed') {
                     removeSessionSummary(event.sessionId)
                     void queryClient.removeQueries({ queryKey: queryKeys.session(event.sessionId) })
-                    clearMessageWindow(event.sessionId)
+                    // Keep message window state briefly to avoid losing context during
+                    // canonical session rebind (old -> new sessionId).
                 } else if (isSessionRecord(event.data) && event.data.id === event.sessionId) {
                     queryClient.setQueryData<SessionResponse>(queryKeys.session(event.sessionId), { session: event.data })
                     upsertSessionSummary(event.data)

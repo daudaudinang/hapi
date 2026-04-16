@@ -33,6 +33,30 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null): Ho
         return c.json({ machines })
     })
 
+    app.get('/machines/:id/codex-models', async (c) => {
+        const engine = getSyncEngine()
+        if (!engine) {
+            return c.json({ error: 'Not connected' }, 503)
+        }
+
+        const machineId = c.req.param('id')
+        const access = requireMachine(c, engine, machineId)
+        if (access instanceof Response) {
+            return access
+        }
+
+        try {
+            const result = await engine.listCodexModels(machineId)
+            if (!result.success) {
+                return c.json({ error: result.error ?? 'Failed to load Codex models' }, 500)
+            }
+
+            return c.json({ models: result.models ?? [] })
+        } catch (error) {
+            return c.json({ error: error instanceof Error ? error.message : 'Failed to load Codex models' }, 500)
+        }
+    })
+
     app.post('/machines/:id/spawn', async (c) => {
         const engine = getSyncEngine()
         if (!engine) {

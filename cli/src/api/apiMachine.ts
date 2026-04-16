@@ -15,6 +15,7 @@ import { RpcHandlerManager } from './rpc/RpcHandlerManager'
 import { registerCommonHandlers } from '../modules/common/registerCommonHandlers'
 import type { SpawnSessionOptions, SpawnSessionResult } from '../modules/common/rpcTypes'
 import { applyVersionedAck } from './versionedUpdate'
+import { listCodexModels } from '@/codex/listCodexModels'
 
 interface ServerToRunnerEvents {
     update: (data: Update) => void
@@ -152,6 +153,10 @@ export class ApiMachineClient {
         this.rpcHandlerManager.registerHandler('stop-runner', () => {
             setTimeout(() => requestShutdown(), 100)
             return { message: 'Runner stop request acknowledged' }
+        })
+
+        this.rpcHandlerManager.registerHandler('list-codex-models', async () => {
+            return await listCodexModels()
         })
     }
 

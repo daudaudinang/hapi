@@ -44,6 +44,26 @@ export type RpcPathExistsResponse = {
     exists: Record<string, boolean>
 }
 
+export type RpcCodexModelSummary = {
+    id: string
+    model: string
+    displayName: string
+    description: string
+    hidden: boolean
+    defaultReasoningEffort: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+    supportedReasoningEfforts: Array<{
+        reasoningEffort: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+        description: string
+    }>
+    isDefault: boolean
+}
+
+export type RpcCodexModelsResponse = {
+    success: boolean
+    models?: RpcCodexModelSummary[]
+    error?: string
+}
+
 export class RpcGateway {
     constructor(
         private readonly io: Server,
@@ -173,6 +193,10 @@ export class RpcGateway {
             exists[key] = value === true
         }
         return exists
+    }
+
+    async listCodexModels(machineId: string): Promise<RpcCodexModelsResponse> {
+        return await this.machineRpc(machineId, 'list-codex-models', {}) as RpcCodexModelsResponse
     }
 
     async getGitStatus(sessionId: string, cwd?: string): Promise<RpcCommandResponse> {

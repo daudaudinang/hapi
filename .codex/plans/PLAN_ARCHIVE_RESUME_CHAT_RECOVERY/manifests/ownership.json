@@ -1,0 +1,62 @@
+{
+  "schema_version": 2,
+  "plan": "PLAN_ARCHIVE_RESUME_CHAT_RECOVERY",
+  "workflow": "WF_20260416_D3242758",
+  "plan_profile": "standard",
+  "parallel_safe": false,
+  "ownership_mode": "sequential-single-controller",
+  "reason": "Backend canonical queue migration, frontend canonical rebind, and regression assertions share one canonical-session-id contract and must land in order.",
+  "phases": [
+    {
+      "phase": "phase-01-backend-canonical-queue-and-contract",
+      "owner": "implement-plan",
+      "files": [
+        "hub/src/store/pendingMessages.ts",
+        "hub/src/store/pendingMessages.test.ts",
+        "hub/src/sync/sessionCache.ts",
+        "hub/src/sync/syncEngine.ts",
+        "hub/src/web/routes/messages.ts",
+        "hub/src/web/routes/messages.test.ts",
+        "hub/src/web/routes/sessions.ts",
+        "hub/src/web/routes/sessions.test.ts",
+        "hub/src/resume/autoResumeOrchestrator.ts"
+      ]
+    },
+    {
+      "phase": "phase-02-frontend-canonical-rebind",
+      "owner": "implement-plan",
+      "files": [
+        "web/src/api/client.ts",
+        "web/src/hooks/mutations/useSendMessage.ts",
+        "web/src/router.tsx",
+        "web/src/hooks/useSSE.ts",
+        "web/src/lib/message-window-store.ts"
+      ]
+    },
+    {
+      "phase": "phase-03-regression-tests-and-qa",
+      "owner": "implement-plan",
+      "files": [
+        "hub/src/store/pendingMessages.test.ts",
+        "hub/src/resume/autoResumeOrchestrator.test.ts",
+        "hub/src/resume/autoResumeOrchestrator.integration.test.ts",
+        "hub/src/web/routes/messages.test.ts",
+        "hub/src/web/routes/sessions.test.ts",
+        "hub/src/web/routes/guards.test.ts",
+        "hub/integration/auto-resume.test.ts",
+        "web/src/hooks/mutations/useSendMessage.rebind.test.tsx",
+        "web/src/routes/sessions/session-rebind-flow.test.tsx"
+      ]
+    }
+  ],
+  "shared_contracts": [
+    "authoritative canonical sessionId for both /sessions/:id/resume and POST /sessions/:id/messages",
+    "pending_messages ownership migration in mergeSessions atomic boundary",
+    "route/query/message-window rebind sequencing under session-removed events"
+  ],
+  "do_not_modify": [
+    "cli/**",
+    "shared/**",
+    "unrelated dirty worktree files outside the archive/resume regression"
+  ]
+}

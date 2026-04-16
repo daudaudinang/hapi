@@ -1,0 +1,31 @@
+{
+  "schema_version": 2,
+  "skill": "review-plan",
+  "workflow": "WF_20260416_D3242758",
+  "plan": "PLAN_ARCHIVE_RESUME_CHAT_RECOVERY",
+  "revision_reviewed": 2,
+  "status": "PASS",
+  "weighted_score": 8.35,
+  "duration_min": 6,
+  "findings": [],
+  "blockers": [],
+  "review_summary": {
+    "verdict_reason": "All previously blocking issues from revision-1 review are addressed in revision-2 plan artifacts.",
+    "top_validated_items": [
+      "single authoritative inactive-send/manual-resume contract",
+      "manual-resume ownership clarified in backend/frontend surfaces",
+      "baseline-aware verification strategy",
+      "expanded route/SSE/cache rebind verification",
+      "explicit backend merge atomicity",
+      "corrected route test surface"
+    ]
+  },
+  "finding_validation": {
+    "evidence_complete": true,
+    "business_context_validated": true,
+    "conflicts_normalized": true
+  },
+  "next": {
+    "recommended_skill": "implement-plan"
+  }
+}

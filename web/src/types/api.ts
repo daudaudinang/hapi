@@ -95,6 +95,26 @@ export type MessagesResponse = {
 export type MachinesResponse = { machines: Machine[] }
 export type MachinePathsExistsResponse = { exists: Record<string, boolean> }
 
+export type CodexModelReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+
+export type CodexModelSummary = {
+    id: string
+    model: string
+    displayName: string
+    description: string
+    hidden: boolean
+    defaultReasoningEffort: CodexModelReasoningEffort
+    supportedReasoningEfforts: Array<{
+        reasoningEffort: CodexModelReasoningEffort
+        description: string
+    }>
+    isDefault: boolean
+}
+
+export type CodexModelsResponse = {
+    models: CodexModelSummary[]
+}
+
 export type SpawnResponse =
     | { type: 'success'; sessionId: string }
     | { type: 'error'; message: string }

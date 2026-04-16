@@ -105,7 +105,7 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null): Ho
             attachments: parsed.data.attachments,
             sentFrom: 'webapp'
         })
-        return c.json({ ok: true })
+        return c.json({ ok: true, sessionId })
     })
 
     return app

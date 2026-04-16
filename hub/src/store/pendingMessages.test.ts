@@ -486,4 +486,62 @@ describe('PendingMessagesStore', () => {
       expect(updated?.retryCount).toBe(2)
     })
   })
+
+  describe('reassignSession', () => {
+    it('should move pending messages from old session to new session', () => {
+      createSession('old-session')
+      createSession('new-session')
+
+      store.addPendingMessage({
+        id: 'msg-reassign-1',
+        sessionId: 'old-session',
+        payload: JSON.stringify({ content: 'Move me' }),
+        createdAt: Date.now(),
+        processedAt: null,
+        error: null,
+        status: 'pending'
+      })
+
+      const changed = store.reassignSession('old-session', 'new-session')
+      expect(changed).toBe(1)
+
+      const oldPending = store.getPendingMessages('old-session')
+      const newPending = store.getPendingMessages('new-session')
+      expect(oldPending).toHaveLength(0)
+      expect(newPending).toHaveLength(1)
+      expect(newPending[0]?.id).toBe('msg-reassign-1')
+      expect(newPending[0]?.sessionId).toBe('new-session')
+    })
+
+    it('should only move pending status messages', () => {
+      createSession('old-session')
+      createSession('new-session')
+
+      store.addPendingMessage({
+        id: 'msg-reassign-2',
+        sessionId: 'old-session',
+        payload: JSON.stringify({ content: 'Pending' }),
+        createdAt: Date.now(),
+        processedAt: null,
+        error: null,
+        status: 'pending'
+      })
+
+      store.addPendingMessage({
+        id: 'msg-reassign-3',
+        sessionId: 'old-session',
+        payload: JSON.stringify({ content: 'Processed' }),
+        createdAt: Date.now(),
+        processedAt: Date.now(),
+        error: null,
+        status: 'processed'
+      })
+
+      const changed = store.reassignSession('old-session', 'new-session')
+      expect(changed).toBe(1)
+
+      const processed = store.getPendingMessage('msg-reassign-3')
+      expect(processed?.sessionId).toBe('old-session')
+    })
+  })
 })

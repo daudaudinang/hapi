@@ -30,7 +30,7 @@ import { queryKeys } from '@/lib/query-keys'
 import { useToast } from '@/lib/toast-context'
 import { useTranslation } from '@/lib/use-translation'
 import { fetchLatestMessages, seedMessageWindowFromSession } from '@/lib/message-window-store'
-import type { Machine } from '@/types/api'
+import type { Machine, SessionResponse } from '@/types/api'
 import FilesPage from '@/routes/sessions/files'
 import FilePage from '@/routes/sessions/file'
 import TerminalPage from '@/routes/sessions/terminal'
@@ -220,28 +220,72 @@ function SessionPage() {
         flushPending,
         setAtBottom,
     } = useMessages(api, sessionId)
+    const refreshSelectedSession = useCallback(() => {
+        void refetchSession()
+        void refetchMessages()
+    }, [refetchMessages, refetchSession])
+
+    const rebindToSession = useCallback((fromSessionId: string, toSessionId: string) => {
+        if (!fromSessionId || !toSessionId || fromSessionId === toSessionId) {
+            return
+        }
+
+        seedMessageWindowFromSession(fromSessionId, toSessionId)
+
+        void queryClient.invalidateQueries({ queryKey: queryKeys.session(fromSessionId) })
+        void queryClient.invalidateQueries({ queryKey: queryKeys.session(toSessionId) })
+        void queryClient.invalidateQueries({ queryKey: queryKeys.messages(fromSessionId) })
+        void queryClient.invalidateQueries({ queryKey: queryKeys.messages(toSessionId) })
+        void queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
+
+        navigate({
+            to: '/sessions/$sessionId',
+            params: { sessionId: toSessionId },
+            replace: true
+        })
+    }, [navigate, queryClient])
+
+    const resolveSessionId = useCallback(async (currentSessionId: string) => {
+        if (!api) {
+            return currentSessionId
+        }
+
+        const currentDetail = queryClient.getQueryData<SessionResponse>(queryKeys.session(currentSessionId))
+        if (currentDetail?.session?.active) {
+            return currentSessionId
+        }
+
+        try {
+            const resumedSessionId = await api.resumeSession(currentSessionId)
+            if (resumedSessionId && resumedSessionId !== currentSessionId) {
+                rebindToSession(currentSessionId, resumedSessionId)
+            }
+            return resumedSessionId || currentSessionId
+        } catch (error) {
+            console.error('Failed to resolve session before send:', error)
+            return currentSessionId
+        }
+    }, [api, queryClient, rebindToSession])
+
     const {
         sendMessage,
         retryMessage,
         isSending,
         isResuming,
     } = useSendMessage(api, sessionId, {
-        // Note: With auto-resume, we let the backend handle session resuming
-        // The frontend will receive 202 if resuming starts, 503 if it fails
-        onResuming: (resumingSessionId) => {
-            // Session is being resumed in the background
-            // The UI will show "Resuming..." state
-            // We'll refresh the session when resume completes
-            console.log('Session resuming:', resumingSessionId)
+        resolveSessionId,
+        onSessionResolved: (resolvedSessionId) => {
+            if (sessionId && resolvedSessionId !== sessionId) {
+                rebindToSession(sessionId, resolvedSessionId)
+            }
+        },
+        onResuming: () => {
+            void refreshSelectedSession()
         },
         onResumed: () => {
-            // Resume completed successfully
-            // Refresh session data
-            refreshSelectedSession()
+            void refreshSelectedSession()
         },
         onArchiveFailed: (reason) => {
-            // Resume failed, session was archived
-            // Show archive prompt
             addToast({
                 title: 'Session Archived',
                 body: reason || 'This session could not be resumed and has been archived.',
@@ -262,7 +306,6 @@ function SessionPage() {
         }
     })
 
-    // Get agent type from session metadata for slash commands
     const agentType = session?.metadata?.flavor ?? 'claude'
     const {
         commands: slashCommands,
@@ -278,11 +321,6 @@ function SessionPage() {
         }
         return await getSlashSuggestions(query)
     }, [getSkillSuggestions, getSlashSuggestions])
-
-    const refreshSelectedSession = useCallback(() => {
-        void refetchSession()
-        void refetchMessages()
-    }, [refetchMessages, refetchSession])
 
     if (!session) {
         return (

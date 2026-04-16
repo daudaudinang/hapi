@@ -2,6 +2,7 @@ import type {
     AttachmentMetadata,
     AuthResponse,
     CodexCollaborationMode,
+    CodexModelsResponse,
     DeleteUploadResponse,
     ListDirectoryResponse,
     FileReadResponse,
@@ -274,7 +275,7 @@ export class ApiClient {
         return response.sessionId
     }
 
-    async sendMessage(sessionId: string, text: string, localId?: string | null, attachments?: AttachmentMetadata[]): Promise<{ status: 'sent' } | { status: 'resuming'; sessionId: string } | { status: 'failed'; error: string; archived: boolean; reason?: string }> {
+    async sendMessage(sessionId: string, text: string, localId?: string | null, attachments?: AttachmentMetadata[]): Promise<{ status: 'sent'; sessionId: string } | { status: 'resuming'; sessionId: string } | { status: 'failed'; error: string; archived: boolean; reason?: string }> {
         const res = await fetch(this.buildUrl(`/api/sessions/${encodeURIComponent(sessionId)}/messages`), {
             method: 'POST',
             headers: {
@@ -306,7 +307,8 @@ export class ApiClient {
             throw new ApiError(`HTTP ${res.status} ${res.statusText}`, res.status, undefined, bodyText || undefined)
         }
 
-        return { status: 'sent' }
+        const body = await res.json().catch(() => null) as { sessionId?: string } | null
+        return { status: 'sent', sessionId: body?.sessionId ?? sessionId }
     }
 
     async abortSession(sessionId: string): Promise<void> {
@@ -392,6 +394,12 @@ export class ApiClient {
 
     async getMachines(): Promise<MachinesResponse> {
         return await this.request<MachinesResponse>('/api/machines')
+    }
+
+    async getCodexModels(machineId: string): Promise<CodexModelsResponse> {
+        return await this.request<CodexModelsResponse>(
+            `/api/machines/${encodeURIComponent(machineId)}/codex-models`
+        )
     }
 
     async checkMachinePathsExists(

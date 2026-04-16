@@ -1,0 +1,33 @@
+{
+  "schema_version": 2,
+  "skill": "implement-plan",
+  "workflow": "WF_20260416_D3242758",
+  "plan": "PLAN_ARCHIVE_RESUME_CHAT_RECOVERY",
+  "status": "PASS",
+  "artifacts": {
+    "primary": "/home/huynq/notebooks/hapi/.codex/pipeline/PLAN_ARCHIVE_RESUME_CHAT_RECOVERY/03-implement-plan.output.md",
+    "secondary": [
+      "/home/huynq/notebooks/hapi/hub/src/store/pendingMessages.ts",
+      "/home/huynq/notebooks/hapi/hub/src/sync/sessionCache.ts",
+      "/home/huynq/notebooks/hapi/hub/src/web/routes/messages.ts",
+      "/home/huynq/notebooks/hapi/web/src/api/client.ts",
+      "/home/huynq/notebooks/hapi/web/src/hooks/mutations/useSendMessage.ts",
+      "/home/huynq/notebooks/hapi/web/src/router.tsx",
+      "/home/huynq/notebooks/hapi/web/src/hooks/useSSE.ts",
+      "/home/huynq/notebooks/hapi/hub/src/store/pendingMessages.test.ts",
+      "/home/huynq/notebooks/hapi/hub/src/web/routes/messages.test.ts"
+    ]
+  },
+  "verification": {
+    "commands": [
+      "cd hub && bun test src/web/routes/messages.test.ts",
+      "cd hub && bun test src/store/pendingMessages.test.ts",
+      "cd hub && bun test src/resume/autoResumeOrchestrator.test.ts",
+      "cd web && bun run typecheck"
+    ],
+    "all_passed": true
+  },
+  "next": {
+    "recommended_skill": "review-implement"
+  }
+}

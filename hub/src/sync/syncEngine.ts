@@ -18,6 +18,7 @@ import { MessageService } from './messageService'
 import {
     RpcGateway,
     type RpcCommandResponse,
+    type RpcCodexModelsResponse,
     type RpcDeleteUploadResponse,
     type RpcListDirectoryResponse,
     type RpcPathExistsResponse,
@@ -34,6 +35,7 @@ export type { SyncEventListener } from './eventPublisher'
 export type { EnqueueResult, MessagePayload } from '../queue/messageQueue'
 export type {
     RpcCommandResponse,
+    RpcCodexModelsResponse,
     RpcDeleteUploadResponse,
     RpcListDirectoryResponse,
     RpcPathExistsResponse,
@@ -551,6 +553,10 @@ export class SyncEngine {
 
     async checkPathsExist(machineId: string, paths: string[]): Promise<Record<string, boolean>> {
         return await this.rpcGateway.checkPathsExist(machineId, paths)
+    }
+
+    async listCodexModels(machineId: string): Promise<RpcCodexModelsResponse> {
+        return await this.rpcGateway.listCodexModels(machineId)
     }
 
     async getGitStatus(sessionId: string, cwd?: string): Promise<RpcCommandResponse> {

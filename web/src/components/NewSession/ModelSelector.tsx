@@ -5,11 +5,12 @@ import { useTranslation } from '@/lib/use-translation'
 export function ModelSelector(props: {
     agent: AgentType
     model: string
+    options?: { value: string; label: string }[]
     isDisabled: boolean
     onModelChange: (value: string) => void
 }) {
     const { t } = useTranslation()
-    const options = MODEL_OPTIONS[props.agent]
+    const options = props.options ?? MODEL_OPTIONS[props.agent]
     if (options.length === 0) {
         return null
     }

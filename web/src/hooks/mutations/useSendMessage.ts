@@ -69,15 +69,20 @@ export function useSendMessage(
             if (result.status === 'resuming') {
                 setIsResuming(true)
                 options?.onResuming?.(result.sessionId)
-                // After a delay, assume resume completed and refresh
+                options?.onSessionResolved?.(result.sessionId)
+                // UI fallback only: clear transient resuming indicator if no follow-up
+                // event arrives (do not use this timeout as canonical state source).
                 setTimeout(() => {
                     setIsResuming(false)
-                    options?.onResumed?.()
-                }, 3000) // 3 second delay for resume
+                }, 15_000)
             } else if (result.status === 'failed') {
                 setIsResuming(false)
                 options?.onArchiveFailed?.(result.reason)
                 throw new Error(result.error)
+            } else if (result.status === 'sent') {
+                setIsResuming(false)
+                options?.onSessionResolved?.(result.sessionId)
+                options?.onResumed?.()
             }
 
             return result

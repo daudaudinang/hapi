@@ -367,6 +367,7 @@ export class SessionCache {
         }
 
         this.store.messages.mergeSessionMessages(oldSessionId, newSessionId)
+        this.store.pendingMessages.reassignSession(oldSessionId, newSessionId)
 
         const mergedMetadata = this.mergeSessionMetadata(oldStored.metadata, newStored.metadata)
         if (mergedMetadata !== null && mergedMetadata !== newStored.metadata) {
