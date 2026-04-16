@@ -93,6 +93,41 @@ describe('listSlashCommands', () => {
         expect(command?.description).toBe('Trellis start')
     })
 
+    it('loads global commands defined with colon in the filename', async () => {
+        await writeFile(
+            join(claudeConfigDir, 'commands', 'lp:plan.md'),
+            ['---', 'description: LP plan', '---', '', 'Plan flow'].join('\n')
+        )
+
+        const commands = await listSlashCommands('claude')
+        const command = commands.find(cmd => cmd.name === 'lp:plan')
+
+        expect(command).toBeDefined()
+        expect(command?.source).toBe('user')
+        expect(command?.description).toBe('LP plan')
+        expect(command?.content).toBe('Plan flow')
+    })
+
+    it('prefers project commands over global commands for the same colon command name', async () => {
+        await writeFile(
+            join(claudeConfigDir, 'commands', 'lp:plan.md'),
+            ['---', 'description: Global LP plan', '---', '', 'Global plan flow'].join('\n')
+        )
+        await mkdir(join(projectDir, '.claude', 'commands', 'lp'), { recursive: true })
+        await writeFile(
+            join(projectDir, '.claude', 'commands', 'lp', 'plan.md'),
+            ['---', 'description: Project LP plan', '---', '', 'Project plan flow'].join('\n')
+        )
+
+        const commands = await listSlashCommands('claude', projectDir)
+        const colonCommands = commands.filter(cmd => cmd.name === 'lp:plan')
+
+        expect(colonCommands).toHaveLength(1)
+        expect(colonCommands[0]?.source).toBe('project')
+        expect(colonCommands[0]?.description).toBe('Project LP plan')
+        expect(colonCommands[0]?.content).toBe('Project plan flow')
+    })
+
     it('returns empty project commands when project directory does not exist', async () => {
         const nonExistentProjectDir = join(sandboxDir, 'not-exists')
 

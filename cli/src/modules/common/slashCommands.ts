@@ -146,7 +146,7 @@ async function scanCommandsDir(
                 }
 
                 const baseName = entry.name.slice(0, -3);
-                if (!baseName || baseName.includes(':')) {
+                if (!baseName) {
                     return [];
                 }
 

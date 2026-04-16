@@ -72,10 +72,16 @@ describe('parseSpecialCommand', () => {
         // Test with extra whitespace
         expect(parseSpecialCommand('  /compact test  ').type).toBe('compact');
         expect(parseSpecialCommand('  /clear  ').type).toBe('clear');
-        
+
         // Test partial matches should not trigger
         expect(parseSpecialCommand('some /compact text').type).toBeNull();
         expect(parseSpecialCommand('/compactor').type).toBeNull();
         expect(parseSpecialCommand('/clearing').type).toBeNull();
+    });
+
+    it('should not intercept custom slash commands like /lp:plan', () => {
+        const result = parseSpecialCommand('/lp:plan build auth flow');
+        expect(result.type).toBeNull();
+        expect(result.originalMessage).toBeUndefined();
     });
 });
