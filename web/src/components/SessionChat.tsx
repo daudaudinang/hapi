@@ -16,8 +16,10 @@ import { normalizeDecryptedMessage } from '@/chat/normalize'
 import { reduceChatBlocks } from '@/chat/reducer'
 import { reconcileChatBlocks } from '@/chat/reconcile'
 import { buildConversationOutline } from '@/chat/outline'
+import { isQueuedForInvocation } from '@/lib/messages'
 import { HappyComposer } from '@/components/AssistantChat/HappyComposer'
 import { HappyThread } from '@/components/AssistantChat/HappyThread'
+import { QueuedMessagesBar } from '@/components/AssistantChat/QueuedMessagesBar'
 import { useHappyRuntime } from '@/lib/assistant-runtime'
 import { createAttachmentAdapter } from '@/lib/attachmentAdapter'
 import { useTranslation } from '@/lib/use-translation'
@@ -63,6 +65,10 @@ export function SessionChat(props: {
     onRetryMessage?: (localId: string) => void
     autocompleteSuggestions?: (query: string) => Promise<Suggestion[]>
     availableSlashCommands?: readonly SlashCommand[]
+    disableVoice?: boolean
+    hideHeader?: boolean
+    compactMode?: boolean
+    pinIndex?: number
 }) {
     const { haptic } = usePlatform()
     const { t } = useTranslation()
@@ -81,6 +87,7 @@ export function SessionChat(props: {
         sessionId: props.session.id,
         enabled: agentFlavor === 'codex' && props.session.active && !controlledByUser
     })
+    const [codexErrorDismissed, setCodexErrorDismissed] = useState(false)
     const codexModelOptions = useMemo(() => {
         if (agentFlavor !== 'codex') {
             return undefined
@@ -110,8 +117,9 @@ export function SessionChat(props: {
         codexCollaborationModeSupported
     )
 
-    // Voice assistant integration
-    const voice = useVoiceOptional()
+    // Voice assistant integration — disabled in multi-pin mode to avoid conflicts
+    const voiceRaw = useVoiceOptional()
+    const voice = props.disableVoice ? null : voiceRaw
 
     // Register session store for voice client tools
     useEffect(() => {
@@ -209,6 +217,15 @@ export function SessionChat(props: {
         setOutlineOpen(false)
     }, [props.session.id])
 
+    // Exclude user messages that haven't been invoked yet — those appear in the
+    // QueuedMessagesBar above the composer, not in the thread timeline. The
+    // `isQueuedForInvocation` predicate is shared with the window store and the
+    // floating bar so the three views never disagree about queued state.
+    const visibleMessages = useMemo(
+        () => props.messages.filter((m) => !isQueuedForInvocation(m)),
+        [props.messages]
+    )
+
     const normalizedMessages: NormalizedMessage[] = useMemo(() => {
         // Clear caches immediately when session changes (before useEffect runs)
         if (prevSessionIdRef.current !== null && prevSessionIdRef.current !== props.session.id) {
@@ -220,7 +237,7 @@ export function SessionChat(props: {
         const cache = normalizedCacheRef.current
         const normalized: NormalizedMessage[] = []
         const seen = new Set<string>()
-        for (const message of props.messages) {
+        for (const message of visibleMessages) {
             seen.add(message.id)
             const cached = cache.get(message.id)
             if (cached && cached.source === message) {
@@ -237,7 +254,7 @@ export function SessionChat(props: {
             }
         }
         return normalized
-    }, [props.messages])
+    }, [visibleMessages])
 
     const reduced = useMemo(
         () => reduceChatBlocks(normalizedMessages, props.session.agentState),
@@ -369,26 +386,68 @@ export function SessionChat(props: {
 
     return (
         <div className="flex h-full min-h-0 flex-col">
-            <SessionHeader
-                session={props.session}
-                onBack={props.onBack}
-                onViewFiles={props.session.metadata?.path ? handleViewFiles : undefined}
-                onOpenOutline={() => setOutlineOpen(true)}
-                api={props.api}
-                onSessionDeleted={props.onBack}
-            />
+            {!props.hideHeader && (
+                <SessionHeader
+                    session={props.session}
+                    onBack={props.onBack}
+                    onViewFiles={terminalSupported ? handleViewFiles : undefined}
+                    onOpenOutline={() => setOutlineOpen(true)}
+                    api={props.api}
+                    onSessionDeleted={props.onBack}
+                    compactMode={props.compactMode}
+                    pinIndex={props.pinIndex}
+                />
+            )}
 
             {props.session.teamState && (
                 <TeamPanel teamState={props.session.teamState} />
             )}
 
-            {sessionInactive ? (
-                <div className="px-3 pt-3">
-                    <div className="mx-auto w-full max-w-content rounded-md bg-[var(--app-subtle-bg)] p-3 text-sm text-[var(--app-hint)]">
-                        Session is inactive. Sending will resume it automatically.
+
+            {sessionInactive ? (() => {
+                const meta = props.session.metadata
+                const hasResumeToken = !!(
+                    meta?.claudeSessionId ||
+                    meta?.codexSessionId ||
+                    meta?.geminiSessionId ||
+                    meta?.opencodeSessionId ||
+                    meta?.cursorSessionId
+                )
+                if (!hasResumeToken) {
+                    return (
+                        <div className="px-3 pt-3">
+                            <div className="mx-auto w-full max-w-content rounded-md bg-[var(--app-subtle-bg)] p-3 text-sm flex items-center justify-between gap-3">
+                                <p className="text-[var(--app-hint)]">
+                                    This session cannot be resumed — no agent session token was saved.
+                                </p>
+                                <button
+                                    type="button"
+                                    style={{ background: 'rgb(99,102,241)', color: '#fff', whiteSpace: 'nowrap' }}
+                                    className="shrink-0 rounded-md px-3 py-1.5 text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer"
+                                    onClick={() => void navigate({
+                                        search: (prev: any) => ({
+                                            ...prev,
+                                            modal: 'new-session',
+                                            modalReplaceSessionId: props.session.id,
+                                            ...(meta?.path ? { directory: meta.path } : {})
+                                        })
+                                    } as any)}
+                                >
+                                    + New Session
+                                </button>
+                            </div>
+                        </div>
+                    )
+                }
+                return (
+                    <div className="px-3 pt-3">
+                        <div className="mx-auto w-full max-w-content rounded-md bg-[var(--app-subtle-bg)] p-3 text-sm text-[var(--app-hint)]">
+                            Session is inactive. Sending will resume it automatically.
+                        </div>
                     </div>
-                </div>
-            ) : null}
+                )
+            })() : null}
+
 
             <AssistantRuntimeProvider runtime={runtime}>
                 <div className="relative flex min-h-0 flex-1 flex-col">
@@ -408,7 +467,7 @@ export function SessionChat(props: {
                         isLoadingMoreMessages={props.isLoadingMoreMessages}
                         onLoadMore={props.onLoadMore}
                         pendingCount={props.pendingCount}
-                        rawMessagesCount={props.messages.length}
+                        rawMessagesCount={visibleMessages.length}
                         normalizedMessagesCount={normalizedMessages.length}
                         messagesVersion={props.messagesVersion}
                         forceScrollToken={forceScrollToken}
@@ -418,13 +477,26 @@ export function SessionChat(props: {
                         onOutlineOpenChange={setOutlineOpen}
                     />
 
-                    {codexCollaborationModeSupported && codexModelsState.error ? (
+                    {codexCollaborationModeSupported && codexModelsState.error && !codexErrorDismissed ? (
                         <div className="px-3 pb-2">
-                            <div className="mx-auto w-full max-w-content rounded-md bg-[var(--app-subtle-bg)] p-3 text-sm text-red-600">
-                                {t('session.codexModelsLoadFailed')}: {codexModelsState.error}
+                            <div className="mx-auto w-full max-w-content rounded-md bg-[var(--app-subtle-bg)] p-3 text-sm text-red-500 flex items-center justify-between gap-3">
+                                <span className="flex-1 min-w-0">
+                                    {t('session.codexModelsLoadFailed')}: {codexModelsState.error}
+                                </span>
+                                <button
+                                    type="button"
+                                    className="shrink-0 text-xs px-2 py-1 rounded border border-[var(--app-border)] hover:bg-[var(--app-subtle-bg)] text-[var(--app-hint)] transition-colors"
+                                    onClick={() => setCodexErrorDismissed(true)}
+                                >
+                                    Dismiss
+                                </button>
                             </div>
                         </div>
                     ) : null}
+
+                    <div className="px-3">
+                        <QueuedMessagesBar sessionId={props.session.id} />
+                    </div>
 
                     <HappyComposer
                         key={props.session.id}
@@ -443,6 +515,8 @@ export function SessionChat(props: {
                         agentState={props.session.agentState}
                         backgroundTaskCount={props.session.backgroundTaskCount}
                         contextSize={reduced.latestUsage?.contextSize}
+                        contextCacheRead={reduced.latestUsage?.cacheRead}
+                        contextWindow={reduced.latestUsage?.contextWindow}
                         controlledByUser={controlledByUser}
                         onCollaborationModeChange={
                             codexCollaborationModeSupported && props.session.active && !controlledByUser
@@ -474,7 +548,7 @@ export function SessionChat(props: {
             </AssistantRuntimeProvider>
 
             {/* Voice session component - renders nothing but initializes ElevenLabs */}
-            {voice && (
+            {voice && !props.disableVoice && (
                 <RealtimeVoiceSession
                     api={props.api}
                     micMuted={voice.micMuted}

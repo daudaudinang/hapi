@@ -242,6 +242,7 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
         let clearReadyAfterTurnTimer: (() => void) | null = null;
         let turnInFlight = false;
         let allowAnonymousTerminalEvent = false;
+        let hasSummary = false;
         let invalidThreadId: string | null = null;
 
         const handleCodexEvent = (msg: Record<string, unknown>) => {
@@ -384,6 +385,24 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
                         message,
                         id: randomUUID()
                     });
+
+                    // Auto-update session summary from first agent message
+                    if (!hasSummary) {
+                        hasSummary = true;
+                        const firstLine = message.split('\n')[0].trim();
+                        const summaryText = firstLine.length > 120
+                            ? firstLine.slice(0, 117) + '…'
+                            : firstLine;
+                        if (summaryText.length > 0) {
+                            session.client.updateMetadata((metadata) => ({
+                                ...metadata,
+                                summary: {
+                                    text: summaryText,
+                                    updatedAt: Date.now()
+                                }
+                            }));
+                        }
+                    }
                 }
             }
             if (msgType === 'exec_command_begin' || msgType === 'exec_approval_request') {
@@ -410,6 +429,8 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
                     delete output.type;
                     delete output.call_id;
                     delete output.callId;
+                    output.stdout = output.output;
+                    delete output.output;
 
                     session.sendAgentMessage({
                         type: 'tool-call-result',
@@ -422,6 +443,28 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
             if (msgType === 'token_count') {
                 session.sendAgentMessage({
                     ...msg,
+                    id: randomUUID()
+                });
+            }
+            if (msgType === 'plan_update') {
+                session.sendAgentMessage({
+                    type: 'tool-call',
+                    name: 'update_plan',
+                    callId: 'codex-plan-state',
+                    input: {
+                        plan: Array.isArray(msg.plan) ? msg.plan : [],
+                        source: 'codex'
+                    },
+                    id: randomUUID()
+                });
+                session.sendAgentMessage({
+                    type: 'tool-call-result',
+                    callId: 'codex-plan-state',
+                    output: {
+                        plan: Array.isArray(msg.plan) ? msg.plan : [],
+                        source: 'codex',
+                        status: 'updated'
+                    },
                     id: randomUUID()
                 });
             }
@@ -701,6 +744,7 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
                 this.currentThreadId = null;
                 invalidThreadId = null;
                 hasThread = false;
+                hasSummary = false;
                 session.resetCodexThread();
                 sendVisibleStatus('Context was reset');
                 return true;

@@ -171,6 +171,21 @@ export class SyncEngine {
         return this.messageService.getMessagesPage(sessionId, options)
     }
 
+    getMessagesPageByPosition(
+        sessionId: string,
+        options: { limit: number; before?: { at: number; seq: number } | null }
+    ): {
+        messages: DecryptedMessage[]
+        page: {
+            limit: number
+            nextBeforeSeq: number | null
+            nextBeforeAt: number | null
+            hasMore: boolean
+        }
+    } {
+        return this.messageService.getMessagesPageByPosition(sessionId, options)
+    }
+
     getMessagesAfter(sessionId: string, options: { afterSeq: number; limit: number }): DecryptedMessage[] {
         return this.messageService.getMessagesAfter(sessionId, options)
     }
@@ -309,6 +324,10 @@ export class SyncEngine {
     ): Promise<void> {
         await this.messageService.sendMessage(sessionId, payload)
         this.sessionCache.markMessageQueued(sessionId)
+        // Best-effort: persist last user request for title fallback (non-critical)
+        if (payload.text.trim()) {
+            this.sessionCache.updateLastUserRequest(sessionId, payload.text.trim())
+        }
     }
 
     async approvePermission(
