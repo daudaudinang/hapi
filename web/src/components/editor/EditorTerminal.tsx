@@ -369,34 +369,36 @@ export function EditorTerminal(props: {
                     }
                 }}
             >
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Close terminal?</DialogTitle>
-                        <DialogDescription>
-                            This will stop the running process and close the terminal tab.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="mt-4 flex justify-end gap-2">
-                        <button
-                            type="button"
-                            className="rounded border border-[var(--app-border)] px-3 py-1.5 text-sm text-[var(--app-fg)] hover:bg-[var(--app-secondary-bg)]"
-                            onClick={() => setPendingCloseTerminalId(null)}
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            type="button"
-                            className="rounded bg-red-600 px-3 py-1.5 text-sm text-white hover:bg-red-500"
-                            onClick={() => {
-                                if (!pendingCloseTerminalId) {
-                                    return
-                                }
-                                closeTerminalNow(pendingCloseTerminalId)
-                                setPendingCloseTerminalId(null)
-                            }}
-                        >
-                            Stop process and close
-                        </button>
+                <DialogContent className="bottom-0 left-0 top-auto w-full max-w-none translate-x-0 translate-y-0 rounded-b-none rounded-t-xl p-4 sm:left-1/2 sm:bottom-auto sm:top-1/2 sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl sm:p-6">
+                    <div className="mx-auto flex max-w-md flex-col gap-3">
+                        <DialogHeader>
+                            <DialogTitle>Close terminal?</DialogTitle>
+                            <DialogDescription>
+                                This will stop the running process and close the terminal tab.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="flex flex-col gap-2">
+                            <button
+                                type="button"
+                                className="w-full rounded bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-500"
+                                onClick={() => {
+                                    if (!pendingCloseTerminalId) {
+                                        return
+                                    }
+                                    closeTerminalNow(pendingCloseTerminalId)
+                                    setPendingCloseTerminalId(null)
+                                }}
+                            >
+                                Stop process and close
+                            </button>
+                            <button
+                                type="button"
+                                className="w-full rounded border border-[var(--app-border)] px-3 py-2 text-sm text-[var(--app-fg)] hover:bg-[var(--app-secondary-bg)]"
+                                onClick={() => setPendingCloseTerminalId(null)}
+                            >
+                                Cancel
+                            </button>
+                        </div>
                     </div>
                 </DialogContent>
             </Dialog>

@@ -269,7 +269,12 @@ describe('EditorTerminal', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Close terminal Terminal: zsh' }))
 
-        expect(screen.getByRole('dialog', { name: 'Close terminal?' })).toBeInTheDocument()
+        const dialog = screen.getByRole('dialog', { name: 'Close terminal?' })
+        expect(dialog).toBeInTheDocument()
+        expect(dialog).toHaveClass('bottom-0', 'left-0', 'translate-x-0', 'rounded-t-xl')
+        expect(dialog).toHaveClass('sm:left-1/2', 'sm:-translate-x-1/2')
+        expect(screen.getByRole('button', { name: 'Stop process and close' })).toHaveClass('w-full', 'py-2')
+        expect(screen.getByRole('button', { name: 'Cancel' }).parentElement).toHaveClass('flex-col')
         expect(onCloseTab).not.toHaveBeenCalled()
         expect(mocks.closesByTerminalId.get('term-2')).not.toHaveBeenCalled()
 
