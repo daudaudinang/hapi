@@ -12,6 +12,7 @@ import { go } from '@codemirror/lang-go'
 import type { EditorTab } from '@/hooks/useEditorState'
 import type { ApiClient } from '@/api/client'
 import { FileIcon } from '@/components/FileIcon'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useEditorFile } from '@/hooks/queries/useEditorFile'
 
 const editorScrollTheme = EditorView.theme({
@@ -527,19 +528,21 @@ export function EditorTabs(props: {
                 )}
             </div>
 
-            {pendingCloseTab && (
-                <div className="fixed inset-0 z-50 flex items-end bg-black/30">
-                    <div
-                        role="dialog"
-                        aria-modal="true"
-                        aria-label="Close unsaved tab?"
-                        className="w-full border-t border-[var(--app-border)] bg-[var(--app-bg)] p-4 shadow-2xl"
-                    >
+            <Dialog
+                open={pendingCloseTab !== null}
+                onOpenChange={(open) => {
+                    if (open || (pendingCloseTab && savingTabId === pendingCloseTab.id)) return
+                    setPendingCloseTab(null)
+                    setPendingCloseError(null)
+                }}
+            >
+                {pendingCloseTab && (
+                    <DialogContent className="bottom-0 top-auto w-full max-w-none translate-y-0 rounded-b-none rounded-t-xl p-4 sm:max-w-md sm:left-1/2 sm:bottom-auto sm:top-1/2 sm:-translate-y-1/2 sm:rounded-xl sm:p-6">
                         <div className="mx-auto flex max-w-md flex-col gap-3">
-                            <div className="text-sm font-medium text-[var(--app-fg)]">Close unsaved tab?</div>
-                            <div className="text-xs text-[var(--app-hint)]">
-                                {pendingCloseTab.label} has unsaved changes.
-                            </div>
+                            <DialogHeader>
+                                <DialogTitle>Close unsaved tab?</DialogTitle>
+                                <DialogDescription>{pendingCloseTab.label} has unsaved changes.</DialogDescription>
+                            </DialogHeader>
                             {pendingCloseError && <div className="text-xs text-red-500">{pendingCloseError}</div>}
                             <div className="flex flex-col gap-2">
                                 <button
@@ -571,9 +574,9 @@ export function EditorTabs(props: {
                                 </button>
                             </div>
                         </div>
-                    </div>
-                </div>
-            )}
+                    </DialogContent>
+                )}
+            </Dialog>
         </div>
     )
 }

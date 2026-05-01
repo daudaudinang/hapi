@@ -353,8 +353,6 @@ describe('EditorTabs', () => {
 
         const dialog = await screen.findByRole('dialog', { name: 'Close unsaved tab?' })
         expect(dialog).toBeInTheDocument()
-        expect(dialog).toHaveAttribute('aria-modal', 'true')
-        expect(dialog.parentElement).toHaveClass('fixed', 'inset-0', 'bg-black/30')
         expect(onCloseTab).not.toHaveBeenCalled()
 
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
