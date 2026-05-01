@@ -528,39 +528,48 @@ export function EditorTabs(props: {
             </div>
 
             {pendingCloseTab && (
-                <div className="fixed inset-x-0 bottom-0 z-50 border-t border-[var(--app-border)] bg-[var(--app-bg)] p-4 shadow-2xl">
-                    <div role="dialog" aria-label="Close unsaved tab?" className="mx-auto flex max-w-md flex-col gap-3">
-                        <div className="text-sm font-medium text-[var(--app-fg)]">Close unsaved tab?</div>
-                        <div className="text-xs text-[var(--app-hint)]">
-                            {pendingCloseTab.label} has unsaved changes.
-                        </div>
-                        {pendingCloseError && <div className="text-xs text-red-500">{pendingCloseError}</div>}
-                        <div className="flex flex-col gap-2">
-                            <button
-                                type="button"
-                                className="rounded bg-[#6366f1] px-3 py-2 text-sm text-white disabled:opacity-50"
-                                disabled={savingTabId === pendingCloseTab.id}
-                                onClick={() => { void savePendingClose() }}
-                            >
-                                {savingTabId === pendingCloseTab.id ? 'Saving...' : 'Save then close'}
-                            </button>
-                            <button
-                                type="button"
-                                className="rounded border border-[var(--app-border)] px-3 py-2 text-sm text-[var(--app-fg)]"
-                                onClick={discardPendingClose}
-                            >
-                                Discard changes
-                            </button>
-                            <button
-                                type="button"
-                                className="rounded px-3 py-2 text-sm text-[var(--app-hint)]"
-                                onClick={() => {
-                                    setPendingCloseTab(null)
-                                    setPendingCloseError(null)
-                                }}
-                            >
-                                Cancel
-                            </button>
+                <div className="fixed inset-0 z-50 flex items-end bg-black/30">
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label="Close unsaved tab?"
+                        className="w-full border-t border-[var(--app-border)] bg-[var(--app-bg)] p-4 shadow-2xl"
+                    >
+                        <div className="mx-auto flex max-w-md flex-col gap-3">
+                            <div className="text-sm font-medium text-[var(--app-fg)]">Close unsaved tab?</div>
+                            <div className="text-xs text-[var(--app-hint)]">
+                                {pendingCloseTab.label} has unsaved changes.
+                            </div>
+                            {pendingCloseError && <div className="text-xs text-red-500">{pendingCloseError}</div>}
+                            <div className="flex flex-col gap-2">
+                                <button
+                                    type="button"
+                                    className="rounded bg-[#6366f1] px-3 py-2 text-sm text-white disabled:opacity-50"
+                                    disabled={savingTabId === pendingCloseTab.id}
+                                    onClick={() => { void savePendingClose() }}
+                                >
+                                    {savingTabId === pendingCloseTab.id ? 'Saving...' : 'Save then close'}
+                                </button>
+                                <button
+                                    type="button"
+                                    className="rounded border border-[var(--app-border)] px-3 py-2 text-sm text-[var(--app-fg)] disabled:opacity-50"
+                                    disabled={savingTabId === pendingCloseTab.id}
+                                    onClick={discardPendingClose}
+                                >
+                                    Discard changes
+                                </button>
+                                <button
+                                    type="button"
+                                    className="rounded px-3 py-2 text-sm text-[var(--app-hint)] disabled:opacity-50"
+                                    disabled={savingTabId === pendingCloseTab.id}
+                                    onClick={() => {
+                                        setPendingCloseTab(null)
+                                        setPendingCloseError(null)
+                                    }}
+                                >
+                                    Cancel
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

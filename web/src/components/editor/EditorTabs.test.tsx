@@ -351,7 +351,10 @@ describe('EditorTabs', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Close tab App.tsx' }))
 
-        expect(await screen.findByRole('dialog', { name: 'Close unsaved tab?' })).toBeInTheDocument()
+        const dialog = await screen.findByRole('dialog', { name: 'Close unsaved tab?' })
+        expect(dialog).toBeInTheDocument()
+        expect(dialog).toHaveAttribute('aria-modal', 'true')
+        expect(dialog.parentElement).toHaveClass('fixed', 'inset-0', 'bg-black/30')
         expect(onCloseTab).not.toHaveBeenCalled()
 
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
@@ -385,7 +388,10 @@ describe('EditorTabs', () => {
     })
 
     it('saves a dirty mobile tab before closing', async () => {
-        const onSaveFile = vi.fn(async () => {})
+        let finishSave!: () => void
+        const onSaveFile = vi.fn(() => new Promise<void>((resolve) => {
+            finishSave = resolve
+        }))
         const onDirtyChange = vi.fn()
         const onCloseTab = vi.fn()
 
@@ -415,8 +421,16 @@ describe('EditorTabs', () => {
         await waitFor(() => {
             expect(onSaveFile).toHaveBeenCalledWith('/repo/src/App.tsx', 'console.log("mobile")')
         })
+        expect(screen.getByRole('button', { name: 'Saving...' })).toBeDisabled()
+        expect(screen.getByRole('button', { name: 'Discard changes' })).toBeDisabled()
+        expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+
+        finishSave()
+
+        await waitFor(() => {
+            expect(onCloseTab).toHaveBeenCalledWith('tab-file')
+        })
         expect(onDirtyChange).toHaveBeenCalledWith('tab-file', false)
-        expect(onCloseTab).toHaveBeenCalledWith('tab-file')
     })
 
     it('keeps the editor viewport constrained so CodeMirror owns scrolling', async () => {
