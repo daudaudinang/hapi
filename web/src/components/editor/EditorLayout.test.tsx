@@ -14,7 +14,8 @@ const mocks = vi.hoisted(() => ({
     onTerminalResizePointerDown: vi.fn(),
     savePersistedEditorState: vi.fn(),
     clearPersistedEditorState: vi.fn(),
-    terminalClose: vi.fn()
+    terminalClose: vi.fn(),
+    isMobile: false
 }))
 
 vi.mock('@tanstack/react-router', async () => {
@@ -25,6 +26,11 @@ vi.mock('@tanstack/react-router', async () => {
         useSearch: () => mocks.search
     }
 })
+
+
+vi.mock('@/hooks/useMediaQuery', () => ({
+    useMediaQuery: () => mocks.isMobile
+}))
 
 vi.mock('@/lib/editor-persistence', () => ({
     savePersistedEditorState: (...args: unknown[]) => mocks.savePersistedEditorState(...args),
@@ -175,6 +181,7 @@ describe('EditorLayout', () => {
         mocks.savePersistedEditorState.mockClear()
         mocks.clearPersistedEditorState.mockClear()
         mocks.terminalClose.mockClear()
+        mocks.isMobile = false
     })
 
     afterEach(() => {
@@ -190,6 +197,56 @@ describe('EditorLayout', () => {
         expect(screen.getByTestId('editor-terminal')).toBeInTheDocument()
         expect(screen.getByTestId('editor-session-list')).toBeInTheDocument()
         expect(screen.getByTestId('editor-chat-panel')).toBeInTheDocument()
+    })
+
+
+    it('uses the desktop editor layout by default', () => {
+        renderEditorLayout({} as ApiClient)
+
+        expect(screen.getByTestId('editor-layout-root')).toBeInTheDocument()
+        expect(screen.getByTestId('editor-layout-body')).toBeInTheDocument()
+        expect(screen.queryByTestId('mobile-editor-layout')).not.toBeInTheDocument()
+    })
+
+    it('renders only the mobile editor layout under a narrow viewport', () => {
+        mocks.isMobile = true
+
+        renderEditorLayout({} as ApiClient)
+
+        expect(screen.getByTestId('mobile-editor-layout')).toBeInTheDocument()
+        expect(screen.queryByTestId('editor-layout-body')).not.toBeInTheDocument()
+        expect(screen.queryByTestId('editor-header')).not.toBeInTheDocument()
+    })
+
+    it('navigates back to sessions from the mobile editor layout', () => {
+        mocks.isMobile = true
+        renderEditorLayout({} as ApiClient)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Back to Agent Mode' }))
+
+        expect(mocks.navigate).toHaveBeenCalledWith({ to: '/sessions' })
+    })
+
+    it('opens files through the shared handler in the mobile editor layout', () => {
+        mocks.isMobile = true
+        renderEditorLayout({} as ApiClient)
+
+        fireEvent.click(screen.getByText('Mock open file'))
+
+        expect(screen.getByTestId('mobile-editor-layout')).toBeInTheDocument()
+        expect(screen.queryByTestId('editor-layout-body')).not.toBeInTheDocument()
+        expect(screen.getByTestId('editor-tabs')).toHaveTextContent('App.tsx')
+    })
+
+    it('opens terminals from the mobile editor layout without creating a chat session', () => {
+        mocks.isMobile = true
+        renderEditorLayout({} as ApiClient)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Terminal' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Open terminal' }))
+
+        expect(mocks.createSession).not.toHaveBeenCalled()
+        expect(screen.getByTestId('editor-terminal')).toHaveTextContent('Terminal tabs: Terminal: bash:machine-1:/repo')
     })
 
 
