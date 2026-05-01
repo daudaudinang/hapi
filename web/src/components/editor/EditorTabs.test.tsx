@@ -328,6 +328,97 @@ describe('EditorTabs', () => {
         expect(await screen.findByText('disk full')).toBeInTheDocument()
     })
 
+
+    it('asks before closing a dirty mobile tab and cancels without closing', async () => {
+        const onCloseTab = vi.fn()
+
+        render(
+            <EditorTabs
+                api={{} as ApiClient}
+                machineId="machine-1"
+                tabs={[{ ...tabs[0], dirty: true }]}
+                activeTabId="tab-file"
+                onSelectTab={vi.fn()}
+                onCloseTab={onCloseTab}
+                onNewFile={vi.fn()}
+                mobileMode
+            />
+        )
+
+        const tabBar = screen.getByTestId('editor-tabs-tabbar')
+        expect(tabBar).toHaveClass('bg-[var(--app-secondary-bg)]')
+        expect(screen.getByRole('button', { name: 'Select tab App.tsx' })).toHaveClass('px-2')
+
+        fireEvent.click(screen.getByRole('button', { name: 'Close tab App.tsx' }))
+
+        expect(await screen.findByRole('dialog', { name: 'Close unsaved tab?' })).toBeInTheDocument()
+        expect(onCloseTab).not.toHaveBeenCalled()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+        await waitFor(() => {
+            expect(screen.queryByRole('dialog', { name: 'Close unsaved tab?' })).not.toBeInTheDocument()
+        })
+        expect(onCloseTab).not.toHaveBeenCalled()
+    })
+
+    it('discards a dirty mobile tab before closing', async () => {
+        const onCloseTab = vi.fn()
+
+        render(
+            <EditorTabs
+                api={{} as ApiClient}
+                machineId="machine-1"
+                tabs={[{ ...tabs[0], dirty: true }]}
+                activeTabId="tab-file"
+                onSelectTab={vi.fn()}
+                onCloseTab={onCloseTab}
+                onNewFile={vi.fn()}
+                mobileMode
+            />
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: 'Close tab App.tsx' }))
+        fireEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
+
+        expect(onCloseTab).toHaveBeenCalledWith('tab-file')
+    })
+
+    it('saves a dirty mobile tab before closing', async () => {
+        const onSaveFile = vi.fn(async () => {})
+        const onDirtyChange = vi.fn()
+        const onCloseTab = vi.fn()
+
+        render(
+            <EditorTabs
+                api={{} as ApiClient}
+                machineId="machine-1"
+                tabs={[{ ...tabs[0], dirty: true }]}
+                activeTabId="tab-file"
+                onSelectTab={vi.fn()}
+                onCloseTab={onCloseTab}
+                onNewFile={vi.fn()}
+                onDirtyChange={onDirtyChange}
+                onSaveFile={onSaveFile}
+                mobileMode
+            />
+        )
+
+        await waitFor(() => {
+            expect(cmMocks.editorViews[0]).toBeDefined()
+        })
+        cmMocks.editorViews[0].simulateChange('console.log("mobile")')
+
+        fireEvent.click(screen.getByRole('button', { name: 'Close tab App.tsx' }))
+        fireEvent.click(await screen.findByRole('button', { name: 'Save then close' }))
+
+        await waitFor(() => {
+            expect(onSaveFile).toHaveBeenCalledWith('/repo/src/App.tsx', 'console.log("mobile")')
+        })
+        expect(onDirtyChange).toHaveBeenCalledWith('tab-file', false)
+        expect(onCloseTab).toHaveBeenCalledWith('tab-file')
+    })
+
     it('keeps the editor viewport constrained so CodeMirror owns scrolling', async () => {
         render(
             <EditorTabs

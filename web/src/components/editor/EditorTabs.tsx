@@ -294,10 +294,13 @@ export function EditorTabs(props: {
     onDirtyChange?: (tabId: string, dirty: boolean) => void
     onSaveFile?: (path: string, content: string) => Promise<void>
     onAddSelectionToChat?: (filePath: string, startLine: number, endLine: number, content: string) => void
+    mobileMode?: boolean
 }) {
     const fileContentsRef = useRef<Map<string, string>>(new Map())
     const [savingTabId, setSavingTabId] = useState<string | null>(null)
     const [saveError, setSaveError] = useState<string | null>(null)
+    const [pendingCloseTab, setPendingCloseTab] = useState<EditorTab | null>(null)
+    const [pendingCloseError, setPendingCloseError] = useState<string | null>(null)
     const fileTabs = useMemo(
         () => props.tabs.filter((tab) => tab.type === 'file'),
         [props.tabs]
@@ -316,6 +319,13 @@ export function EditorTabs(props: {
         }
     }, [fileTabs])
 
+    useEffect(() => {
+        if (pendingCloseTab && !fileTabs.some((tab) => tab.id === pendingCloseTab.id)) {
+            setPendingCloseTab(null)
+            setPendingCloseError(null)
+        }
+    }, [fileTabs, pendingCloseTab])
+
     const handleContentLoaded = useCallback((tabId: string, content: string) => {
         fileContentsRef.current.set(tabId, content)
     }, [])
@@ -325,12 +335,12 @@ export function EditorTabs(props: {
         props.onDirtyChange?.(tabId, true)
     }, [props.onDirtyChange])
 
-    const saveActiveFile = useCallback(async () => {
-        if (!activeTab || activeTab.type !== 'file' || !activeTab.path || !activeTab.dirty) {
+    const saveFileTab = useCallback(async (tab: EditorTab) => {
+        if (tab.type !== 'file' || !tab.path || !tab.dirty) {
             return
         }
 
-        const content = fileContentsRef.current.get(activeTab.id) ?? ''
+        const content = fileContentsRef.current.get(tab.id) ?? ''
         const saveFile = props.onSaveFile ?? (async (path: string, nextContent: string) => {
             if (!props.api || !props.machineId) {
                 throw new Error('Cannot save file: API or machine is not available')
@@ -341,17 +351,57 @@ export function EditorTabs(props: {
             }
         })
 
-        setSavingTabId(activeTab.id)
+        setSavingTabId(tab.id)
         setSaveError(null)
+        await saveFile(tab.path, content)
+        props.onDirtyChange?.(tab.id, false)
+        setSavingTabId(null)
+    }, [props])
+
+    const saveActiveFile = useCallback(async () => {
+        if (!activeTab) {
+            return
+        }
+
         try {
-            await saveFile(activeTab.path, content)
-            props.onDirtyChange?.(activeTab.id, false)
+            await saveFileTab(activeTab)
         } catch (error) {
             setSaveError(error instanceof Error ? error.message : 'Failed to save file')
         } finally {
             setSavingTabId(null)
         }
-    }, [activeTab, props])
+    }, [activeTab, saveFileTab])
+
+    const requestCloseTab = useCallback((tab: EditorTab) => {
+        if (props.mobileMode && tab.dirty) {
+            setPendingCloseTab(tab)
+            setPendingCloseError(null)
+            return
+        }
+        props.onCloseTab(tab.id)
+    }, [props])
+
+    const discardPendingClose = useCallback(() => {
+        if (!pendingCloseTab) return
+        props.onCloseTab(pendingCloseTab.id)
+        setPendingCloseTab(null)
+        setPendingCloseError(null)
+    }, [pendingCloseTab, props])
+
+    const savePendingClose = useCallback(async () => {
+        if (!pendingCloseTab) return
+
+        setPendingCloseError(null)
+        try {
+            await saveFileTab(pendingCloseTab)
+            props.onCloseTab(pendingCloseTab.id)
+            setPendingCloseTab(null)
+        } catch (error) {
+            setPendingCloseError(error instanceof Error ? error.message : 'Failed to save file')
+        } finally {
+            setSavingTabId(null)
+        }
+    }, [pendingCloseTab, props, saveFileTab])
 
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
@@ -366,7 +416,12 @@ export function EditorTabs(props: {
 
     return (
         <div data-testid="editor-tabs-root" className="flex h-full min-h-0 flex-col overflow-hidden">
-            <div className="flex items-center bg-[var(--app-subtle-bg)] border-b border-[var(--app-border)] overflow-x-auto shrink-0">
+            <div
+                data-testid="editor-tabs-tabbar"
+                className={`flex items-center border-b border-[var(--app-border)] overflow-x-auto shrink-0 ${
+                    props.mobileMode ? 'bg-[var(--app-secondary-bg)]' : 'bg-[var(--app-subtle-bg)]'
+                }`}
+            >
                 {fileTabs.map((tab) => {
                     const isActive = tab.id === props.activeTabId
                     return (
@@ -375,7 +430,7 @@ export function EditorTabs(props: {
                             role="button"
                             tabIndex={0}
                             aria-label={`Select tab ${tab.label}`}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border-r border-[var(--app-border)] whitespace-nowrap cursor-pointer transition-colors ${
+                            className={`flex items-center gap-1.5 ${props.mobileMode ? 'px-2' : 'px-3'} py-1.5 text-xs border-r border-[var(--app-border)] whitespace-nowrap cursor-pointer transition-colors ${
                                 isActive
                                     ? 'bg-[var(--app-bg)] border-b-2 border-b-[#6366f1] text-[var(--app-fg)]'
                                     : 'text-[var(--app-hint)] hover:bg-[var(--app-subtle-bg)]'
@@ -399,13 +454,13 @@ export function EditorTabs(props: {
                                 className="ml-1 hover:text-[var(--app-fg)] text-[10px] leading-none"
                                 onClick={(event) => {
                                     event.stopPropagation()
-                                    props.onCloseTab(tab.id)
+                                    requestCloseTab(tab)
                                 }}
                                 onKeyDown={(event) => {
                                     if (event.key === 'Enter' || event.key === ' ') {
                                         event.preventDefault()
                                         event.stopPropagation()
-                                        props.onCloseTab(tab.id)
+                                        requestCloseTab(tab)
                                     }
                                 }}
                             >
@@ -471,6 +526,45 @@ export function EditorTabs(props: {
                     </div>
                 )}
             </div>
+
+            {pendingCloseTab && (
+                <div className="fixed inset-x-0 bottom-0 z-50 border-t border-[var(--app-border)] bg-[var(--app-bg)] p-4 shadow-2xl">
+                    <div role="dialog" aria-label="Close unsaved tab?" className="mx-auto flex max-w-md flex-col gap-3">
+                        <div className="text-sm font-medium text-[var(--app-fg)]">Close unsaved tab?</div>
+                        <div className="text-xs text-[var(--app-hint)]">
+                            {pendingCloseTab.label} has unsaved changes.
+                        </div>
+                        {pendingCloseError && <div className="text-xs text-red-500">{pendingCloseError}</div>}
+                        <div className="flex flex-col gap-2">
+                            <button
+                                type="button"
+                                className="rounded bg-[#6366f1] px-3 py-2 text-sm text-white disabled:opacity-50"
+                                disabled={savingTabId === pendingCloseTab.id}
+                                onClick={() => { void savePendingClose() }}
+                            >
+                                {savingTabId === pendingCloseTab.id ? 'Saving...' : 'Save then close'}
+                            </button>
+                            <button
+                                type="button"
+                                className="rounded border border-[var(--app-border)] px-3 py-2 text-sm text-[var(--app-fg)]"
+                                onClick={discardPendingClose}
+                            >
+                                Discard changes
+                            </button>
+                            <button
+                                type="button"
+                                className="rounded px-3 py-2 text-sm text-[var(--app-hint)]"
+                                onClick={() => {
+                                    setPendingCloseTab(null)
+                                    setPendingCloseError(null)
+                                }}
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
