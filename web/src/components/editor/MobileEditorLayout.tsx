@@ -114,8 +114,16 @@ function BottomNav(props: { view: MobileEditorView; onViewChange: (view: MobileE
 
 export function MobileEditorLayout(props: MobileEditorLayoutProps) {
     const [view, setView] = useState<MobileEditorView>('files')
+    const [hasOpenedEditorSurface, setHasOpenedEditorSurface] = useState(false)
     const [selectionNoticeVisible, setSelectionNoticeVisible] = useState(false)
     const activeFilePath = props.activeFileTab?.path ?? null
+
+    const handleViewChange = useCallback((nextView: MobileEditorView) => {
+        if (nextView === 'editor') {
+            setHasOpenedEditorSurface(true)
+        }
+        setView(nextView)
+    }, [])
 
     const title = useMemo(() => {
         switch (view) {
@@ -145,8 +153,8 @@ export function MobileEditorLayout(props: MobileEditorLayoutProps) {
 
     const handleOpenFile = useCallback((path: string) => {
         props.onOpenFile(path)
-        setView('editor')
-    }, [props.onOpenFile])
+        handleViewChange('editor')
+    }, [handleViewChange, props.onOpenFile])
 
     const handleOpenTerminal = useCallback(() => {
         props.onOpenTerminal()
@@ -230,19 +238,21 @@ export function MobileEditorLayout(props: MobileEditorLayoutProps) {
                     />
                 ) : null}
 
-                {view === 'editor' ? (
-                    <EditorTabs
-                        api={props.api}
-                        machineId={props.machineId}
-                        tabs={props.fileTabs}
-                        activeTabId={props.activeFileTab?.id ?? null}
-                        onSelectTab={props.onSelectFileTab}
-                        onCloseTab={props.onCloseTab}
-                        onNewFile={props.onNewFileFromTabs}
-                        onDirtyChange={props.onDirtyChange}
-                        onAddSelectionToChat={handleAddSelectionToChat}
-                        mobileMode={true}
-                    />
+                {hasOpenedEditorSurface ? (
+                    <div className="h-full" hidden={view !== 'editor'}>
+                        <EditorTabs
+                            api={props.api}
+                            machineId={props.machineId}
+                            tabs={props.fileTabs}
+                            activeTabId={props.activeFileTab?.id ?? null}
+                            onSelectTab={props.onSelectFileTab}
+                            onCloseTab={props.onCloseTab}
+                            onNewFile={props.onNewFileFromTabs}
+                            onDirtyChange={props.onDirtyChange}
+                            onAddSelectionToChat={handleAddSelectionToChat}
+                            mobileMode={true}
+                        />
+                    </div>
                 ) : null}
 
                 {view === 'chat' ? (
@@ -280,7 +290,7 @@ export function MobileEditorLayout(props: MobileEditorLayoutProps) {
                     <button
                         type="button"
                         className="ml-2 rounded-md px-2 py-1 text-xs font-semibold hover:bg-[var(--app-bg)]"
-                        onClick={() => setView('chat')}
+                        onClick={() => handleViewChange('chat')}
                     >
                         Open chat
                     </button>
@@ -300,7 +310,7 @@ export function MobileEditorLayout(props: MobileEditorLayoutProps) {
                 </div>
             ) : null}
 
-            <BottomNav view={view} onViewChange={setView} />
+            <BottomNav view={view} onViewChange={handleViewChange} />
         </div>
     )
 }

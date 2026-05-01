@@ -25,6 +25,7 @@ vi.mock('./EditorTabs', () => ({
     }) => (
         <div data-testid="mobile-editor-tabs">
             mobile tabs: {props.mobileMode ? 'yes' : 'no'} {props.tabs.map((tab) => tab.label).join(',')}
+            <input aria-label="Mock editor buffer" defaultValue="" />
             <button type="button" onClick={props.onNewFile}>New file from tabs</button>
             <button type="button" onClick={() => props.onAddSelectionToChat?.('/repo/src/App.tsx', 1, 2, 'const app = true')}>Add selection</button>
         </div>
@@ -118,6 +119,19 @@ describe('MobileEditorLayout', () => {
 
         expect(props.onOpenFile).toHaveBeenCalledWith('/repo/src/App.tsx')
         expect(screen.getByTestId('mobile-editor-tabs')).toBeInTheDocument()
+    })
+
+    it('preserves the editor buffer when switching away and back from the bottom navigation', () => {
+        render(<MobileEditorLayout {...baseProps()} />)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Editor' }))
+        fireEvent.change(screen.getByLabelText('Mock editor buffer'), { target: { value: 'unsaved draft' } })
+
+        fireEvent.click(screen.getByRole('button', { name: 'Chat' }))
+        expect(screen.getByTestId('mobile-chat-panel')).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Editor' }))
+        expect(screen.getByLabelText('Mock editor buffer')).toHaveValue('unsaved draft')
     })
 
     it('opens terminal and switches to the Terminal view', () => {
