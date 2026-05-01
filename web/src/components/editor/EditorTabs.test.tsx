@@ -187,7 +187,7 @@ describe('EditorTabs', () => {
         expect(useEditorFileMock).toHaveBeenCalledWith(api, 'machine-1', '/repo/src/App.tsx', { refetchInterval: 2_000 })
         expect(cmMocks.editorViews[0].doc).toBe('console.log("hi")')
         expect(screen.getByTestId('codemirror-view')).toBeInTheDocument()
-        expect(screen.getByText('TSX')).toBeInTheDocument()
+        expect(screen.getByText('TSX', { selector: 'div' })).toBeInTheDocument()
         expect(cmMocks.editableOf).toHaveBeenCalledWith(true)
         expect(cmMocks.language).toHaveBeenCalledWith('javascript', { jsx: true, typescript: true })
     })
