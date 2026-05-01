@@ -87,7 +87,7 @@ function BottomNav(props: { view: MobileEditorView; onViewChange: (view: MobileE
         { view: 'files', label: 'Files', icon: '📁' },
         { view: 'editor', label: 'Editor', icon: '⌨️' },
         { view: 'chat', label: 'Chat', icon: '💬' },
-        { view: 'terminal', label: 'Terminal', icon: '▣' },
+        { view: 'terminal', label: 'Term', ariaLabel: 'Terminal', icon: '▣' },
     ]
 
     return (
