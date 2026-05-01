@@ -44,3 +44,6 @@ cli/npm/main/
 
 # Superpowers local brainstorm artifacts
 .superpowers/
+
+# Local git worktrees
+.worktrees/
