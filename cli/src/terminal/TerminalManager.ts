@@ -12,21 +12,27 @@ type TerminalRuntime = TerminalSession & {
     proc: Bun.Subprocess
     terminal: Bun.Terminal
     idleTimer: ReturnType<typeof setTimeout> | null
+    detachedTimer: ReturnType<typeof setTimeout> | null
+    outputBuffer: string
 }
 
 type TerminalManagerOptions = {
-    sessionId: string
+    sessionId?: string
+    machineId?: string
     getSessionPath: () => string | null
     onReady: (payload: TerminalReadyPayload) => void
     onOutput: (payload: TerminalOutputPayload) => void
     onExit: (payload: TerminalExitPayload) => void
     onError: (payload: TerminalErrorPayload) => void
     idleTimeoutMs?: number
+    detachedTimeoutMs?: number
     maxTerminals?: number
 }
 
-const DEFAULT_IDLE_TIMEOUT_MS = 15 * 60_000
+const DEFAULT_IDLE_TIMEOUT_MS = 0
+const DEFAULT_DETACHED_TIMEOUT_MS = 5 * 60_000
 const DEFAULT_MAX_TERMINALS = 4
+const MAX_OUTPUT_BUFFER_CHARS = 200_000
 const SENSITIVE_ENV_KEYS = new Set([
     'CLI_API_TOKEN',
     'HAPI_API_URL',
@@ -45,6 +51,15 @@ function resolveEnvNumber(name: string, fallback: number): number {
     }
     const parsed = Number.parseInt(raw, 10)
     return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+function resolveEnvNumberAllowZero(name: string, fallback: number): number {
+    const raw = process.env[name]
+    if (!raw) {
+        return fallback
+    }
+    const parsed = Number.parseInt(raw, 10)
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback
 }
 
 function resolveShell(): string {
@@ -81,30 +96,37 @@ function buildFilteredEnv(): NodeJS.ProcessEnv {
 }
 
 export class TerminalManager {
-    private readonly sessionId: string
+    private readonly sessionId?: string
+    private readonly machineId?: string
     private readonly getSessionPath: () => string | null
     private readonly onReady: (payload: TerminalReadyPayload) => void
     private readonly onOutput: (payload: TerminalOutputPayload) => void
     private readonly onExit: (payload: TerminalExitPayload) => void
     private readonly onError: (payload: TerminalErrorPayload) => void
     private readonly idleTimeoutMs: number
+    private readonly detachedTimeoutMs: number
     private readonly maxTerminals: number
     private readonly terminals: Map<string, TerminalRuntime> = new Map()
     private readonly filteredEnv: NodeJS.ProcessEnv
 
     constructor(options: TerminalManagerOptions) {
+        if (Boolean(options.sessionId) === Boolean(options.machineId)) {
+            throw new Error('TerminalManager requires exactly one of sessionId or machineId')
+        }
         this.sessionId = options.sessionId
+        this.machineId = options.machineId
         this.getSessionPath = options.getSessionPath
         this.onReady = options.onReady
         this.onOutput = options.onOutput
         this.onExit = options.onExit
         this.onError = options.onError
         this.idleTimeoutMs = options.idleTimeoutMs ?? resolveEnvNumber('HAPI_TERMINAL_IDLE_TIMEOUT_MS', DEFAULT_IDLE_TIMEOUT_MS)
+        this.detachedTimeoutMs = options.detachedTimeoutMs ?? resolveEnvNumberAllowZero('HAPI_TERMINAL_DETACHED_TIMEOUT_MS', DEFAULT_DETACHED_TIMEOUT_MS)
         this.maxTerminals = options.maxTerminals ?? resolveEnvNumber('HAPI_TERMINAL_MAX_TERMINALS', DEFAULT_MAX_TERMINALS)
         this.filteredEnv = buildFilteredEnv()
     }
 
-    create(terminalId: string, cols: number, rows: number): void {
+    create(terminalId: string, cols: number, rows: number, cwd?: string, replay = false): void {
         if (process.platform === 'win32') {
             this.emitError(terminalId, 'Remote terminal is not supported on Windows yet.')
             return
@@ -114,9 +136,13 @@ export class TerminalManager {
         if (existing) {
             existing.cols = cols
             existing.rows = rows
+            this.clearDetachedTimer(existing)
             existing.terminal.resize(cols, rows)
             this.markActivity(existing)
-            this.onReady({ sessionId: this.sessionId, terminalId })
+            this.onReady({ ...this.scopePayload(), terminalId })
+            if (replay && existing.outputBuffer) {
+                this.onOutput({ ...this.scopePayload(), terminalId, data: existing.outputBuffer })
+            }
             return
         }
 
@@ -130,7 +156,7 @@ export class TerminalManager {
             return
         }
 
-        const sessionPath = this.getSessionPath() ?? getInvokedCwd()
+        const sessionPath = cwd?.trim() || this.getSessionPath() || getInvokedCwd()
         const shell = resolveShell()
         const decoder = new TextDecoder()
 
@@ -144,7 +170,8 @@ export class TerminalManager {
                     data: (terminal, data) => {
                         const text = decoder.decode(data, { stream: true })
                         if (text) {
-                            this.onOutput({ sessionId: this.sessionId, terminalId, data: text })
+                            this.appendOutputBuffer(terminalId, text)
+                            this.onOutput({ ...this.scopePayload(), terminalId, data: text })
                         }
                         const active = this.terminals.get(terminalId)
                         if (active) {
@@ -160,7 +187,7 @@ export class TerminalManager {
                 onExit: (subprocess, exitCode) => {
                     const signal = subprocess.signalCode ?? null
                     this.onExit({
-                        sessionId: this.sessionId,
+                        ...this.scopePayload(),
                         terminalId,
                         code: exitCode ?? null,
                         signal
@@ -186,12 +213,14 @@ export class TerminalManager {
                 rows,
                 proc,
                 terminal,
-                idleTimer: null
+                idleTimer: null,
+                detachedTimer: null,
+                outputBuffer: ''
             }
 
             this.terminals.set(terminalId, runtime)
             this.markActivity(runtime)
-            this.onReady({ sessionId: this.sessionId, terminalId })
+            this.onReady({ ...this.scopePayload(), terminalId })
         } catch (error) {
             logger.debug('[TERMINAL] Failed to spawn terminal', { error })
             this.emitError(terminalId, 'Failed to spawn terminal.')
@@ -223,6 +252,26 @@ export class TerminalManager {
         this.cleanup(terminalId)
     }
 
+    detach(terminalId: string): void {
+        const runtime = this.terminals.get(terminalId)
+        if (!runtime || this.detachedTimeoutMs <= 0) {
+            return
+        }
+        this.clearDetachedTimer(runtime)
+        runtime.detachedTimer = setTimeout(() => {
+            this.cleanup(runtime.terminalId)
+        }, this.detachedTimeoutMs)
+    }
+
+    private appendOutputBuffer(terminalId: string, text: string): void {
+        const runtime = this.terminals.get(terminalId)
+        if (!runtime) return
+        runtime.outputBuffer += text
+        if (runtime.outputBuffer.length > MAX_OUTPUT_BUFFER_CHARS) {
+            runtime.outputBuffer = runtime.outputBuffer.slice(-MAX_OUTPUT_BUFFER_CHARS)
+        }
+    }
+
     closeAll(): void {
         for (const terminalId of this.terminals.keys()) {
             this.cleanup(terminalId)
@@ -241,6 +290,7 @@ export class TerminalManager {
         if (runtime.idleTimer) {
             clearTimeout(runtime.idleTimer)
         }
+        this.clearDetachedTimer(runtime)
 
         runtime.idleTimer = setTimeout(() => {
             this.emitError(runtime.terminalId, 'Terminal closed due to inactivity.')
@@ -275,6 +325,24 @@ export class TerminalManager {
     }
 
     private emitError(terminalId: string, message: string): void {
-        this.onError({ sessionId: this.sessionId, terminalId, message })
+        this.onError({ ...this.scopePayload(), terminalId, message })
+    }
+
+    private clearDetachedTimer(runtime: TerminalRuntime): void {
+        if (!runtime.detachedTimer) {
+            return
+        }
+        clearTimeout(runtime.detachedTimer)
+        runtime.detachedTimer = null
+    }
+
+    private scopePayload(): { sessionId: string } | { machineId: string } {
+        if (this.sessionId) {
+            return { sessionId: this.sessionId }
+        }
+        if (this.machineId) {
+            return { machineId: this.machineId }
+        }
+        throw new Error('TerminalManager scope is not configured')
     }
 }

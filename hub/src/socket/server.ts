@@ -18,7 +18,7 @@ const jwtPayloadSchema = z.object({
     ns: z.string()
 })
 
-const DEFAULT_IDLE_TIMEOUT_MS = 15 * 60_000
+const DEFAULT_IDLE_TIMEOUT_MS = 0
 const DEFAULT_MAX_TERMINALS = 4
 
 function resolveEnvNumber(name: string, fallback: number): number {
@@ -91,7 +91,7 @@ export function createSocketServer(deps: SocketServerDeps): {
             })
             const cliSocket = cliNs.sockets.get(entry.cliSocketId)
             cliSocket?.emit('terminal:close', {
-                sessionId: entry.sessionId,
+                ...(entry.sessionId ? { sessionId: entry.sessionId } : { machineId: entry.machineId }),
                 terminalId: entry.terminalId
             })
         }
@@ -145,6 +145,9 @@ export function createSocketServer(deps: SocketServerDeps): {
         io,
         getSession: (sessionId) => {
             return deps.getSession?.(sessionId) ?? deps.store.sessions.getSession(sessionId)
+        },
+        getMachine: (machineId) => {
+            return deps.store.machines.getMachine(machineId)
         },
         terminalRegistry,
         maxTerminalsPerSocket,

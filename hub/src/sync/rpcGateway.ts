@@ -13,12 +13,20 @@ export type RpcCommandResponse = {
 export type RpcReadFileResponse = {
     success: boolean
     content?: string
+    size?: number
     error?: string
 }
 
 export type RpcUploadFileResponse = {
     success: boolean
     path?: string
+    error?: string
+}
+
+export type RpcEditorFileMutationResponse = {
+    success: boolean
+    path?: string
+    size?: number
     error?: string
 }
 
@@ -32,6 +40,7 @@ export type RpcDirectoryEntry = {
     type: 'file' | 'directory' | 'other'
     size?: number
     modified?: number
+    gitStatus?: 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked'
 }
 
 export type RpcListDirectoryResponse = {
@@ -55,6 +64,18 @@ export type RpcCodexModel = {
 export type RpcListCodexModelsResponse = {
     success: boolean
     models?: RpcCodexModel[]
+    error?: string
+}
+
+export type RpcEditorProject = {
+    path: string
+    name: string
+    hasGit: boolean
+}
+
+export type RpcEditorProjectsResponse = {
+    success: boolean
+    projects?: RpcEditorProject[]
     error?: string
 }
 
@@ -178,6 +199,64 @@ export class RpcGateway {
             return { success: false, error: 'Unexpected list-directory result' }
         }
         return result as RpcListDirectoryResponse
+    }
+
+    // ─── Editor Mode RPC ─────────────────────────────────────────────────
+
+    async editorListDirectory(machineId: string, path: string): Promise<RpcListDirectoryResponse> {
+        const result = await this.machineRpc(machineId, 'editor-list-directory', { path }) as RpcListDirectoryResponse | unknown
+        if (!result || typeof result !== 'object') {
+            return { success: false, error: 'Unexpected editor-list-directory result' }
+        }
+        return result as RpcListDirectoryResponse
+    }
+
+    async editorReadFile(machineId: string, path: string): Promise<RpcReadFileResponse> {
+        const result = await this.machineRpc(machineId, 'editor-read-file', { path }) as RpcReadFileResponse | unknown
+        if (!result || typeof result !== 'object') {
+            return { success: false, error: 'Unexpected editor-read-file result' }
+        }
+        return result as RpcReadFileResponse
+    }
+
+    async editorListProjects(machineId: string): Promise<RpcEditorProjectsResponse> {
+        const result = await this.machineRpc(machineId, 'editor-list-projects', {}) as RpcEditorProjectsResponse | unknown
+        if (!result || typeof result !== 'object') {
+            return { success: false, error: 'Unexpected editor-list-projects result' }
+        }
+        return result as RpcEditorProjectsResponse
+    }
+
+    async editorGitStatus(machineId: string, path: string): Promise<RpcCommandResponse> {
+        const result = await this.machineRpc(machineId, 'editor-git-status', { path }) as RpcCommandResponse | unknown
+        if (!result || typeof result !== 'object') {
+            return { success: false, error: 'Unexpected editor-git-status result' }
+        }
+        return result as RpcCommandResponse
+    }
+
+    async editorWriteFile(machineId: string, path: string, content: string): Promise<RpcEditorFileMutationResponse> {
+        const result = await this.machineRpc(machineId, 'editor-write-file', { path, content }) as RpcEditorFileMutationResponse | unknown
+        if (!result || typeof result !== 'object') {
+            return { success: false, error: 'Unexpected editor-write-file result' }
+        }
+        return result as RpcEditorFileMutationResponse
+    }
+
+    async editorCreateFile(machineId: string, path: string, content: string): Promise<RpcEditorFileMutationResponse> {
+        const result = await this.machineRpc(machineId, 'editor-create-file', { path, content }) as RpcEditorFileMutationResponse | unknown
+        if (!result || typeof result !== 'object') {
+            return { success: false, error: 'Unexpected editor-create-file result' }
+        }
+        return result as RpcEditorFileMutationResponse
+    }
+
+    async editorDeleteFile(machineId: string, path: string): Promise<RpcEditorFileMutationResponse> {
+        const result = await this.machineRpc(machineId, 'editor-delete-file', { path }) as RpcEditorFileMutationResponse | unknown
+        if (!result || typeof result !== 'object') {
+            return { success: false, error: 'Unexpected editor-delete-file result' }
+        }
+        return result as RpcEditorFileMutationResponse
     }
 
     async checkPathsExist(machineId: string, paths: string[]): Promise<Record<string, boolean>> {

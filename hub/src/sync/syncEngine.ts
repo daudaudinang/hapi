@@ -20,6 +20,8 @@ import {
     type RpcCodexModel,
     type RpcCommandResponse,
     type RpcDeleteUploadResponse,
+    type RpcEditorFileMutationResponse,
+    type RpcEditorProjectsResponse,
     type RpcListDirectoryResponse,
     type RpcListCodexModelsResponse,
     type RpcPathExistsResponse,
@@ -35,6 +37,8 @@ export type {
     RpcCodexModel,
     RpcCommandResponse,
     RpcDeleteUploadResponse,
+    RpcEditorFileMutationResponse,
+    RpcEditorProjectsResponse,
     RpcListDirectoryResponse,
     RpcListCodexModelsResponse,
     RpcPathExistsResponse,
@@ -580,6 +584,34 @@ export class SyncEngine {
 
     async listMachineDirectory(machineId: string, path: string): Promise<RpcListDirectoryResponse> {
         return await this.rpcGateway.listMachineDirectory(machineId, path)
+    }
+
+    async listEditorDirectory(machineId: string, path: string): Promise<RpcListDirectoryResponse> {
+        return await this.rpcGateway.editorListDirectory(machineId, path)
+    }
+
+    async readEditorFile(machineId: string, path: string): Promise<RpcReadFileResponse> {
+        return await this.rpcGateway.editorReadFile(machineId, path)
+    }
+
+    async listEditorProjects(machineId: string): Promise<RpcEditorProjectsResponse> {
+        return await this.rpcGateway.editorListProjects(machineId)
+    }
+
+    async getEditorGitStatus(machineId: string, path: string): Promise<RpcCommandResponse> {
+        return await this.rpcGateway.editorGitStatus(machineId, path)
+    }
+
+    async writeEditorFile(machineId: string, path: string, content: string): Promise<RpcEditorFileMutationResponse> {
+        return await this.rpcGateway.editorWriteFile(machineId, path, content)
+    }
+
+    async createEditorFile(machineId: string, path: string, content: string): Promise<RpcEditorFileMutationResponse> {
+        return await this.rpcGateway.editorCreateFile(machineId, path, content)
+    }
+
+    async deleteEditorFile(machineId: string, path: string): Promise<RpcEditorFileMutationResponse> {
+        return await this.rpcGateway.editorDeleteFile(machineId, path)
     }
 
     async getGitStatus(sessionId: string, cwd?: string): Promise<RpcCommandResponse> {

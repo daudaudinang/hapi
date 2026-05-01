@@ -95,9 +95,11 @@ export function WorkspaceBrowser(props: {
     machinesLoading: boolean
     onStartSession: (machineId: string, directory: string) => void
     initialMachineId?: string
+    initialPath?: string
+    actionLabel?: string
 }) {
     const { t } = useTranslation()
-    const { api, machines, machinesLoading, initialMachineId } = props
+    const { api, machines, machinesLoading, initialMachineId, initialPath } = props
     const queryClient = useQueryClient()
 
     const [machineId, setMachineId] = useState<string | null>(initialMachineId ?? null)
@@ -157,12 +159,15 @@ export function WorkspaceBrowser(props: {
         }
     }, [api, machineId, queryClient])
 
-    // Auto-load workspace root when a machine with a root is selected
+    // Auto-load workspace root (or the requested initial folder) when a machine is selected.
     useEffect(() => {
         if (!machineId || !workspaceRoot) return
         if (currentPath && isPathWithin(currentPath, workspaceRoot)) return
-        void loadDirectory(workspaceRoot)
-    }, [machineId, workspaceRoot, currentPath, loadDirectory])
+        const targetPath = initialPath && isPathWithin(initialPath, workspaceRoot)
+            ? initialPath
+            : workspaceRoot
+        void loadDirectory(targetPath)
+    }, [machineId, workspaceRoot, currentPath, initialPath, loadDirectory])
 
     // If switching machines, reset view
     useEffect(() => {
@@ -226,7 +231,7 @@ export function WorkspaceBrowser(props: {
     // No machines connected
     if (machines.length === 0 && !machinesLoading) {
         return (
-            <div className="flex flex-col h-full">
+            <div className="flex h-full min-h-0 flex-col">
                 <div className="px-3 py-2 border-b border-[var(--app-divider)]">{machineSelector}</div>
                 <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 text-center">
                     <div className="text-sm text-[var(--app-hint)]">{t('browse.noMachinesConnected')}</div>
@@ -239,7 +244,7 @@ export function WorkspaceBrowser(props: {
     // Browsing is opt-in, triggered by `--workspace-root`.
     if (selectedMachine && !workspaceRoot) {
         return (
-            <div className="flex flex-col h-full">
+            <div className="flex h-full min-h-0 flex-col">
                 <div className="px-3 py-2 border-b border-[var(--app-divider)]">{machineSelector}</div>
                 <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 text-center">
                     <div className="text-sm text-[var(--app-fg)] font-medium">{t('browse.noRootTitle')}</div>
@@ -256,8 +261,8 @@ export function WorkspaceBrowser(props: {
     }
 
     return (
-        <div className="flex flex-col h-full">
-            <div className="px-3 py-2 border-b border-[var(--app-divider)]">
+        <div className="flex h-full min-h-0 flex-col">
+            <div className="shrink-0 px-3 py-2 border-b border-[var(--app-divider)]">
                 {machineSelector}
 
                 {currentPath && (
@@ -300,7 +305,7 @@ export function WorkspaceBrowser(props: {
                 <div className="px-3 py-2 text-sm text-red-600">{error}</div>
             )}
 
-            <div className="flex-1 app-scroll-y">
+            <div className="min-h-0 flex-1 app-scroll-y">
                 {isLoading && entries.length === 0 ? (
                     <div className="flex items-center justify-center py-8 text-sm text-[var(--app-hint)]">{t('loading')}</div>
                 ) : directories.length === 0 ? (
@@ -330,7 +335,7 @@ export function WorkspaceBrowser(props: {
             </div>
 
             {currentPath && (
-                <div className="px-3 py-2 border-t border-[var(--app-divider)]">
+                <div className="shrink-0 px-3 py-2 border-t border-[var(--app-divider)]">
                     <div className="flex items-center gap-2">
                         <div className="flex-1 text-xs text-[var(--app-hint)] truncate" title={currentPath}>
                             {currentPath}
@@ -341,7 +346,7 @@ export function WorkspaceBrowser(props: {
                             disabled={!machineId || !currentPath}
                             className="px-4 py-1.5 text-sm rounded-lg bg-[var(--app-button)] text-[var(--app-button-text)] font-medium disabled:opacity-50 transition-colors hover:opacity-90"
                         >
-                            {t('browse.startSession')}
+                            {props.actionLabel ?? t('browse.startSession')}
                         </button>
                     </div>
                 </div>

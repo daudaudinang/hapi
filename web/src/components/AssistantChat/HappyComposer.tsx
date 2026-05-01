@@ -38,6 +38,24 @@ export interface TextInputState {
     selection: { start: number; end: number }
 }
 
+export function appendTextToComposerDraft(currentDraft: string, textToAppend: string): string {
+    const additions = textToAppend
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
+    const existingText = currentDraft.trimEnd()
+    const existingTokens = new Set(existingText.split(/\s+/).filter(Boolean))
+    let nextText = existingText
+
+    for (const addition of additions) {
+        if (existingTokens.has(addition)) continue
+        nextText = nextText.length === 0 ? addition : `${nextText}\n${addition}`
+        existingTokens.add(addition)
+    }
+
+    return nextText
+}
+
 const defaultSuggestionHandler = async (): Promise<Suggestion[]> => []
 
 export function HappyComposer(props: {
@@ -74,6 +92,8 @@ export function HappyComposer(props: {
     voiceMicMuted?: boolean
     onVoiceToggle?: () => void
     onVoiceMicToggle?: () => void
+    appendText?: string
+    onAppendTextConsumed?: () => void
 }) {
     const { t } = useTranslation()
     const {
@@ -108,7 +128,9 @@ export function HappyComposer(props: {
         voiceStatus = 'disconnected',
         voiceMicMuted = false,
         onVoiceToggle,
-        onVoiceMicToggle
+        onVoiceMicToggle,
+        appendText,
+        onAppendTextConsumed
     } = props
 
     // Use ?? so missing values fall back to default (destructuring defaults only handle undefined)
@@ -151,8 +173,37 @@ export function HappyComposer(props: {
 
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const prevControlledByUser = useRef(controlledByUser)
+    const composerTextRef = useRef(composerText)
+
+    useEffect(() => {
+        composerTextRef.current = composerText
+    }, [composerText])
 
     useComposerDraft(sessionId, composerText, (text) => api.composer().setText(text))
+
+    useEffect(() => {
+        if (!appendText) return
+
+        const nextText = appendTextToComposerDraft(composerTextRef.current, appendText)
+        api.composer().setText(nextText)
+        composerTextRef.current = nextText
+        setInputState({
+            text: nextText,
+            selection: { start: nextText.length, end: nextText.length }
+        })
+        onAppendTextConsumed?.()
+
+        setTimeout(() => {
+            const el = textareaRef.current
+            if (!el) return
+            el.setSelectionRange(nextText.length, nextText.length)
+            try {
+                el.focus({ preventScroll: true })
+            } catch {
+                el.focus()
+            }
+        }, 0)
+    }, [appendText, api, onAppendTextConsumed])
 
     useEffect(() => {
         setInputState((prev) => {
@@ -178,7 +229,7 @@ export function HappyComposer(props: {
     const { haptic: platformHaptic, isTouch } = usePlatform()
     const { isStandalone, isIOS } = usePWAInstall()
     const isIOSPWA = isIOS && isStandalone
-    const bottomPaddingClass = isIOSPWA ? 'pb-0' : 'pb-3'
+    const bottomPaddingClass = isIOSPWA ? 'pb-0' : 'pb-2'
     const activeWord = useActiveWord(inputState.text, inputState.selection, autocompletePrefixes)
     const [suggestions, selectedIndex, moveUp, moveDown, clearSuggestions] = useActiveSuggestions(
         activeWord,
@@ -747,8 +798,8 @@ export function HappyComposer(props: {
     ])
 
     return (
-        <div className={`px-3 ${bottomPaddingClass} pt-2 bg-[var(--app-bg)]`}>
-            <div className="mx-auto w-full max-w-content">
+        <div className={`px-2 ${bottomPaddingClass} pt-2 bg-[var(--app-bg)]`}>
+            <div className="mx-auto w-full max-w-full">
                 <ComposerPrimitive.Root className="relative" onSubmit={handleSubmit}>
                     {overlays}
 
@@ -788,7 +839,7 @@ export function HappyComposer(props: {
                                 onSelect={handleSelect}
                                 onKeyDown={handleKeyDown}
                                 onPaste={handlePaste}
-                                className="flex-1 resize-none bg-transparent text-base leading-snug text-[var(--app-fg)] placeholder-[var(--app-hint)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                                className="flex-1 resize-none bg-transparent text-sm leading-snug text-[var(--app-fg)] placeholder-[var(--app-hint)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                             />
                         </div>
 

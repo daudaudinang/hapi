@@ -14,6 +14,7 @@ import type { SessionEndReason } from '@hapi/protocol'
 import type { ClientToServerEvents, ServerToClientEvents, Update } from '@hapi/protocol'
 import {
     TerminalClosePayloadSchema,
+    TerminalDetachPayloadSchema,
     TerminalOpenPayloadSchema,
     TerminalResizePayloadSchema,
     TerminalWritePayloadSchema
@@ -170,7 +171,7 @@ export class ApiSessionClient extends EventEmitter {
             logger.debug('[API] Socket error:', payload)
         })
 
-        const handleTerminalEvent = <T extends { sessionId: string }>(
+        const handleTerminalEvent = <T extends { sessionId?: string }>(
             schema: ZodType<T>,
             handler: (payload: T) => void
         ) => (data: unknown) => {
@@ -185,7 +186,7 @@ export class ApiSessionClient extends EventEmitter {
         }
 
         this.socket.on('terminal:open', handleTerminalEvent(TerminalOpenPayloadSchema, (payload) => {
-            this.terminalManager.create(payload.terminalId, payload.cols, payload.rows)
+            this.terminalManager.create(payload.terminalId, payload.cols, payload.rows, undefined, payload.replay === true)
         }))
 
         this.socket.on('terminal:write', handleTerminalEvent(TerminalWritePayloadSchema, (payload) => {
@@ -198,6 +199,10 @@ export class ApiSessionClient extends EventEmitter {
 
         this.socket.on('terminal:close', handleTerminalEvent(TerminalClosePayloadSchema, (payload) => {
             this.terminalManager.close(payload.terminalId)
+        }))
+
+        this.socket.on('terminal:detach', handleTerminalEvent(TerminalDetachPayloadSchema, (payload) => {
+            this.terminalManager.detach(payload.terminalId)
         }))
 
         this.socket.on('update', (data: Update) => {

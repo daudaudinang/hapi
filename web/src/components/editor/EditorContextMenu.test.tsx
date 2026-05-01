@@ -1,0 +1,192 @@
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { EditorContextMenu } from './EditorContextMenu'
+
+const singleFile = [{ path: '/repo/src/App.tsx', type: 'file' as const }]
+const selectedItems = [
+    { path: '/repo/src/App.tsx', type: 'file' as const },
+    { path: '/repo/src/Other.ts', type: 'file' as const }
+]
+
+describe('EditorContextMenu', () => {
+    afterEach(() => {
+        cleanup()
+    })
+
+    it('renders nothing without a file path or position', () => {
+        const { container, rerender } = render(
+            <EditorContextMenu
+                filePath={null}
+                items={[]}
+                position={{ x: 10, y: 20 }}
+                onOpen={vi.fn()}
+                onNewFile={vi.fn()}
+                onAddToChat={vi.fn()}
+                onCopyPath={vi.fn()}
+                onCopyRelativePath={vi.fn()}
+                onRefresh={vi.fn()}
+                onDelete={vi.fn()}
+                onClose={vi.fn()}
+            />
+        )
+        expect(container).toBeEmptyDOMElement()
+
+        rerender(
+            <EditorContextMenu
+                filePath="/repo/file.ts"
+                items={[{ path: '/repo/file.ts', type: 'file' }]}
+                position={null}
+                onOpen={vi.fn()}
+                onNewFile={vi.fn()}
+                onAddToChat={vi.fn()}
+                onCopyPath={vi.fn()}
+                onCopyRelativePath={vi.fn()}
+                onRefresh={vi.fn()}
+                onDelete={vi.fn()}
+                onClose={vi.fn()}
+            />
+        )
+        expect(container).toBeEmptyDOMElement()
+    })
+
+    it('renders actions at the provided coordinates', () => {
+        render(
+            <EditorContextMenu
+                filePath="/repo/src/App.tsx"
+                items={singleFile}
+                position={{ x: 12, y: 34 }}
+                onOpen={vi.fn()}
+                onNewFile={vi.fn()}
+                onAddToChat={vi.fn()}
+                onCopyPath={vi.fn()}
+                onCopyRelativePath={vi.fn()}
+                onRefresh={vi.fn()}
+                onDelete={vi.fn()}
+                onClose={vi.fn()}
+            />
+        )
+
+        const menu = screen.getByRole('menu')
+        expect(menu).toHaveStyle({ left: '12px', top: '34px' })
+        expect(screen.getByRole('menuitem', { name: 'Open in Editor' })).toBeInTheDocument()
+        expect(screen.getByRole('menuitem', { name: 'New File' })).toBeInTheDocument()
+        expect(screen.getByRole('menuitem', { name: 'Add to Chat' })).toBeInTheDocument()
+        expect(screen.getByRole('menuitem', { name: 'Copy Path' })).toBeInTheDocument()
+        expect(screen.getByRole('menuitem', { name: 'Copy Relative Path' })).toBeInTheDocument()
+        expect(screen.getByRole('menuitem', { name: 'Refresh' })).toBeInTheDocument()
+        expect(screen.getByRole('menuitem', { name: 'Delete' })).toBeInTheDocument()
+    })
+
+    it('runs open, new-file, add-to-chat, refresh, and delete actions then closes', () => {
+        const onOpen = vi.fn()
+        const onNewFile = vi.fn()
+        const onAddToChat = vi.fn()
+        const onRefresh = vi.fn()
+        const onDelete = vi.fn()
+        const onClose = vi.fn()
+
+        render(
+            <EditorContextMenu
+                filePath="/repo/src/App.tsx"
+                items={selectedItems}
+                position={{ x: 12, y: 34 }}
+                onOpen={onOpen}
+                onNewFile={onNewFile}
+                onAddToChat={onAddToChat}
+                onCopyPath={vi.fn()}
+                onCopyRelativePath={vi.fn()}
+                onRefresh={onRefresh}
+                onDelete={onDelete}
+                onClose={onClose}
+            />
+        )
+
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Open in Editor' }))
+        expect(onOpen).toHaveBeenCalledWith(selectedItems)
+        expect(onClose).toHaveBeenCalledTimes(1)
+
+        fireEvent.click(screen.getByRole('menuitem', { name: 'New File' }))
+        expect(onNewFile).toHaveBeenCalledWith('/repo/src/App.tsx')
+        expect(onClose).toHaveBeenCalledTimes(2)
+
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Add to Chat' }))
+        expect(onAddToChat).toHaveBeenCalledWith(selectedItems)
+        expect(onClose).toHaveBeenCalledTimes(3)
+
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Refresh' }))
+        expect(onRefresh).toHaveBeenCalledWith(selectedItems)
+        expect(onClose).toHaveBeenCalledTimes(4)
+
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }))
+        expect(onDelete).toHaveBeenCalledWith(selectedItems)
+        expect(onClose).toHaveBeenCalledTimes(5)
+    })
+
+    it('awaits copy actions before closing', async () => {
+        let resolveCopy!: () => void
+        const onCopyPath = vi.fn(() => new Promise<void>((resolve) => {
+            resolveCopy = resolve
+        }))
+        const onCopyRelativePath = vi.fn(async () => {})
+        const onClose = vi.fn()
+
+        render(
+            <EditorContextMenu
+                filePath="/repo/src/App.tsx"
+                items={selectedItems}
+                position={{ x: 12, y: 34 }}
+                onOpen={vi.fn()}
+                onNewFile={vi.fn()}
+                onAddToChat={vi.fn()}
+                onCopyPath={onCopyPath}
+                onCopyRelativePath={onCopyRelativePath}
+                onRefresh={vi.fn()}
+                onDelete={vi.fn()}
+                onClose={onClose}
+            />
+        )
+
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Copy Path' }))
+        expect(onCopyPath).toHaveBeenCalledWith(selectedItems)
+        expect(onClose).not.toHaveBeenCalled()
+
+        resolveCopy()
+        await waitFor(() => {
+            expect(onClose).toHaveBeenCalledTimes(1)
+        })
+
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Copy Relative Path' }))
+        await waitFor(() => {
+            expect(onCopyRelativePath).toHaveBeenCalledWith(selectedItems)
+            expect(onClose).toHaveBeenCalledTimes(2)
+        })
+    })
+
+    it('closes on Escape and outside mouse down', () => {
+        const onClose = vi.fn()
+        render(
+            <>
+                <button type="button">outside</button>
+                <EditorContextMenu
+                    filePath="/repo/src/App.tsx"
+                    items={singleFile}
+                    position={{ x: 12, y: 34 }}
+                    onOpen={vi.fn()}
+                    onNewFile={vi.fn()}
+                    onAddToChat={vi.fn()}
+                    onCopyPath={vi.fn()}
+                    onCopyRelativePath={vi.fn()}
+                    onRefresh={vi.fn()}
+                    onDelete={vi.fn()}
+                    onClose={onClose}
+                />
+            </>
+        )
+
+        fireEvent.keyDown(document, { key: 'Escape' })
+        expect(onClose).toHaveBeenCalledTimes(1)
+
+        fireEvent.mouseDown(screen.getByRole('button', { name: 'outside' }))
+        expect(onClose).toHaveBeenCalledTimes(2)
+    })
+})

@@ -1,5 +1,10 @@
 import type {
     AttachmentMetadata,
+    EditorDirectoryResponse,
+    EditorFileResponse,
+    EditorFileMutationResponse,
+    EditorGitStatusResponse,
+    EditorProjectsResponse,
     AuthResponse,
     CodexCollaborationMode,
     DeleteUploadResponse,
@@ -487,6 +492,98 @@ export class ApiClient {
         )
     }
 
+
+    async listEditorDirectory(
+        machineId: string,
+        path: string
+    ): Promise<EditorDirectoryResponse> {
+        return await this.request<EditorDirectoryResponse>(
+            `/api/editor/directory`,
+            {
+                method: "POST",
+                body: JSON.stringify({ machineId, path })
+            }
+        )
+    }
+
+    async readEditorFile(
+        machineId: string,
+        path: string
+    ): Promise<EditorFileResponse> {
+        return await this.request<EditorFileResponse>(
+            `/api/editor/file`,
+            {
+                method: "POST",
+                body: JSON.stringify({ machineId, path })
+            }
+        )
+    }
+
+    async writeEditorFile(
+        machineId: string,
+        path: string,
+        content: string
+    ): Promise<EditorFileMutationResponse> {
+        return await this.request<EditorFileMutationResponse>(
+            `/api/editor/file/write`,
+            {
+                method: "POST",
+                body: JSON.stringify({ machineId, path, content })
+            }
+        )
+    }
+
+    async createEditorFile(
+        machineId: string,
+        path: string,
+        content: string = ''
+    ): Promise<EditorFileMutationResponse> {
+        return await this.request<EditorFileMutationResponse>(
+            `/api/editor/file/create`,
+            {
+                method: "POST",
+                body: JSON.stringify({ machineId, path, content })
+            }
+        )
+    }
+
+    async deleteEditorFile(
+        machineId: string,
+        path: string
+    ): Promise<EditorFileMutationResponse> {
+        return await this.request<EditorFileMutationResponse>(
+            `/api/editor/file/delete`,
+            {
+                method: "POST",
+                body: JSON.stringify({ machineId, path })
+            }
+        )
+    }
+
+    async listEditorProjects(
+        machineId: string
+    ): Promise<EditorProjectsResponse> {
+        return await this.request<EditorProjectsResponse>(
+            `/api/editor/projects`,
+            {
+                method: "POST",
+                body: JSON.stringify({ machineId })
+            }
+        )
+    }
+
+    async getEditorGitStatus(
+        machineId: string,
+        projectPath: string
+    ): Promise<EditorGitStatusResponse> {
+        return await this.request<EditorGitStatusResponse>(
+            `/api/editor/git-status`,
+            {
+                method: "POST",
+                body: JSON.stringify({ machineId, path: projectPath })
+            }
+        )
+    }
     async renameSession(sessionId: string, name: string): Promise<void> {
         await this.request(`/api/sessions/${encodeURIComponent(sessionId)}`, {
             method: 'PATCH',
