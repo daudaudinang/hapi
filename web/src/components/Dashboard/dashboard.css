@@ -2095,25 +2095,21 @@
     }
 
     .db__topbar-left {
-        flex: 1;
-        min-width: 0;
-        overflow: hidden;
+        display: none;
     }
 
-    /* Title slightly smaller */
-    .db__title {
-        font-size: 0.8125rem;
-    }
-
-    /* Hide stats that overflow on mobile */
+    /* Title area is replaced by the Editor entry point on mobile */
+    .db__title,
     .db__stats {
         display: none;
     }
 
     /* Topbar action area compact */
     .db__topbar-actions {
+        flex: 1;
+        justify-content: flex-end;
         gap: 4px;
-        flex-shrink: 0;
+        min-width: 0;
     }
 
     /* Icon-only buttons on mobile: hide text label */
@@ -2128,7 +2124,16 @@
     }
 
     .db__topbar-btn--editor {
-        display: none;
+        display: flex;
+        order: -1;
+        margin-right: auto;
+        padding: 6px 10px;
+        gap: 4px;
+    }
+
+    .db__topbar-btn--editor .db__label {
+        display: inline;
+        font-size: 0.6875rem;
     }
 
     /* Keep "New Session" label visible but shorter */
