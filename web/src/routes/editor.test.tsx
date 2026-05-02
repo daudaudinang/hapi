@@ -59,6 +59,27 @@ describe('EditorPage', () => {
         })
     })
 
+    it('reuses persisted editor state when opening the same project from a session', () => {
+        const persistedState = {
+            machineId: 'machine-1',
+            projectPath: '/repo',
+            tabs: [{ id: 'term-1', type: 'terminal', label: 'Terminal: bash', machineId: 'machine-1', cwd: '/repo' }],
+            activeTabId: 'term-1',
+            activeSessionId: 'session-1',
+            isTerminalCollapsed: false
+        }
+        loadPersistedEditorStateMock.mockReturnValue(persistedState)
+
+        render(<EditorPage />)
+
+        expect(editorLayoutMock).toHaveBeenCalledWith({
+            api,
+            initialMachineId: 'machine-1',
+            initialProjectPath: '/repo',
+            initialState: persistedState
+        })
+    })
+
     it('is registered in the router', async () => {
         const { createAppRouter } = await import('@/router')
         const router = createAppRouter() as unknown as { routesByPath: Record<string, unknown> }

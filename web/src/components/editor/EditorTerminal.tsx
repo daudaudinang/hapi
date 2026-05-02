@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Terminal } from '@xterm/xterm'
 import type { ApiClient } from '@/api/client'
 import { TerminalView } from '@/components/Terminal/TerminalView'
+import { TerminalQuickKeys, useTerminalQuickInput } from '@/components/Terminal/TerminalQuickKeys'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useAppContext } from '@/lib/app-context'
 import type { EditorTab } from '@/hooks/useEditorState'
@@ -15,6 +16,7 @@ function EditorTerminalBody(props: {
     onAddToChat?: (text: string) => void
     onRegisterClose?: (tabId: string, close: (() => void) | null) => void
     compactFontSize?: boolean
+    mobileMode?: boolean
 }) {
     const { token, baseUrl } = useAppContext()
     const sessionId = props.tab.sessionId ?? null
@@ -48,6 +50,13 @@ function EditorTerminalBody(props: {
         machineId: machineId ?? '',
         cwd,
         terminalId: props.tab.id
+    })
+    const canUseTerminal = terminalSupported && Boolean(machineId || session?.active)
+    const quickInputDisabled = !canUseTerminal || terminalState.status !== 'connected'
+    const quickInput = useTerminalQuickInput({
+        disabled: quickInputDisabled,
+        write,
+        focusTerminal: () => terminalRef.current?.focus(),
     })
 
     useEffect(() => {
@@ -99,11 +108,9 @@ function EditorTerminalBody(props: {
             setTerminalMousePos(null)
         }
 
-        inputDisposableRef.current = terminal.onData((data) => {
-            write(data)
-        })
+        inputDisposableRef.current = terminal.onData(quickInput.writeTerminalData)
         terminal.focus()
-    }, [write])
+    }, [quickInput.writeTerminalData])
 
     const handleResize = useCallback((cols: number, rows: number) => {
         lastSizeRef.current = { cols, rows }
@@ -210,7 +217,7 @@ function EditorTerminalBody(props: {
                 ref={terminalContainerRef}
                 className="min-h-0 flex-1 overflow-hidden p-2 relative"
             >
-                {terminalSupported && (machineId || session?.active) ? (
+                {canUseTerminal ? (
                     <TerminalView
                         onMount={handleTerminalMount}
                         onResize={handleResize}
@@ -243,6 +250,16 @@ function EditorTerminalBody(props: {
                     </button>
                 )}
             </div>
+            {props.mobileMode ? (
+                <TerminalQuickKeys
+                    disabled={quickInputDisabled}
+                    ctrlActive={quickInput.ctrlActive}
+                    altActive={quickInput.altActive}
+                    onQuickInput={quickInput.sendQuickInput}
+                    onModifierToggle={quickInput.toggleModifier}
+                    onWritePlainInput={quickInput.writePlainInput}
+                />
+            ) : null}
         </div>
     )
 }
@@ -359,6 +376,7 @@ export function EditorTerminal(props: {
                                     onAddToChat={props.onAddToChat}
                                     onRegisterClose={handleRegisterClose}
                                     compactFontSize={props.mobileMode}
+                                    mobileMode={props.mobileMode}
                                 />
                             </div>
                         )

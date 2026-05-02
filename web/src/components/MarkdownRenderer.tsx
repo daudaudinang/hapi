@@ -20,7 +20,7 @@ function MarkdownContent(props: MarkdownRendererProps) {
                 remarkPlugins={MARKDOWN_PLUGINS}
                 rehypePlugins={MARKDOWN_REHYPE_PLUGINS}
                 components={mergedComponents}
-                className={cn('aui-md min-w-0 max-w-full break-words text-base')}
+                className={cn('aui-md min-w-0 max-w-full break-words text-sm')}
             />
         </TextMessagePartProvider>
     )
