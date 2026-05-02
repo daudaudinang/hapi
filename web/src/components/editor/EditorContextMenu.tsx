@@ -13,6 +13,7 @@ export function EditorContextMenu(props: {
     onRefresh: (items: EditorTreeItem[]) => void
     onDelete: (items: EditorTreeItem[]) => void | Promise<void>
     onClose: () => void
+    mobileMode?: boolean
 }) {
     const menuRef = useRef<HTMLDivElement | null>(null)
     const filePath = props.filePath
@@ -30,6 +31,9 @@ export function EditorContextMenu(props: {
             }
         }
         const handleMouseDown = (event: MouseEvent) => {
+            if (props.mobileMode) {
+                return
+            }
             const menu = menuRef.current
             if (menu && event.target instanceof Node && !menu.contains(event.target)) {
                 props.onClose()
@@ -81,6 +85,35 @@ export function EditorContextMenu(props: {
     const handleDeleteFile = () => {
         void props.onDelete(items)
         props.onClose()
+    }
+
+    if (props.mobileMode) {
+        const title = items.length === 1
+            ? items[0].path.split('/').filter(Boolean).pop() ?? items[0].path
+            : `${items.length} items`
+
+        return (
+            <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3" role="presentation">
+                <div
+                    ref={menuRef}
+                    role="menu"
+                    aria-label={`File actions ${title}`}
+                    className="w-full max-w-sm rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)] p-2 text-sm text-[var(--app-fg)] shadow-xl"
+                >
+                    <div className="border-b border-[var(--app-border)] px-3 py-2 text-xs font-semibold text-[var(--app-hint)]">
+                        {title}
+                    </div>
+                    <button type="button" role="menuitem" onClick={handleOpen} className="block min-h-11 w-full rounded-md px-3 py-2 text-left hover:bg-[var(--app-subtle-bg)]">Open in Editor</button>
+                    <button type="button" role="menuitem" onClick={handleNewFile} className="block min-h-11 w-full rounded-md px-3 py-2 text-left hover:bg-[var(--app-subtle-bg)]">New File</button>
+                    <button type="button" role="menuitem" onClick={handleAddToChat} className="block min-h-11 w-full rounded-md px-3 py-2 text-left hover:bg-[var(--app-subtle-bg)]">Add to Chat</button>
+                    <button type="button" role="menuitem" onClick={() => { void handleCopyPath() }} className="block min-h-11 w-full rounded-md px-3 py-2 text-left hover:bg-[var(--app-subtle-bg)]">Copy Path</button>
+                    <button type="button" role="menuitem" onClick={() => { void handleCopyRelativePath() }} className="block min-h-11 w-full rounded-md px-3 py-2 text-left hover:bg-[var(--app-subtle-bg)]">Copy Relative Path</button>
+                    <button type="button" role="menuitem" onClick={handleRefresh} className="block min-h-11 w-full rounded-md px-3 py-2 text-left hover:bg-[var(--app-subtle-bg)]">Refresh</button>
+                    <button type="button" role="menuitem" onClick={handleDeleteFile} className="block min-h-11 w-full rounded-md px-3 py-2 text-left text-red-500 hover:bg-[var(--app-subtle-bg)]">Delete</button>
+                    <button type="button" onClick={props.onClose} className="mt-1 block min-h-11 w-full rounded-md border border-[var(--app-border)] px-3 py-2 text-center text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)]">Cancel</button>
+                </div>
+            </div>
+        )
     }
 
     return (

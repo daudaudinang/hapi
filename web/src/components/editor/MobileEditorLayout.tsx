@@ -553,6 +553,7 @@ export function MobileEditorLayout(props: MobileEditorLayoutProps) {
                         newFileTargetPath={props.newFileTargetPath}
                         onCreateFile={props.onCreateFile}
                         onCancelNewFile={props.onCancelNewFile}
+                        mobileMode={true}
                     />
                 ) : null}
 

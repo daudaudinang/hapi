@@ -635,6 +635,7 @@ export function EditorLayout(props: {
                     onRefresh={handleRefreshPath}
                     onDelete={handleRequestDelete}
                     onClose={editor.hideContextMenu}
+                    mobileMode={true}
                 />
                 <DeleteConfirmModal
                     items={deleteItems}
