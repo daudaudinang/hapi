@@ -1,3 +1,4 @@
+// TODO: Integrate into EditorGitPanel for inline diff viewing (click file to expand diff)
 import { useQuery } from '@tanstack/react-query'
 import type { ApiClient } from '@/api/client'
 import { queryKeys } from '@/lib/query-keys'

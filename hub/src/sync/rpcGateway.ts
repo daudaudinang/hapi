@@ -286,31 +286,45 @@ export class RpcGateway {
     }
 
     async editorGitStageFile(machineId: string, path: string, filePath: string, repoRoot?: string): Promise<RpcCommandResponse> {
-        return await this.machineRpc(machineId, 'editor-git-stage-file', { path, repoRoot, filePath }) as RpcCommandResponse
+        const result = await this.machineRpc(machineId, 'editor-git-stage-file', { path, repoRoot, filePath }) as RpcCommandResponse | unknown
+        if (!result || typeof result !== 'object') return { success: false, error: 'Unexpected editor-git-stage-file result' }
+        return result as RpcCommandResponse
     }
 
     async editorGitUnstageFile(machineId: string, path: string, filePath: string, repoRoot?: string): Promise<RpcCommandResponse> {
-        return await this.machineRpc(machineId, 'editor-git-unstage-file', { path, repoRoot, filePath }) as RpcCommandResponse
+        const result = await this.machineRpc(machineId, 'editor-git-unstage-file', { path, repoRoot, filePath }) as RpcCommandResponse | unknown
+        if (!result || typeof result !== 'object') return { success: false, error: 'Unexpected editor-git-unstage-file result' }
+        return result as RpcCommandResponse
     }
 
     async editorGitStageAll(machineId: string, path: string, repoRoot?: string): Promise<RpcCommandResponse> {
-        return await this.machineRpc(machineId, 'editor-git-stage-all', { path, repoRoot }) as RpcCommandResponse
+        const result = await this.machineRpc(machineId, 'editor-git-stage-all', { path, repoRoot }) as RpcCommandResponse | unknown
+        if (!result || typeof result !== 'object') return { success: false, error: 'Unexpected editor-git-stage-all result' }
+        return result as RpcCommandResponse
     }
 
     async editorGitUnstageAll(machineId: string, path: string, repoRoot?: string): Promise<RpcCommandResponse> {
-        return await this.machineRpc(machineId, 'editor-git-unstage-all', { path, repoRoot }) as RpcCommandResponse
+        const result = await this.machineRpc(machineId, 'editor-git-unstage-all', { path, repoRoot }) as RpcCommandResponse | unknown
+        if (!result || typeof result !== 'object') return { success: false, error: 'Unexpected editor-git-unstage-all result' }
+        return result as RpcCommandResponse
     }
 
     async editorGitCommit(machineId: string, path: string, message: string, repoRoot?: string): Promise<RpcCommandResponse> {
-        return await this.machineRpc(machineId, 'editor-git-commit', { path, repoRoot, message }) as RpcCommandResponse
+        const result = await this.machineRpc(machineId, 'editor-git-commit', { path, repoRoot, message }) as RpcCommandResponse | unknown
+        if (!result || typeof result !== 'object') return { success: false, error: 'Unexpected editor-git-commit result' }
+        return result as RpcCommandResponse
     }
 
     async editorGitPull(machineId: string, path: string, repoRoot?: string): Promise<RpcCommandResponse> {
-        return await this.machineRpc(machineId, 'editor-git-pull', { path, repoRoot }) as RpcCommandResponse
+        const result = await this.machineRpc(machineId, 'editor-git-pull', { path, repoRoot }) as RpcCommandResponse | unknown
+        if (!result || typeof result !== 'object') return { success: false, error: 'Unexpected editor-git-pull result' }
+        return result as RpcCommandResponse
     }
 
     async editorGitPush(machineId: string, path: string, repoRoot?: string): Promise<RpcCommandResponse> {
-        return await this.machineRpc(machineId, 'editor-git-push', { path, repoRoot }) as RpcCommandResponse
+        const result = await this.machineRpc(machineId, 'editor-git-push', { path, repoRoot }) as RpcCommandResponse | unknown
+        if (!result || typeof result !== 'object') return { success: false, error: 'Unexpected editor-git-push result' }
+        return result as RpcCommandResponse
     }
 
     async editorWriteFile(machineId: string, path: string, content: string): Promise<RpcEditorFileMutationResponse> {

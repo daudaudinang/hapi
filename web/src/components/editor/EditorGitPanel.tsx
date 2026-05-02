@@ -1,8 +1,10 @@
+// TODO: Inline diff viewer — useEditorGitDiff hook and /api/editor/git-diff-file endpoint are ready; add click-to-expand diff in FileRow
 import { useCallback, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { ApiClient } from '@/api/client'
 import type { EditorGitFile, EditorGitRepository } from '@/types/api'
 import { useEditorGitStatus } from '@/hooks/queries/useEditorGitStatus'
+import { queryKeys } from '@/lib/query-keys'
 
 function statusLabel(status: EditorGitFile['status']): string {
     if (status === 'added') return 'A'
@@ -99,8 +101,8 @@ export function EditorGitPanel(props: {
 
     const invalidate = useCallback(async () => {
         if (!props.machineId || !props.projectPath) return
-        await queryClient.invalidateQueries({ queryKey: ['editor', 'git-status', props.machineId, props.projectPath] })
-        await queryClient.invalidateQueries({ queryKey: ['editor', 'directory', props.machineId] })
+        await queryClient.invalidateQueries({ queryKey: queryKeys.editorGitStatusBase(props.machineId, props.projectPath) })
+        await queryClient.invalidateQueries({ queryKey: queryKeys.editorDirectoryBase(props.machineId) })
     }, [props.machineId, props.projectPath, queryClient])
 
     const runAction = useCallback(async (fn: () => Promise<{ success: boolean; error?: string; stderr?: string }>) => {
