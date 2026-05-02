@@ -10,6 +10,7 @@ import { queryKeys } from '@/lib/query-keys'
 import { filterSessionsForEditorProject } from '@/lib/editor-session-filter'
 import { clearPersistedEditorState, savePersistedEditorState } from '@/lib/editor-persistence'
 import { useEditorPaneResize } from '@/hooks/useEditorPaneResize'
+import { useRegisterActiveEditorSession } from '@/lib/active-chat-session'
 import { useSessions } from '@/hooks/queries/useSessions'
 import { useEditorState } from '@/hooks/useEditorState'
 import { useEditorNewSession } from '@/hooks/mutations/useEditorNewSession'
@@ -188,6 +189,7 @@ export function EditorLayout(props: {
     initialState?: PersistedEditorState
 }) {
     const editor = useEditorState(props.initialMachineId, props.initialProjectPath, props.initialState)
+    useRegisterActiveEditorSession(editor.activeSessionId)
     const panes = useEditorPaneResize()
     const queryClient = useQueryClient()
     const navigate = useNavigate()

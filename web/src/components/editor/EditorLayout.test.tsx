@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '@/api/client'
 import type { SessionSummary } from '@/types/api'
 import { EditorLayout } from './EditorLayout'
+import { ActiveChatSessionProvider } from '@/lib/active-chat-session'
 
 const mocks = vi.hoisted(() => ({
     createSession: vi.fn(),
@@ -621,5 +622,27 @@ describe('EditorLayout', () => {
         fireEvent.click(screen.getByText('Context add'))
 
         expect(mocks.createSession).toHaveBeenCalled()
+    })
+})
+
+
+describe('EditorLayout active chat sync registration', () => {
+    it('registers the active editor chat session for app-level reconnect recovery', async () => {
+        const onActiveSessionChange = vi.fn()
+        mocks.sessions = [
+            makeSession({ id: 'project-session', metadata: { path: '/repo', machineId: 'machine-1', name: 'Project session' } })
+        ]
+
+        render(
+            <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}>
+                <ActiveChatSessionProvider value={{ setActiveEditorSessionId: onActiveSessionChange }}>
+                    <EditorLayout api={{} as ApiClient} initialMachineId="machine-1" initialProjectPath="/repo" />
+                </ActiveChatSessionProvider>
+            </QueryClientProvider>
+        )
+
+        await waitFor(() => {
+            expect(onActiveSessionChange).toHaveBeenCalledWith('project-session')
+        })
     })
 })
