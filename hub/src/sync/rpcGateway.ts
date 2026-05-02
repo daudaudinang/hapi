@@ -262,14 +262,6 @@ export class RpcGateway {
         return result as RpcEditorProjectsResponse
     }
 
-    async editorGitStatus(machineId: string, path: string): Promise<RpcCommandResponse> {
-        const result = await this.machineRpc(machineId, 'editor-git-status', { path }) as RpcCommandResponse | unknown
-        if (!result || typeof result !== 'object') {
-            return { success: false, error: 'Unexpected editor-git-status result' }
-        }
-        return result as RpcCommandResponse
-    }
-
     async editorGitStatusV2(machineId: string, path: string, repoRoot?: string): Promise<RpcEditorGitStatusResponse> {
         const result = await this.machineRpc(machineId, 'editor-git-status-v2', { path, repoRoot }) as RpcEditorGitStatusResponse | unknown
         if (!result || typeof result !== 'object') {

@@ -585,10 +585,6 @@ export class SyncEngine {
         return await this.rpcGateway.editorListProjects(machineId)
     }
 
-    async getEditorGitStatus(machineId: string, path: string): Promise<RpcCommandResponse> {
-        return await this.rpcGateway.editorGitStatus(machineId, path)
-    }
-
     async getEditorGitStatusV2(machineId: string, path: string, repoRoot?: string): Promise<RpcEditorGitStatusResponse> {
         return await this.rpcGateway.editorGitStatusV2(machineId, path, repoRoot)
     }

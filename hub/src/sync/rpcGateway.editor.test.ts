@@ -93,22 +93,6 @@ describe('RpcGateway editor RPC', () => {
         })
     })
 
-    it('sends editor-git-status through machine-level RPC', async () => {
-        const expected = { success: true, stdout: ' M README.md\n' }
-        const { gateway, calls } = createGateway(expected)
-
-        const result = await gateway.editorGitStatus('machine-1', '/repo')
-
-        expect(result).toEqual(expected)
-        expect(calls[0]).toEqual({
-            event: 'rpc-request',
-            payload: {
-                method: 'machine-1:editor-git-status',
-                params: JSON.stringify({ path: '/repo' })
-            }
-        })
-    })
-
     it('sends editor-git-status-v2 through machine-level RPC', async () => {
         const expected = { success: true, state: 'notRepository', repositories: [], stagedFiles: [], unstagedFiles: [], totalStaged: 0, totalUnstaged: 0 }
         const { gateway, calls } = createGateway(expected)
@@ -212,10 +196,6 @@ describe('RpcGateway editor RPC', () => {
         await expect(gateway.editorListProjects('machine-1')).resolves.toEqual({
             success: false,
             error: 'Unexpected editor-list-projects result'
-        })
-        await expect(gateway.editorGitStatus('machine-1', '/repo')).resolves.toEqual({
-            success: false,
-            error: 'Unexpected editor-git-status result'
         })
         await expect(gateway.editorWriteFile('machine-1', '/repo/file.ts', 'content')).resolves.toEqual({
             success: false,

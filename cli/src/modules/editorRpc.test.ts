@@ -184,13 +184,6 @@ describe('editor RPC handlers', () => {
         expect(plainProjectIndex).toBeGreaterThan(gitProjectIndex)
     })
 
-    it('runs git status only inside the editor root', async () => {
-        await expect(request(rpc, 'editor-git-status', { path: resolve(rootDir, '..') })).resolves.toMatchObject({
-            success: false,
-            error: 'Path outside editor root'
-        })
-    })
-
     it('reports notRepository for a folder without git metadata', async () => {
         const parsed = await request(rpc, 'editor-git-status-v2', { path: rootDir }) as {
             success: boolean

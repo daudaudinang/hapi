@@ -23,11 +23,6 @@ const projectsBodySchema = z.object({
     machineId: z.string().min(1)
 })
 
-const gitStatusBodySchema = z.object({
-    machineId: z.string().min(1),
-    path: z.string().min(1)
-})
-
 const gitRepoBodySchema = z.object({
     machineId: z.string().min(1),
     path: z.string().min(1),
@@ -180,29 +175,6 @@ export function createEditorRoutes(getSyncEngine: () => SyncEngine | null): Hono
             return c.json({
                 success: false,
                 error: error instanceof Error ? error.message : 'Failed to list projects'
-            }, 500)
-        }
-    })
-
-    app.post('/editor/git-status', async (c) => {
-        const engine = getSyncEngine()
-        if (!engine) {
-            return c.json({ success: false, error: 'Not connected' }, 503)
-        }
-
-        const body = await c.req.json().catch(() => null)
-        const parsed = gitStatusBodySchema.safeParse(body)
-        if (!parsed.success) {
-            return c.json({ success: false, error: 'Invalid body' }, 400)
-        }
-
-        try {
-            const result = await engine.getEditorGitStatus(parsed.data.machineId, parsed.data.path)
-            return c.json(result)
-        } catch (error) {
-            return c.json({
-                success: false,
-                error: error instanceof Error ? error.message : 'Failed to get git status'
             }, 500)
         }
     })

@@ -286,12 +286,6 @@ export type EditorProjectsResponse = {
     error?: string
 }
 
-export type EditorGitStatusResponse = {
-    success: boolean
-    status?: GitStatusFiles
-    error?: string
-}
-
 export type EditorGitRepositoryState = 'ready' | 'notRepository' | 'repoOutsideRoot' | 'detached' | 'initial'
 export type EditorGitFileStatus = 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked' | 'conflicted'
 export type EditorGitRepository = {

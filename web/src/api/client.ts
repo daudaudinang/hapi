@@ -3,7 +3,6 @@ import type {
     EditorDirectoryResponse,
     EditorFileResponse,
     EditorFileMutationResponse,
-    EditorGitStatusResponse,
     EditorGitStatusV2Response,
     EditorProjectsResponse,
     AuthResponse,
@@ -555,19 +554,6 @@ export class ApiClient {
             {
                 method: "POST",
                 body: JSON.stringify({ machineId })
-            }
-        )
-    }
-
-    async getEditorGitStatus(
-        machineId: string,
-        projectPath: string
-    ): Promise<EditorGitStatusResponse> {
-        return await this.request<EditorGitStatusResponse>(
-            `/api/editor/git-status`,
-            {
-                method: "POST",
-                body: JSON.stringify({ machineId, path: projectPath })
             }
         )
     }

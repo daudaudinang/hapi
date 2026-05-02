@@ -35,10 +35,6 @@ type EditorFileMutationRequest = {
     content?: string
 }
 
-type EditorGitStatusRequest = {
-    path?: string
-}
-
 type EditorCommandResponse = {
     success: boolean
     stdout?: string
@@ -460,31 +456,4 @@ export function registerEditorRpcHandlers(rpcHandlerManager: RpcHandlerManager, 
         }
     })
 
-    rpcHandlerManager.registerHandler<EditorGitStatusRequest, EditorCommandResponse>('editor-git-status', async (data) => {
-        const resolved = await resolveExistingInsideRoot(data?.path, editorRoot)
-        if (resolved.error) {
-            return rpcError(resolved.error)
-        }
-
-        try {
-            const { stdout, stderr } = await execGit('git', ['status', '--porcelain'], {
-                cwd: resolved.path,
-                timeout: 5_000,
-                encoding: 'utf8'
-            })
-            return {
-                success: true,
-                stdout: stdout.toString(),
-                stderr: stderr.toString(),
-                exitCode: 0
-            }
-        } catch (error) {
-            const execError = error as NodeJS.ErrnoException & { stdout?: string | Buffer; stderr?: string | Buffer; code?: number | string }
-            return rpcError(execError.message || 'Git status failed', {
-                stdout: execError.stdout ? execError.stdout.toString() : '',
-                stderr: execError.stderr ? execError.stderr.toString() : execError.message || 'Git status failed',
-                exitCode: typeof execError.code === 'number' ? execError.code : 1
-            })
-        }
-    })
 }
