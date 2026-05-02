@@ -378,7 +378,6 @@ export function MobileEditorLayout(props: MobileEditorLayoutProps) {
     const [view, setView] = useState<MobileEditorView>('files')
     const [hasOpenedEditorSurface, setHasOpenedEditorSurface] = useState(false)
     const [selectionNoticeVisible, setSelectionNoticeVisible] = useState(false)
-    const [terminalScopeSessionId, setTerminalScopeSessionId] = useState<string | null>(null)
     const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm>(null)
     const [newFileOpen, setNewFileOpen] = useState(false)
     const [newFileName, setNewFileName] = useState('')
@@ -428,9 +427,9 @@ export function MobileEditorLayout(props: MobileEditorLayoutProps) {
     }, [handleViewChange, props.onOpenFile])
 
     const handleOpenTerminal = useCallback(() => {
-        props.onOpenTerminal(terminalScopeSessionId)
+        props.onOpenTerminal()
         setView('terminal')
-    }, [props.onOpenTerminal, terminalScopeSessionId])
+    }, [props.onOpenTerminal])
 
     const handleAddSelectionToChat = useCallback((filePath: string, startLine: number, endLine: number, content: string) => {
         props.onAddSelectionToChat(filePath, startLine, endLine, content)
@@ -580,9 +579,9 @@ export function MobileEditorLayout(props: MobileEditorLayoutProps) {
                             mode="chat"
                             sessions={props.projectSessions}
                             activeSessionId={props.activeSessionId}
-                            terminalScopeSessionId={terminalScopeSessionId}
+                            terminalScopeSessionId={null}
                             onSelectSession={props.onSelectSession}
-                            onSelectTerminalScope={setTerminalScopeSessionId}
+                            onSelectTerminalScope={() => {}}
                             onRequestArchive={(session) => setPendingConfirm({ type: 'archive', session })}
                             onRequestDelete={(session) => setPendingConfirm({ type: 'delete', session })}
                             onNewSession={props.onOpenNewSessionModal}
@@ -602,33 +601,20 @@ export function MobileEditorLayout(props: MobileEditorLayoutProps) {
                 ) : null}
 
                 {view === 'terminal' ? (
-                    <div className="flex h-full min-h-0 flex-col">
-                        <MobileSessionTabs
-                            mode="terminal"
-                            sessions={props.projectSessions}
-                            activeSessionId={props.activeSessionId}
-                            terminalScopeSessionId={terminalScopeSessionId}
-                            onSelectSession={props.onSelectSession}
-                            onSelectTerminalScope={setTerminalScopeSessionId}
-                            onRequestArchive={(session) => setPendingConfirm({ type: 'archive', session })}
-                            onRequestDelete={(session) => setPendingConfirm({ type: 'delete', session })}
-                            onNewSession={props.onOpenNewSessionModal}
+                    <div className="h-full min-h-0">
+                        <EditorTerminal
+                            api={props.api}
+                            tabs={props.terminalTabs}
+                            activeTabId={props.activeTerminalTab?.id ?? null}
+                            isCollapsed={false}
+                            onSelectTab={props.onSelectTerminalTab}
+                            onCloseTab={props.onCloseTerminalTab}
+                            onOpenTerminal={handleOpenTerminal}
+                            onToggleCollapsed={() => {}}
+                            onAddToChat={props.onAddTerminalToChat}
+                            onRegisterTerminalClose={props.onRegisterTerminalClose}
+                            mobileMode={true}
                         />
-                        <div className="min-h-0 flex-1">
-                            <EditorTerminal
-                                api={props.api}
-                                tabs={props.terminalTabs}
-                                activeTabId={props.activeTerminalTab?.id ?? null}
-                                isCollapsed={false}
-                                onSelectTab={props.onSelectTerminalTab}
-                                onCloseTab={props.onCloseTerminalTab}
-                                onOpenTerminal={handleOpenTerminal}
-                                onToggleCollapsed={() => {}}
-                                onAddToChat={props.onAddTerminalToChat}
-                                onRegisterTerminalClose={props.onRegisterTerminalClose}
-                                mobileMode={true}
-                            />
-                        </div>
                     </div>
                 ) : null}
             </div>

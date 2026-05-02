@@ -248,15 +248,17 @@ describe('MobileEditorLayout', () => {
         expect(props.onDeleteSession).toHaveBeenCalledWith('archived-session')
     })
 
-    it('uses session tabs in Terminal to choose the terminal scope before opening a terminal', () => {
+    it('does not show chat session tabs in Terminal and opens a project terminal', () => {
         const props = baseProps()
         render(<MobileEditorLayout {...props} />)
 
         fireEvent.click(screen.getByRole('button', { name: 'Terminal' }))
-        fireEvent.click(screen.getByRole('button', { name: 'Use session session-2 for terminal' }))
+        expect(screen.queryByRole('button', { name: 'Use session session-2 for terminal' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Use project for terminal' })).not.toBeInTheDocument()
+
         fireEvent.click(screen.getByRole('button', { name: 'Open terminal' }))
 
-        expect(props.onOpenTerminal).toHaveBeenCalledWith('session-2')
+        expect(props.onOpenTerminal).toHaveBeenCalledWith()
     })
 
     it('keeps the Terminal header plus as the only open terminal action in mobile', () => {
