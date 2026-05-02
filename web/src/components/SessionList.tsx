@@ -14,6 +14,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { CopyIcon, CheckIcon } from '@/components/icons'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/lib/use-translation'
+import { compareSessionGroupOrder } from '@/lib/session-group-order'
 
 type SessionGroup = {
     key: string
@@ -172,12 +173,15 @@ function groupSessionsByDirectory(sessions: SessionSummary[]): SessionGroup[] {
                 hasActiveSession
             }
         })
-        .sort((a, b) => {
-            if (a.hasActiveSession !== b.hasActiveSession) {
-                return a.hasActiveSession ? -1 : 1
-            }
-            return b.latestUpdatedAt - a.latestUpdatedAt
-        })
+        .sort((a, b) => compareSessionGroupOrder({
+            label: a.displayName,
+            latestUpdatedAt: a.latestUpdatedAt,
+            hasActiveSession: a.hasActiveSession
+        }, {
+            label: b.displayName,
+            latestUpdatedAt: b.latestUpdatedAt,
+            hasActiveSession: b.hasActiveSession
+        }))
 }
 
 function groupByMachine(
@@ -204,10 +208,15 @@ function groupByMachine(
         if (g.hasActiveSession) mg.hasActiveSession = true
         if (g.latestUpdatedAt > mg.latestUpdatedAt) mg.latestUpdatedAt = g.latestUpdatedAt
     }
-    return [...map.values()].sort((a, b) => {
-        if (a.hasActiveSession !== b.hasActiveSession) return a.hasActiveSession ? -1 : 1
-        return b.latestUpdatedAt - a.latestUpdatedAt
-    })
+    return [...map.values()].sort((a, b) => compareSessionGroupOrder({
+        label: a.label,
+        latestUpdatedAt: a.latestUpdatedAt,
+        hasActiveSession: a.hasActiveSession
+    }, {
+        label: b.label,
+        latestUpdatedAt: b.latestUpdatedAt,
+        hasActiveSession: b.hasActiveSession
+    }))
 }
 
 function CopyPathButton({ path, className }: { path: string; className?: string }) {

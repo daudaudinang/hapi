@@ -11,6 +11,7 @@ import { useSkills } from '@/hooks/queries/useSkills'
 import { queryKeys } from '@/lib/query-keys'
 import { fetchLatestMessages, seedMessageWindowFromSession } from '@/lib/message-window-store'
 import { clearDraftsAfterSend } from '@/lib/clearDraftsAfterSend'
+import { compareSessionGroupOrder } from '@/lib/session-group-order'
 import { SessionChat } from '@/components/SessionChat'
 import type { ApiClient } from '@/api/client'
 import type { SessionSummary, AttachmentMetadata } from '@/types/api'
@@ -93,14 +94,19 @@ function getSessionTitle(session: SessionSummary): string {
     return `Session ${session.id.substring(0, 6)}`
 }
 
-function groupByProject(sessions: SessionSummary[]): { project: string; sessions: SessionSummary[] }[] {
+function groupByProject(sessions: SessionSummary[]): { project: string; sessions: SessionSummary[]; latestUpdatedAt: number; hasActiveSession: boolean }[] {
     const map = new Map<string, SessionSummary[]>()
     for (const s of sessions) {
         const p = getProjectName(s)
         if (!map.has(p)) map.set(p, [])
         map.get(p)!.push(s)
     }
-    return [...map.entries()].map(([project, sessions]) => ({ project, sessions }))
+    return [...map.entries()].map(([project, sessions]) => ({
+        project,
+        sessions,
+        latestUpdatedAt: sessions.reduce((max, session) => Math.max(max, session.updatedAt), 0),
+        hasActiveSession: sessions.some((session) => session.active)
+    }))
 }
 
 function formatElapsed(updatedAt: number): string {
@@ -826,13 +832,17 @@ export function Dashboard({ api, initialPinnedIds }: DashboardProps) {
             const pb = getStatusPriority(statuses.get(b.id) ?? 'active')
             return pa !== pb ? pa - pb : b.updatedAt - a.updatedAt
         })
-    const projectGroups = groupByProject(visibleSessions).sort((a, b) => {
-        const aHasPin = a.sessions.some(s => pinnedIds.includes(s.id))
-        const bHasPin = b.sessions.some(s => pinnedIds.includes(s.id))
-        if (aHasPin && !bHasPin) return -1
-        if (!aHasPin && bHasPin) return 1
-        return a.project.localeCompare(b.project)
-    })
+    const projectGroups = groupByProject(visibleSessions).sort((a, b) => compareSessionGroupOrder({
+        label: a.project,
+        latestUpdatedAt: a.latestUpdatedAt,
+        hasActiveSession: a.hasActiveSession,
+        hasPinnedSession: a.sessions.some(s => pinnedIds.includes(s.id))
+    }, {
+        label: b.project,
+        latestUpdatedAt: b.latestUpdatedAt,
+        hasActiveSession: b.hasActiveSession,
+        hasPinnedSession: b.sessions.some(s => pinnedIds.includes(s.id))
+    }))
 
     const pinnedSessions = pinnedIds
         .map(id => sessions.find(s => s.id === id))
