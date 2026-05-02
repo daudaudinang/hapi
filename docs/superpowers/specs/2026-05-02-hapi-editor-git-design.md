@@ -148,6 +148,49 @@ Mobile should expose Git as a first-class pane alongside existing mobile Editor 
 
 The Git pane uses the same Source Control component in a single-column layout. Commit actions and staged/unstaged groups stack vertically.
 
+## Repository discovery and active repository
+
+Editor Git must not assume the opened folder itself is the repository root. Before running status, diff, or mutating Git commands, the CLI resolves the active repository explicitly:
+
+1. Run `git -C <projectPath> rev-parse --show-toplevel` and `git -C <projectPath> rev-parse --git-dir`.
+2. If a repository is found, normalize `repoRoot` and use it as the working directory for all Git operations.
+3. If no repository is found, return a successful structured response with `repositories: []` and a `notRepository` state. The UI shows a calm empty state: `No Git repository found`, and disables commit, stage, pull, and push actions.
+4. If `repoRoot` is outside the configured Editor root, do not operate on it. Return a structured `repoOutsideRoot` state with guidance to open the repository root or expand the workspace root.
+
+Phase 1 should support an active repository selector, even if most projects only have one repository:
+
+- Default active repository: the repository containing the selected project path.
+- Also scan for nested repositories below the project path with a small depth limit and skip heavy folders like `node_modules`, `.git`, caches, and build outputs.
+- Include repositories whose `.git` is a directory or a file, so worktrees and submodules work correctly.
+- Every Editor Git API call accepts either `repoRoot` or resolves it from `path`; if `repoRoot` is supplied, it must still be validated inside the Editor root.
+- File paths in status/diff/stage operations are relative to the chosen `repoRoot`, not merely the opened project path.
+
+Repository states to expose to the UI:
+
+- `ready`: Git repository found and usable.
+- `notRepository`: no repository for the opened folder.
+- `repoOutsideRoot`: Git repository exists but is outside Editor root.
+- `detached`: usable repository with detached HEAD; commit allowed, push disabled or warning-gated.
+- `initial`: initial repository state; commit allowed when staged files exist.
+
+Use `git` itself for discovery; do not rely only on checking for a `.git` directory. This handles worktrees, submodules, and `.git` files.
+
+## Reuse from Agent mode Git
+
+Agent mode already has session-scoped Git support:
+
+- `cli/src/modules/common/handlers/git.ts` for status, numstat, and file diff.
+- `hub/src/web/routes/git.ts` for session routes.
+- `web/src/lib/gitParsers.ts` for porcelain v2 and numstat parsing.
+- Session file/diff UI patterns in `web/src/routes/sessions/files.tsx`, `web/src/routes/sessions/file.tsx`, and related modal components.
+
+Editor Git should reuse the useful parts but not directly call session routes:
+
+- Reuse or extract common CLI Git helpers for `execFile`, timeout handling, path validation, status, numstat, and file diff.
+- Reuse/adapt `gitParsers.ts` concepts and types for status grouping, branch, ahead/behind, and line stats.
+- Reuse UI primitives/patterns for `StatusBadge`, line changes, and diff display.
+- Keep Editor Git machine/project-scoped because it must work without an active agent session.
+
 ## Backend/API design
 
 Add Editor Git operations as machine-level RPC because Editor operates on machine/project paths, not only active agent sessions.
@@ -157,25 +200,25 @@ New CLI RPC handlers should live near existing Editor handlers, likely `cli/src/
 Proposed machine RPC methods:
 
 - `editor-git-status-v2`
-  - input: `{ path: string }`
-  - output: structured status including branch, ahead/behind, staged files, unstaged files.
+  - input: `{ path: string; repoRoot?: string }`
+  - output: structured repository state, repository list, active repository, branch, ahead/behind, staged files, unstaged files.
 - `editor-git-diff-file`
-  - input: `{ path: string; filePath: string; staged?: boolean }`
+  - input: `{ path: string; repoRoot?: string; filePath: string; staged?: boolean }`
   - output: command response with unified diff.
 - `editor-git-stage-file`
-  - input: `{ path: string; filePath: string }`
+  - input: `{ path: string; repoRoot?: string; filePath: string }`
 - `editor-git-unstage-file`
-  - input: `{ path: string; filePath: string }`
+  - input: `{ path: string; repoRoot?: string; filePath: string }`
 - `editor-git-stage-all`
-  - input: `{ path: string }`
+  - input: `{ path: string; repoRoot?: string }`
 - `editor-git-unstage-all`
-  - input: `{ path: string }`
+  - input: `{ path: string; repoRoot?: string }`
 - `editor-git-commit`
-  - input: `{ path: string; message: string }`
+  - input: `{ path: string; repoRoot?: string; message: string }`
 - `editor-git-pull`
-  - input: `{ path: string }`
+  - input: `{ path: string; repoRoot?: string }`
 - `editor-git-push`
-  - input: `{ path: string }`
+  - input: `{ path: string; repoRoot?: string }`
 
 All handlers must resolve paths inside the configured Editor root and execute Git with `execFile`, never shell interpolation.
 
@@ -205,7 +248,7 @@ Add corresponding methods to:
 
 ## Data parsing
 
-Prefer `git status --porcelain=v2 --branch --untracked-files=all` for structured status. Reuse and adapt `web/src/lib/gitParsers.ts` concepts for Editor responses, but avoid duplicating complex parsing on both backend and frontend if backend can return structured data.
+Prefer `git status --porcelain=v2 -z --branch --untracked-files=all` for structured status. The `-z` format is required so file names with spaces, Unicode, renames, and unusual characters are handled correctly. Reuse and adapt `web/src/lib/gitParsers.ts` concepts for Editor responses, but avoid duplicating complex parsing on both backend and frontend if backend can return structured data.
 
 Use `git diff --numstat` and `git diff --cached --numstat` for line stats.
 
@@ -214,7 +257,8 @@ Use `git diff --no-ext-diff -- <file>` and `git diff --cached --no-ext-diff -- <
 ## Safety and errors
 
 - Empty commit message: block in UI and return validation error server-side.
-- Non-Git directory: show `No Git repository found` in Git tab.
+- Non-Git directory: return `notRepository` and show `No Git repository found` in Git tab without a red error state.
+- Repository root outside Editor root: return `repoOutsideRoot`, disable actions, and ask user to open repo root or expand workspace root.
 - Missing upstream on push/pull: show Git stderr with a clear action message; no upstream setup in Phase 1.
 - Merge conflicts: display conflicted files with `U`, but do not add conflict-resolution UI in Phase 1.
 - Destructive actions are out of Phase 1.
@@ -226,7 +270,8 @@ Use `git diff --no-ext-diff -- <file>` and `git diff --cached --no-ext-diff -- <
 Backend tests:
 
 - Editor Git RPC rejects paths outside Editor root.
-- Status parsing reports branch, ahead/behind, staged, unstaged, untracked.
+- Repository discovery reports `notRepository`, `repoOutsideRoot`, worktree/submodule `.git` file cases, and nested repositories.
+- Status parsing reports branch, ahead/behind, staged, unstaged, untracked, rename, Unicode paths, and paths with spaces.
 - Stage/unstage file mutate repository state.
 - Commit requires non-empty message and succeeds with staged changes.
 - Pull/push return structured command errors when remote/upstream is absent.
