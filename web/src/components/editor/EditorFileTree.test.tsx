@@ -179,6 +179,31 @@ describe('EditorFileTree', () => {
         ])
     })
 
+    it('shows mobile action buttons with larger rows and opens actions without opening the file', () => {
+        const onOpenFile = vi.fn()
+        const onContextMenu = vi.fn()
+        render(
+            <EditorFileTree
+                api={{} as ApiClient}
+                machineId="machine-1"
+                projectPath="/repo"
+                onOpenFile={onOpenFile}
+                onContextMenu={onContextMenu}
+                mobileMode
+            />
+        )
+
+        const readme = screen.getByRole('button', { name: 'Open file README.md' })
+        expect(readme).toHaveClass('min-h-10', 'py-2', 'text-sm')
+
+        fireEvent.click(screen.getByRole('button', { name: 'File actions README.md' }))
+
+        expect(onOpenFile).not.toHaveBeenCalled()
+        expect(onContextMenu).toHaveBeenCalledWith('/repo/README.md', expect.any(Number), expect.any(Number), [
+            { path: '/repo/README.md', type: 'file' }
+        ])
+    })
+
     it('supports ctrl and shift selection for visible files and folders', () => {
         const onContextMenu = vi.fn()
         render(

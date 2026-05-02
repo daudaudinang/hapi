@@ -75,7 +75,7 @@ export function EditorChatPanel(props: {
     }
 
     return (
-        <div className="flex h-full min-h-0 flex-col">
+        <div data-testid="editor-chat-panel" className="editor-chat--compact flex h-full min-h-0 flex-col">
             <SessionChat
                 key={session.id}
                 api={props.api}

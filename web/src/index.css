@@ -91,7 +91,7 @@
 }
 
 html {
-    font-size: calc(100% * var(--app-font-scale, 1));
+    font-size: calc(120% * var(--app-font-scale, 1));
 }
 
 button, [role="button"] {
@@ -240,6 +240,21 @@ body {
     background-color: transparent !important;
 }
 
+/* Desktop editor embeds chat beside dense file/tree/terminal UI. Keep markdown
+ * readable, but align it with editor chrome instead of full-page chat sizing.
+ */
+@media (min-width: 768px) {
+    .editor-chat--compact .aui-md {
+        font-size: 0.875rem;
+        line-height: 1.25rem;
+    }
+
+    .editor-chat--compact .text-base {
+        font-size: 0.875rem !important;
+        line-height: 1.25rem !important;
+    }
+}
+
 /* Shiki dual theme colors */
 .shiki,
 .shiki span {
@@ -365,12 +380,11 @@ html[data-theme="dark"] .shiki span {
 }
 
 /* ─── Mobile Density ─────────────────────────────────────────────────────────
- * Reduce rem base on mobile so all Tailwind utility classes (p-3, gap-3,
- * text-base, text-sm…) scale down proportionally — no component changes needed.
- * text-base: 16px → ~14px; p-3: 12px → ~10.5px; gap-2: 8px → ~7px
+ * Use a slightly smaller mobile rem base than desktop while keeping mobile
+ * 10% larger than the previous setting; user font scale still multiplies both.
  * ─────────────────────────────────────────────────────────────────────────── */
 @media (max-width: 600px) {
     html {
-        font-size: calc(87.5% * var(--app-font-scale, 1));
+        font-size: calc(105% * var(--app-font-scale, 1));
     }
 }

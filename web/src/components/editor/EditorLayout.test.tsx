@@ -2,7 +2,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '@/api/client'
+import type { SessionSummary } from '@/types/api'
 import { EditorLayout } from './EditorLayout'
+import { ActiveChatSessionProvider } from '@/lib/active-chat-session'
 
 const mocks = vi.hoisted(() => ({
     createSession: vi.fn(),
@@ -14,7 +16,11 @@ const mocks = vi.hoisted(() => ({
     onTerminalResizePointerDown: vi.fn(),
     savePersistedEditorState: vi.fn(),
     clearPersistedEditorState: vi.fn(),
-    terminalClose: vi.fn()
+    terminalClose: vi.fn(),
+    isMobile: false,
+    sessions: [] as SessionSummary[],
+    sessionsLoading: false,
+    sessionsError: null as string | null
 }))
 
 vi.mock('@tanstack/react-router', async () => {
@@ -25,6 +31,20 @@ vi.mock('@tanstack/react-router', async () => {
         useSearch: () => mocks.search
     }
 })
+
+
+vi.mock('@/hooks/useMediaQuery', () => ({
+    useMediaQuery: () => mocks.isMobile
+}))
+
+vi.mock('@/hooks/queries/useSessions', () => ({
+    useSessions: () => ({
+        sessions: mocks.sessions,
+        isLoading: mocks.sessionsLoading,
+        error: mocks.sessionsError,
+        refetch: vi.fn()
+    })
+}))
 
 vi.mock('@/lib/editor-persistence', () => ({
     savePersistedEditorState: (...args: unknown[]) => mocks.savePersistedEditorState(...args),
@@ -106,9 +126,9 @@ vi.mock('./EditorSessionList', () => ({
 }))
 
 vi.mock('./EditorChatPanel', () => ({
-    EditorChatPanel: (props: { pendingDraftText?: string; onNewSessionRequested?: () => void }) => (
+    EditorChatPanel: (props: { sessionId?: string | null; pendingDraftText?: string; onNewSessionRequested?: () => void }) => (
         <div data-testid="editor-chat-panel">
-            Chat draft: {props.pendingDraftText ?? ''}
+            Session: {props.sessionId ?? ''} Chat draft: {props.pendingDraftText ?? ''}
             <button type="button" onClick={props.onNewSessionRequested}>Dead session new</button>
         </div>
     )
@@ -156,6 +176,22 @@ vi.mock('@/hooks/useEditorPaneResize', () => ({
     })
 }))
 
+
+function makeSession(overrides: Partial<SessionSummary> & { id: string }): SessionSummary {
+    return {
+        active: true,
+        thinking: false,
+        activeAt: Date.now(),
+        updatedAt: Date.now(),
+        metadata: null,
+        todoProgress: null,
+        pendingRequestsCount: 0,
+        model: null,
+        effort: null,
+        ...overrides
+    }
+}
+
 function renderEditorLayout(api: ApiClient) {
     const queryClient = new QueryClient({
         defaultOptions: { queries: { retry: false }, mutations: { retry: false } }
@@ -175,6 +211,10 @@ describe('EditorLayout', () => {
         mocks.savePersistedEditorState.mockClear()
         mocks.clearPersistedEditorState.mockClear()
         mocks.terminalClose.mockClear()
+        mocks.isMobile = false
+        mocks.sessions = []
+        mocks.sessionsLoading = false
+        mocks.sessionsError = null
     })
 
     afterEach(() => {
@@ -192,6 +232,140 @@ describe('EditorLayout', () => {
         expect(screen.getByTestId('editor-chat-panel')).toBeInTheDocument()
     })
 
+
+    it('uses the desktop editor layout by default', () => {
+        renderEditorLayout({} as ApiClient)
+
+        expect(screen.getByTestId('editor-layout-root')).toBeInTheDocument()
+        expect(screen.getByTestId('editor-layout-body')).toBeInTheDocument()
+        expect(screen.queryByTestId('mobile-editor-layout')).not.toBeInTheDocument()
+    })
+
+    it('renders only the mobile editor layout under a narrow viewport', () => {
+        mocks.isMobile = true
+
+        renderEditorLayout({} as ApiClient)
+
+        expect(screen.getByTestId('mobile-editor-layout')).toBeInTheDocument()
+        expect(screen.queryByTestId('editor-layout-body')).not.toBeInTheDocument()
+        expect(screen.queryByTestId('editor-header')).not.toBeInTheDocument()
+    })
+
+    it('navigates back to sessions from the mobile editor layout', () => {
+        mocks.isMobile = true
+        renderEditorLayout({} as ApiClient)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Back to Agent Mode' }))
+
+        expect(mocks.navigate).toHaveBeenCalledWith({ to: '/sessions' })
+    })
+
+    it('opens files through the shared handler in the mobile editor layout', () => {
+        mocks.isMobile = true
+        renderEditorLayout({} as ApiClient)
+
+        fireEvent.click(screen.getByText('Mock open file'))
+
+        expect(screen.getByTestId('mobile-editor-layout')).toBeInTheDocument()
+        expect(screen.queryByTestId('editor-layout-body')).not.toBeInTheDocument()
+        expect(screen.getByTestId('editor-tabs')).toHaveTextContent('App.tsx')
+    })
+
+    it('opens terminals from the mobile editor layout without creating a chat session', () => {
+        mocks.isMobile = true
+        renderEditorLayout({} as ApiClient)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Terminal' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Open terminal' }))
+
+        expect(mocks.createSession).not.toHaveBeenCalled()
+        expect(screen.getByTestId('editor-terminal')).toHaveTextContent('Terminal tabs: Terminal: bash:machine-1:/repo')
+    })
+
+    it('opens mobile terminals scoped to the project without session tabs', () => {
+        mocks.isMobile = true
+        mocks.sessions = [
+            makeSession({ id: 'session-1', metadata: { path: '/repo', machineId: 'machine-1', name: 'Session 1' } }),
+            makeSession({ id: 'session-2', metadata: { path: '/repo', machineId: 'machine-1', name: 'Session 2' } })
+        ]
+
+        renderEditorLayout({} as ApiClient)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Terminal' }))
+        expect(screen.queryByRole('button', { name: 'Use session session-2 for terminal' })).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Open terminal' }))
+
+        expect(screen.getByTestId('editor-terminal')).toHaveTextContent('Terminal tabs: Terminal: bash:machine-1:/repo')
+    })
+
+    it('archives mobile chat sessions through the editor API', async () => {
+        mocks.isMobile = true
+        mocks.sessions = [
+            makeSession({ id: 'project-session', metadata: { path: '/repo', machineId: 'machine-1', name: 'Project session' } })
+        ]
+        const api = {
+            archiveSession: vi.fn(async () => undefined)
+        } as unknown as ApiClient
+
+        renderEditorLayout(api)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Chat' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Session actions project-session' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Archive session' }))
+        expect(screen.getByText('Archive session?')).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Archive' }))
+
+        await waitFor(() => {
+            expect(api.archiveSession).toHaveBeenCalledWith('project-session')
+        })
+    })
+
+
+
+    it('auto-selects the first project session in mobile layout so chat persists like desktop', async () => {
+        mocks.isMobile = true
+        mocks.sessions = [
+            makeSession({ id: 'project-session', metadata: { path: '/repo', machineId: 'machine-1', name: 'Project session' } }),
+            makeSession({ id: 'other-session', metadata: { path: '/other', machineId: 'machine-1', name: 'Other session' } })
+        ]
+
+        renderEditorLayout({} as ApiClient)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Chat' }))
+
+        await waitFor(() => {
+            expect(screen.getByTestId('editor-chat-panel')).toHaveTextContent('Session: project-session')
+        })
+        expect(mocks.savePersistedEditorState).toHaveBeenCalledWith(expect.objectContaining({
+            activeSessionId: 'project-session'
+        }))
+    })
+
+    it('does not replace an active newly-created session before sessions refetch includes it', async () => {
+        mocks.sessions = [
+            makeSession({ id: 'project-session', metadata: { path: '/repo', machineId: 'machine-1', name: 'Project session' } })
+        ]
+
+        render(
+            <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}>
+                <EditorLayout
+                    api={{} as ApiClient}
+                    initialMachineId="machine-1"
+                    initialProjectPath="/repo"
+                    initialState={{ machineId: 'machine-1', projectPath: '/repo', tabs: [], activeTabId: null, activeSessionId: 'new-session-not-refetched', isTerminalCollapsed: true }}
+                />
+            </QueryClientProvider>
+        )
+
+        await waitFor(() => {
+            expect(mocks.savePersistedEditorState).toHaveBeenCalledWith(expect.objectContaining({
+                activeSessionId: 'new-session-not-refetched'
+            }))
+        })
+        expect(mocks.savePersistedEditorState).not.toHaveBeenCalledWith(expect.objectContaining({
+            activeSessionId: 'project-session'
+        }))
+    })
 
     it('shows browse project CTA when no project is selected', () => {
         render(
@@ -486,5 +660,27 @@ describe('EditorLayout', () => {
         fireEvent.click(screen.getByText('Context add'))
 
         expect(mocks.createSession).toHaveBeenCalled()
+    })
+})
+
+
+describe('EditorLayout active chat sync registration', () => {
+    it('registers the active editor chat session for app-level reconnect recovery', async () => {
+        const onActiveSessionChange = vi.fn()
+        mocks.sessions = [
+            makeSession({ id: 'project-session', metadata: { path: '/repo', machineId: 'machine-1', name: 'Project session' } })
+        ]
+
+        render(
+            <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}>
+                <ActiveChatSessionProvider value={{ setActiveEditorSessionId: onActiveSessionChange }}>
+                    <EditorLayout api={{} as ApiClient} initialMachineId="machine-1" initialProjectPath="/repo" />
+                </ActiveChatSessionProvider>
+            </QueryClientProvider>
+        )
+
+        await waitFor(() => {
+            expect(onActiveSessionChange).toHaveBeenCalledWith('project-session')
+        })
     })
 })

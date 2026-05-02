@@ -41,3 +41,9 @@ execplan/
 # Generated npm bundle output (local)
 cli/npm/main/
 .ace-tool/
+
+# Superpowers local brainstorm artifacts
+.superpowers/
+
+# Local git worktrees
+.worktrees/

@@ -2,15 +2,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import type { ApiClient } from '@/api/client'
+import type { SessionSummary } from '@/types/api'
 import type { EditorTreeItem } from '@/types/editor'
 import type { PersistedEditorState } from '@/lib/editor-persistence'
 import type { RootSearch } from '@/router'
 import { appendEditorChatDraft, appendEditorChatDraftWithSelection, buildAddSelectionToChatText, expandSelectionRefs } from '@/lib/editor-chat-draft'
 import { queryKeys } from '@/lib/query-keys'
+import { filterSessionsForEditorProject } from '@/lib/editor-session-filter'
+import { clearMessageWindow } from '@/lib/message-window-store'
 import { clearPersistedEditorState, savePersistedEditorState } from '@/lib/editor-persistence'
 import { useEditorPaneResize } from '@/hooks/useEditorPaneResize'
+import { useRegisterActiveEditorSession } from '@/lib/active-chat-session'
+import { useSessions } from '@/hooks/queries/useSessions'
 import { useEditorState } from '@/hooks/useEditorState'
 import { useEditorNewSession } from '@/hooks/mutations/useEditorNewSession'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { EditorChatPanel } from './EditorChatPanel'
 import { EditorContextMenu } from './EditorContextMenu'
 import { EditorFileTree } from './EditorFileTree'
@@ -18,6 +24,7 @@ import { EditorHeader } from './EditorHeader'
 import { EditorSessionList } from './EditorSessionList'
 import { EditorTabs } from './EditorTabs'
 import { EditorTerminal } from './EditorTerminal'
+import { MobileEditorLayout } from './MobileEditorLayout'
 
 function joinPath(base: string, name: string): string {
     return base.endsWith('/') ? `${base}${name}` : `${base}/${name}`
@@ -73,6 +80,44 @@ function pruneDeleteItems(items: EditorTreeItem[]): EditorTreeItem[] {
         }
         return !directories.some((directory) => isPathInsideDirectory(item.path, directory.path))
     })
+}
+
+
+function useEditorProjectSessionSelection(args: {
+    api: ApiClient | null
+    machineId: string | null
+    projectPath: string | null
+    activeSessionId: string | null
+    onSelectSession: (sessionId: string) => void
+}): { projectSessions: SessionSummary[] } {
+    const { api, machineId, projectPath, activeSessionId, onSelectSession } = args
+    const { sessions, isLoading, error } = useSessions(api)
+    const projectSessions = useMemo(() => {
+        if (!machineId || !projectPath) return []
+        return filterSessionsForEditorProject(sessions, machineId, projectPath)
+    }, [machineId, projectPath, sessions])
+
+    useEffect(() => {
+        if (!machineId || !projectPath) return
+        if (isLoading || error || projectSessions.length === 0) return
+
+        if (!activeSessionId) {
+            onSelectSession(projectSessions[0].id)
+            return
+        }
+
+        if (projectSessions.some((session) => session.id === activeSessionId)) return
+
+        const activeSession = sessions.find((session) => session.id === activeSessionId)
+        // Newly-created editor sessions can be active before the sessions list
+        // refetch includes them. Keep the explicit selection instead of
+        // bouncing back to the first stale row.
+        if (!activeSession) return
+
+        onSelectSession(projectSessions[0].id)
+    }, [activeSessionId, error, isLoading, machineId, onSelectSession, projectPath, projectSessions, sessions])
+
+    return { projectSessions }
 }
 
 function DeleteConfirmModal(props: {
@@ -148,9 +193,11 @@ export function EditorLayout(props: {
     initialState?: PersistedEditorState
 }) {
     const editor = useEditorState(props.initialMachineId, props.initialProjectPath, props.initialState)
+    useRegisterActiveEditorSession(editor.activeSessionId)
     const panes = useEditorPaneResize()
     const queryClient = useQueryClient()
     const navigate = useNavigate()
+    const isMobile = useMediaQuery('(max-width: 767px)')
     const search = useSearch({ strict: false }) as RootSearch
     const [pendingDraftText, setPendingDraftText] = useState<string | undefined>(undefined)
     const [newFileTargetPath, setNewFileTargetPath] = useState<string | null>(null)
@@ -205,6 +252,18 @@ export function EditorLayout(props: {
         }
         terminalCloseFnsRef.current.clear()
     }, [])
+
+    const handleSelectSession = useCallback((sessionId: string) => {
+        editor.setActiveSessionId(sessionId)
+    }, [editor.setActiveSessionId])
+
+    const { projectSessions } = useEditorProjectSessionSelection({
+        api: props.api,
+        machineId: editor.machineId,
+        projectPath: editor.projectPath,
+        activeSessionId: editor.activeSessionId,
+        onSelectSession: handleSelectSession,
+    })
 
     useEffect(() => {
         if (!search.modalNewSessionId) return
@@ -416,6 +475,10 @@ export function EditorLayout(props: {
         } as any)
     }, [editor.machineId, editor.projectPath, navigate])
 
+    const handleBackToAgents = useCallback(() => {
+        void navigate({ to: '/sessions' } as any)
+    }, [navigate])
+
     const handleOpenItems = useCallback((items: EditorTreeItem[]) => {
         for (const item of uniqueItems(items)) {
             if (item.type === 'file') {
@@ -432,13 +495,45 @@ export function EditorLayout(props: {
         setNewFileTargetPath(activeFilePath ?? editor.projectPath)
     }, [activeFilePath, editor.projectPath])
 
-    const handleOpenTerminal = useCallback(() => {
+    const handleOpenTerminal = useCallback((sessionId?: string | null) => {
+        if (sessionId) {
+            editor.openTerminal({ sessionId })
+            setIsTerminalCollapsed(false)
+            return
+        }
         if (editor.machineId && editor.projectPath) {
             editor.openTerminal({ machineId: editor.machineId, cwd: editor.projectPath })
             setIsTerminalCollapsed(false)
             return
         }
     }, [editor])
+
+    const handleArchiveSession = useCallback(async (sessionId: string) => {
+        if (!props.api) {
+            throw new Error('Session unavailable')
+        }
+
+        await props.api.archiveSession(sessionId)
+        await Promise.all([
+            queryClient.invalidateQueries({ queryKey: queryKeys.session(sessionId) }),
+            queryClient.invalidateQueries({ queryKey: queryKeys.sessions }),
+        ])
+    }, [props.api, queryClient])
+
+    const handleDeleteSession = useCallback(async (sessionId: string) => {
+        if (!props.api) {
+            throw new Error('Session unavailable')
+        }
+
+        await props.api.deleteSession(sessionId)
+        queryClient.removeQueries({ queryKey: queryKeys.session(sessionId) })
+        clearMessageWindow(sessionId)
+        if (editor.activeSessionId === sessionId) {
+            const nextSession = projectSessions.find((session) => session.id !== sessionId) ?? null
+            editor.setActiveSessionId(nextSession?.id ?? null)
+        }
+        await queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
+    }, [editor, projectSessions, props.api, queryClient])
 
     const handleCancelNewFile = useCallback(() => {
         setNewFileTargetPath(null)
@@ -464,10 +559,6 @@ export function EditorLayout(props: {
         return { success: true, path: createdPath }
     }, [editor, props.api, queryClient])
 
-    const handleSelectSession = useCallback((sessionId: string) => {
-        editor.setActiveSessionId(sessionId)
-    }, [editor])
-
     const handleSelectMachine = useCallback((machineId: string) => {
         setPendingDraftText(undefined)
         pendingFileAfterSessionRef.current = null
@@ -489,6 +580,75 @@ export function EditorLayout(props: {
             <div className="flex h-full items-center justify-center p-4 text-sm text-red-500">
                 Editor unavailable: API not connected
             </div>
+        )
+    }
+
+    if (isMobile) {
+        return (
+            <>
+                <MobileEditorLayout
+                    api={props.api}
+                    machineId={editor.machineId}
+                    projectPath={editor.projectPath}
+                    fileTabs={fileTabs}
+                    terminalTabs={terminalTabs}
+                    activeFileTab={activeFileTab}
+                    activeTerminalTab={activeTerminalTab}
+                    activeSessionId={editor.activeSessionId}
+                    projectSessions={projectSessions}
+                    pendingDraftText={pendingDraftText}
+                    newFileTargetPath={newFileTargetPath}
+                    newSessionError={newSession.error}
+                    onBackToAgents={handleBackToAgents}
+                    onBrowseProject={handleBrowseProject}
+                    onOpenFile={editor.openFile}
+                    onShowContextMenu={editor.showContextMenu}
+                    onCreateFile={handleCreateFile}
+                    onCancelNewFile={handleCancelNewFile}
+                    onNewFileFromTabs={handleNewFileFromTabs}
+                    onDirtyChange={editor.setTabDirty}
+                    onAddSelectionToChat={handleAddSelectionToChat}
+                    onSelectFileTab={editor.setActiveTabId}
+                    onCloseTab={editor.closeTab}
+                    onOpenNewSessionModal={handleOpenNewSessionModal}
+                    onSelectSession={handleSelectSession}
+                    onArchiveSession={handleArchiveSession}
+                    onDeleteSession={handleDeleteSession}
+                    onSessionResolved={handleSessionResolved}
+                    onExpandDraft={handleExpandDraft}
+                    onDraftConsumed={() => setPendingDraftText(undefined)}
+                    onOpenTerminal={handleOpenTerminal}
+                    onSelectTerminalTab={editor.setActiveTabId}
+                    onCloseTerminalTab={editor.closeTab}
+                    onAddTerminalToChat={handleAddTerminalToChat}
+                    onRegisterTerminalClose={handleRegisterTerminalClose}
+                />
+                <EditorContextMenu
+                    filePath={editor.contextMenuFile}
+                    position={editor.contextMenuPosition}
+                    items={editor.contextMenuItems}
+                    onOpen={handleOpenItems}
+                    onNewFile={handleNewFile}
+                    onAddToChat={handleAddToChat}
+                    onCopyPath={handleCopyPath}
+                    onCopyRelativePath={handleCopyRelativePath}
+                    onRefresh={handleRefreshPath}
+                    onDelete={handleRequestDelete}
+                    onClose={editor.hideContextMenu}
+                    mobileMode={true}
+                />
+                <DeleteConfirmModal
+                    items={deleteItems}
+                    projectPath={editor.projectPath}
+                    isDeleting={isDeletingItems}
+                    error={deleteError}
+                    onCancel={() => {
+                        setDeleteItems([])
+                        setDeleteError(null)
+                    }}
+                    onConfirm={() => { void handleConfirmDelete() }}
+                />
+            </>
         )
     }
 

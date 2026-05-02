@@ -117,7 +117,7 @@ describe('EditorSessionList', () => {
         expect(onSelectSession).toHaveBeenCalledWith('s-1')
     })
 
-    it('selects the first filtered session by default when none is active', () => {
+    it('does not auto-select sessions; selection is managed by EditorLayout', () => {
         const onSelectSession = vi.fn()
         render(
             <EditorSessionList
@@ -130,23 +130,8 @@ describe('EditorSessionList', () => {
             />
         )
 
-        expect(onSelectSession).toHaveBeenCalledWith('s-1')
-    })
-
-    it('selects the first filtered session when the active session is outside the project', () => {
-        const onSelectSession = vi.fn()
-        render(
-            <EditorSessionList
-                api={{} as ApiClient}
-                machineId="machine-1"
-                projectPath="/repo"
-                activeSessionId="s-3"
-                onSelectSession={onSelectSession}
-                onNewSession={vi.fn()}
-            />
-        )
-
-        expect(onSelectSession).toHaveBeenCalledWith('s-1')
+        expect(screen.getByText('Refactor editor')).toBeInTheDocument()
+        expect(onSelectSession).not.toHaveBeenCalled()
     })
 
     it('shows loading, error, empty, and new session actions', () => {

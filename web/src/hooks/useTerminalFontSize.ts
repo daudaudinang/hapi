@@ -60,6 +60,10 @@ export function getInitialTerminalFontSize(): TerminalFontSize {
     return parseTerminalFontSize(safeGetItem(getTerminalFontSizeStorageKey()))
 }
 
+export function getCompactTerminalFontSize(size: TerminalFontSize = getInitialTerminalFontSize()): number {
+    return Math.max(9, size - 2)
+}
+
 export function useTerminalFontSize(): {
     terminalFontSize: TerminalFontSize
     setTerminalFontSize: (size: TerminalFontSize) => void

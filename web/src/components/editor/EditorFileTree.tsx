@@ -179,8 +179,10 @@ function DirectoryNode(props: {
     name: string
     depth: number
     onOpenFile: (filePath: string) => void
-    onRowClick: (event: MouseEvent<HTMLButtonElement>, item: EditorTreeItem, defaultAction: () => void) => void
-    onRowContextMenu: (event: MouseEvent<HTMLButtonElement>, item: EditorTreeItem) => void
+    onRowClick: (event: MouseEvent<HTMLElement>, item: EditorTreeItem, defaultAction: () => void) => void
+    onRowContextMenu: (event: MouseEvent<HTMLElement>, item: EditorTreeItem) => void
+    onMobileAction: (item: EditorTreeItem) => void
+    mobileMode?: boolean
     activeFilePath?: string | null
     selectedPaths: Set<string>
     expanded: Set<string>
@@ -225,6 +227,8 @@ function DirectoryNode(props: {
                 onOpenFile={props.onOpenFile}
                 onRowClick={props.onRowClick}
                 onRowContextMenu={props.onRowContextMenu}
+                onMobileAction={props.onMobileAction}
+                mobileMode={props.mobileMode}
                 activeFilePath={props.activeFilePath}
                 selectedPaths={props.selectedPaths}
                 expanded={props.expanded}
@@ -242,6 +246,43 @@ function DirectoryNode(props: {
         const isActive = props.activeFilePath === filePath
         const isSelected = props.selectedPaths.has(filePath)
         const item: EditorTreeItem = { path: filePath, type: 'file' }
+        const rowClassName = `flex w-full items-center gap-1.5 pl-1 pr-2 text-left transition-colors text-[var(--app-fg)] ${
+            props.mobileMode ? 'min-h-10 py-2 text-sm' : 'py-1 text-xs'
+        } ${isSelected || isActive ? 'bg-[var(--app-subtle-bg)] text-[var(--app-fg)]' : 'hover:bg-[var(--app-subtle-bg)]'}`
+        if (props.mobileMode) {
+            return (
+                <div key={filePath} className="flex w-full items-stretch">
+                    <button
+                        type="button"
+                        aria-label={`Open file ${entry.name}`}
+                        aria-current={isActive ? 'page' : undefined}
+                        aria-selected={isSelected ? 'true' : undefined}
+                        data-editor-tree-path={filePath}
+                        data-editor-tree-type="file"
+                        onClick={(event) => props.onRowClick(event, item, () => props.onOpenFile(filePath))}
+                        onContextMenu={(event) => props.onRowContextMenu(event, item)}
+                        className={rowClassName}
+                        style={{ paddingLeft: indent + 14 }}
+                    >
+                        <FileIcon fileName={entry.name} size={16} />
+                        <span className="truncate flex-1">{entry.name}</span>
+                        <GitStatusDot status={entry.gitStatus} />
+                    </button>
+                    <button
+                        type="button"
+                        aria-label={`File actions ${entry.name}`}
+                        className="flex min-h-10 w-10 shrink-0 items-center justify-center text-lg text-[var(--app-hint)] hover:bg-[var(--app-subtle-bg)] hover:text-[var(--app-fg)]"
+                        onClick={(event) => {
+                            event.preventDefault()
+                            event.stopPropagation()
+                            props.onMobileAction(item)
+                        }}
+                    >
+                        ⋯
+                    </button>
+                </div>
+            )
+        }
         return (
             <button
                 key={filePath}
@@ -253,9 +294,7 @@ function DirectoryNode(props: {
                 data-editor-tree-type="file"
                 onClick={(event) => props.onRowClick(event, item, () => props.onOpenFile(filePath))}
                 onContextMenu={(event) => props.onRowContextMenu(event, item)}
-                className={`flex w-full items-center gap-1.5 pl-1 pr-2 py-1 text-left transition-colors text-xs text-[var(--app-fg)] ${
-                    isSelected || isActive ? 'bg-[var(--app-subtle-bg)] text-[var(--app-fg)]' : 'hover:bg-[var(--app-subtle-bg)]'
-                }`}
+                className={rowClassName}
                 style={{ paddingLeft: indent + 14 }}
             >
                 <FileIcon fileName={entry.name} size={14} />
@@ -267,26 +306,43 @@ function DirectoryNode(props: {
 
     const directoryItem: EditorTreeItem = { path: props.path, type: 'directory' }
     const isDirectorySelected = props.selectedPaths.has(props.path)
+    const directoryClassName = `flex w-full items-center gap-1.5 px-2 text-left hover:bg-[var(--app-subtle-bg)] transition-colors ${
+        props.mobileMode ? 'min-h-10 py-2 text-sm' : 'py-1 text-xs'
+    } ${isDirectorySelected ? 'bg-[var(--app-subtle-bg)]' : ''}`
 
     return (
         <div>
-            <button
-                type="button"
-                aria-label={`Toggle directory ${props.name}`}
-                aria-selected={isDirectorySelected ? 'true' : undefined}
-                data-editor-tree-path={props.path}
-                data-editor-tree-type="directory"
-                onClick={(event) => props.onRowClick(event, directoryItem, () => props.onToggle(props.path))}
-                onContextMenu={(event) => props.onRowContextMenu(event, directoryItem)}
-                className={`flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-[var(--app-subtle-bg)] transition-colors text-xs ${
-                    isDirectorySelected ? 'bg-[var(--app-subtle-bg)]' : ''
-                }`}
-                style={{ paddingLeft: indent }}
-            >
-                <ChevronIcon collapsed={!isExpanded} />
-                <FolderIcon folderName={props.name} open={isExpanded} size={16} />
-                <span className="truncate flex-1 text-[var(--app-fg)]">{props.name}</span>
-            </button>
+            <div className={props.mobileMode ? 'flex w-full items-stretch' : undefined}>
+                <button
+                    type="button"
+                    aria-label={`Toggle directory ${props.name}`}
+                    aria-selected={isDirectorySelected ? 'true' : undefined}
+                    data-editor-tree-path={props.path}
+                    data-editor-tree-type="directory"
+                    onClick={(event) => props.onRowClick(event, directoryItem, () => props.onToggle(props.path))}
+                    onContextMenu={(event) => props.onRowContextMenu(event, directoryItem)}
+                    className={directoryClassName}
+                    style={{ paddingLeft: indent }}
+                >
+                    <ChevronIcon collapsed={!isExpanded} />
+                    <FolderIcon folderName={props.name} open={isExpanded} size={props.mobileMode ? 18 : 16} />
+                    <span className="truncate flex-1 text-[var(--app-fg)]">{props.name}</span>
+                </button>
+                {props.mobileMode ? (
+                    <button
+                        type="button"
+                        aria-label={`Folder actions ${props.name}`}
+                        className="flex min-h-10 w-10 shrink-0 items-center justify-center text-lg text-[var(--app-hint)] hover:bg-[var(--app-subtle-bg)] hover:text-[var(--app-fg)]"
+                        onClick={(event) => {
+                            event.preventDefault()
+                            event.stopPropagation()
+                            props.onMobileAction(directoryItem)
+                        }}
+                    >
+                        ⋯
+                    </button>
+                ) : null}
+            </div>
 
             {isExpanded && (
                 <div>
@@ -334,6 +390,7 @@ export function EditorFileTree(props: {
     newFileTargetPath?: string | null
     onCreateFile?: (parentPath: string, fileName: string) => Promise<{ success: boolean; path?: string; error?: string } | unknown>
     onCancelNewFile?: () => void
+    mobileMode?: boolean
 }) {
     const treeRef = useRef<HTMLDivElement | null>(null)
     const [expanded, setExpanded] = useState<Set<string>>(() => (
@@ -406,7 +463,7 @@ export function EditorFileTree(props: {
     }, [getVisibleItems, selectedItems])
 
     const handleRowClick = useCallback((
-        event: MouseEvent<HTMLButtonElement>,
+        event: MouseEvent<HTMLElement>,
         item: EditorTreeItem,
         defaultAction: () => void
     ) => {
@@ -442,10 +499,7 @@ export function EditorFileTree(props: {
         defaultAction()
     }, [getVisibleItems, selectionAnchor, setSelection])
 
-    const handleRowContextMenu = useCallback((event: MouseEvent<HTMLButtonElement>, item: EditorTreeItem) => {
-        event.preventDefault()
-        event.stopPropagation()
-
+    const openContextMenuForItem = useCallback((item: EditorTreeItem, x: number, y: number) => {
         let items: EditorTreeItem[]
         if (selectedItems.has(item.path)) {
             items = getSelectedInVisibleOrder(item)
@@ -455,8 +509,18 @@ export function EditorFileTree(props: {
             setSelectionAnchor(item.path)
         }
 
-        props.onContextMenu(item.path, event.clientX, event.clientY, items)
+        props.onContextMenu(item.path, x, y, items)
     }, [getSelectedInVisibleOrder, props, selectedItems, setSelection])
+
+    const handleRowContextMenu = useCallback((event: MouseEvent<HTMLElement>, item: EditorTreeItem) => {
+        event.preventDefault()
+        event.stopPropagation()
+        openContextMenuForItem(item, event.clientX, event.clientY)
+    }, [openContextMenuForItem])
+
+    const handleMobileAction = useCallback((item: EditorTreeItem) => {
+        openContextMenuForItem(item, window.innerWidth / 2, window.innerHeight)
+    }, [openContextMenuForItem])
 
     if (!props.machineId || !props.projectPath) {
         return (
@@ -493,6 +557,8 @@ export function EditorFileTree(props: {
                     onOpenFile={props.onOpenFile}
                     onRowClick={handleRowClick}
                     onRowContextMenu={handleRowContextMenu}
+                    onMobileAction={handleMobileAction}
+                    mobileMode={props.mobileMode}
                     activeFilePath={props.activeFilePath}
                     selectedPaths={new Set(selectedItems.keys())}
                     expanded={expanded}

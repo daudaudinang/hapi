@@ -17,6 +17,7 @@ import { clearMessageWindow, fetchLatestMessages } from '@/lib/message-window-st
 import { useAppGoBack } from '@/hooks/useAppGoBack'
 import { useTranslation } from '@/lib/use-translation'
 import { VoiceProvider } from '@/lib/voice-context'
+import { ActiveChatSessionProvider } from '@/lib/active-chat-session'
 import { requireHubUrlForLogin } from '@/lib/runtime-config'
 import { LoginPrompt } from '@/components/LoginPrompt'
 import { InstallPrompt } from '@/components/InstallPrompt'
@@ -120,6 +121,8 @@ function AppInner() {
     const queryClient = useQueryClient()
     const sessionMatch = matchRoute({ to: '/sessions/$sessionId' })
     const selectedSessionId = sessionMatch && sessionMatch.sessionId !== 'new' ? sessionMatch.sessionId : null
+    const [activeEditorSessionId, setActiveEditorSessionId] = useState<string | null>(null)
+    const activeChatSessionId = selectedSessionId ?? (pathname === '/editor' ? activeEditorSessionId : null)
     const { isSyncing, startSync, endSync } = useSyncingState()
     const [sseDisconnected, setSseDisconnected] = useState(false)
     const [sseDisconnectReason, setSseDisconnectReason] = useState<string | null>(null)
@@ -203,12 +206,12 @@ function AppInner() {
         }
         const invalidations = [
             queryClient.invalidateQueries({ queryKey: queryKeys.sessions }),
-            ...(selectedSessionId ? [
-                queryClient.invalidateQueries({ queryKey: queryKeys.session(selectedSessionId) })
+            ...(activeChatSessionId ? [
+                queryClient.invalidateQueries({ queryKey: queryKeys.session(activeChatSessionId) })
             ] : [])
         ]
-        const refreshMessages = (selectedSessionId && api)
-            ? fetchLatestMessages(api, selectedSessionId)
+        const refreshMessages = (activeChatSessionId && api)
+            ? fetchLatestMessages(api, activeChatSessionId, { mergeStrategy: 'visible' })
             : Promise.resolve()
         Promise.all([...invalidations, refreshMessages])
             .catch((error) => {
@@ -220,7 +223,7 @@ function AppInner() {
                     endSync()
                 }
             })
-    }, [api, queryClient, selectedSessionId, startSync, endSync])
+    }, [activeChatSessionId, api, queryClient, startSync, endSync])
 
     const handleSseDisconnect = useCallback((reason: string) => {
         // Only show reconnecting banner if we've already connected once
@@ -234,12 +237,12 @@ function AppInner() {
         if (event.type !== 'messages-invalidated') {
             return
         }
-        if (!api || event.sessionId !== selectedSessionId) {
+        if (!api || event.sessionId !== activeChatSessionId) {
             return
         }
         clearMessageWindow(event.sessionId)
-        void fetchLatestMessages(api, event.sessionId)
-    }, [api, selectedSessionId])
+        void fetchLatestMessages(api, event.sessionId, { mergeStrategy: 'visible' })
+    }, [activeChatSessionId, api])
     const handleToast = useCallback((event: ToastEvent) => {
         addToast({
             title: event.data.title,
@@ -353,21 +356,23 @@ function AppInner() {
 
     return (
         <AppContextProvider value={{ api, token, baseUrl }}>
-            <VoiceProvider>
-                <SyncingBanner isSyncing={isSyncing} />
-                <ReconnectingBanner
-                    isReconnecting={sseDisconnected && !isSyncing}
-                    reason={sseDisconnectReason}
-                />
-                <VoiceErrorBanner />
-                <OfflineBanner />
-                <div className="h-full min-h-0 flex flex-col">
-                    <Outlet />
-                </div>
-                <GlobalModalManager />
-                <ToastContainer />
-                <InstallPrompt />
-            </VoiceProvider>
+            <ActiveChatSessionProvider value={{ setActiveEditorSessionId }}>
+                <VoiceProvider>
+                    <SyncingBanner isSyncing={isSyncing} />
+                    <ReconnectingBanner
+                        isReconnecting={sseDisconnected && !isSyncing}
+                        reason={sseDisconnectReason}
+                    />
+                    <VoiceErrorBanner />
+                    <OfflineBanner />
+                    <div className="h-full min-h-0 flex flex-col">
+                        <Outlet />
+                    </div>
+                    <GlobalModalManager />
+                    <ToastContainer />
+                    <InstallPrompt />
+                </VoiceProvider>
+            </ActiveChatSessionProvider>
         </AppContextProvider>
     )
 }

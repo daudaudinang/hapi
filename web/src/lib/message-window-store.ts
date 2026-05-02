@@ -414,7 +414,11 @@ export function seedMessageWindowFromSession(fromSessionId: string, toSessionId:
     setState(toSessionId, next)
 }
 
-export async function fetchLatestMessages(api: ApiClient, sessionId: string): Promise<void> {
+export async function fetchLatestMessages(
+    api: ApiClient,
+    sessionId: string,
+    options: { mergeStrategy?: 'auto' | 'visible' } = {}
+): Promise<void> {
     const initial = getState(sessionId)
     if (initial.isLoading) {
         return
@@ -434,7 +438,7 @@ export async function fetchLatestMessages(api: ApiClient, sessionId: string): Pr
         const isV8Cursor = nextBeforeAt !== null && nextBeforeSeq !== null
 
         updateState(sessionId, (prev) => {
-            if (prev.atBottom) {
+            if (prev.atBottom || options.mergeStrategy === 'visible') {
                 const merged = mergeMessages(prev.messages, [...prev.pending, ...response.messages])
                 const trimmed = trimVisible(merged, 'append')
                 return buildState(prev, {

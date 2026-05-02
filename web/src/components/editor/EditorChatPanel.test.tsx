@@ -131,6 +131,7 @@ describe('EditorChatPanel', () => {
         render(<EditorChatPanel api={api} sessionId="session-1" onNewSessionRequested={onNewSessionRequested} />)
 
         expect(screen.getByTestId('session-chat')).toBeInTheDocument()
+        expect(screen.getByTestId('editor-chat-panel')).toHaveClass('editor-chat--compact')
         expect(useSessionMock).toHaveBeenCalledWith(api, 'session-1')
         expect(useMessagesMock).toHaveBeenCalledWith(api, 'session-1')
         expect(useSlashCommandsMock).toHaveBeenCalledWith(api, 'session-1', 'codex')
