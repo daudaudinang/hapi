@@ -12,6 +12,7 @@ export const queryKeys = {
     editorDirectory: (machineId: string, path: string) => ['editor', 'directory', machineId, path] as const,
     editorFile: (machineId: string, path: string) => ['editor', 'file', machineId, path] as const,
     editorGitStatusBase: (machineId: string, projectPath: string) => ['editor', 'git-status', machineId, projectPath] as const,
+    editorGitBranches: (machineId: string, projectPath: string, repoRoot?: string) => ['editor', 'git-branches', machineId, projectPath, repoRoot ?? 'auto'] as const,
     editorGitStatus: (machineId: string, projectPath: string, repoRoot?: string) => ['editor', 'git-status', machineId, projectPath, repoRoot ?? 'auto'] as const,
     editorGitDiff: (machineId: string, projectPath: string, filePath: string, staged?: boolean, repoRoot?: string) => ['editor', 'git-diff', machineId, projectPath, repoRoot ?? 'auto', filePath, staged ? 'staged' : 'unstaged'] as const,
     gitFileDiff: (sessionId: string, path: string, staged?: boolean) => [

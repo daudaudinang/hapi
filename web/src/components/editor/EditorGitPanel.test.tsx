@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { EditorGitPanel } from './EditorGitPanel'
 import type { ApiClient } from '@/api/client'
 
@@ -13,9 +13,19 @@ function renderPanel(api: Partial<ApiClient>) {
     )
 }
 
+const defaultBranches = {
+    listEditorGitBranches: vi.fn().mockResolvedValue({
+        success: true,
+        branches: [{ name: 'main', isCurrent: true }, { name: 'feature-a', isCurrent: false }],
+        currentBranch: 'main'
+    })
+}
+
 describe('EditorGitPanel', () => {
+    afterEach(() => { cleanup() })
     it('shows no repository empty state', async () => {
         renderPanel({
+            ...defaultBranches,
             getEditorGitStatusV2: vi.fn().mockResolvedValue({
                 success: true,
                 state: 'notRepository',
@@ -31,6 +41,7 @@ describe('EditorGitPanel', () => {
 
     it('renders staged and unstaged groups and stages a file', async () => {
         const api = {
+            ...defaultBranches,
             getEditorGitStatusV2: vi.fn().mockResolvedValue({
                 success: true,
                 state: 'ready',
@@ -55,6 +66,7 @@ describe('EditorGitPanel', () => {
 
     it('requires commit message before committing', async () => {
         const api = {
+            ...defaultBranches,
             getEditorGitStatusV2: vi.fn().mockResolvedValue({
                 success: true,
                 state: 'ready',
@@ -71,5 +83,95 @@ describe('EditorGitPanel', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Commit staged changes' }))
         expect(await screen.findByText('Enter a commit message')).toBeInTheDocument()
         expect(api.commitEditorGit).not.toHaveBeenCalled()
+    })
+
+    it('shows branch picker with current branch', async () => {
+        renderPanel({
+            ...defaultBranches,
+            getEditorGitStatusV2: vi.fn().mockResolvedValue({
+                success: true,
+                state: 'ready',
+                repositories: [{ root: '/repo', name: 'repo', branch: 'main', state: 'ready' }],
+                activeRepository: { root: '/repo', name: 'repo', branch: 'main', state: 'ready' },
+                branch: 'main',
+                ahead: 0,
+                behind: 0,
+                stagedFiles: [],
+                unstagedFiles: [],
+                totalStaged: 0,
+                totalUnstaged: 0
+            })
+        })
+        expect(await screen.findByText('main')).toBeInTheDocument()
+    })
+
+    it('opens branch picker and shows branches', async () => {
+        renderPanel({
+            ...defaultBranches,
+            getEditorGitStatusV2: vi.fn().mockResolvedValue({
+                success: true,
+                state: 'ready',
+                repositories: [{ root: '/repo', name: 'repo', branch: 'main', state: 'ready' }],
+                activeRepository: { root: '/repo', name: 'repo', branch: 'main', state: 'ready' },
+                branch: 'main',
+                ahead: 0,
+                behind: 0,
+                stagedFiles: [],
+                unstagedFiles: [],
+                totalStaged: 0,
+                totalUnstaged: 0
+            })
+        })
+        fireEvent.click(await screen.findByRole('button', { name: 'Select branch' }))
+        expect(await screen.findByText('feature-a')).toBeInTheDocument()
+    })
+
+    it('switches branch on click', async () => {
+        const api = {
+            ...defaultBranches,
+            getEditorGitStatusV2: vi.fn().mockResolvedValue({
+                success: true,
+                state: 'ready',
+                repositories: [{ root: '/repo', name: 'repo', branch: 'main', state: 'ready' }],
+                activeRepository: { root: '/repo', name: 'repo', branch: 'main', state: 'ready' },
+                branch: 'main',
+                ahead: 0,
+                behind: 0,
+                stagedFiles: [],
+                unstagedFiles: [],
+                totalStaged: 0,
+                totalUnstaged: 0
+            }),
+            checkoutEditorGitBranch: vi.fn().mockResolvedValue({ success: true })
+        }
+        renderPanel(api)
+        fireEvent.click(await screen.findByRole('button', { name: 'Select branch' }))
+        fireEvent.click(await screen.findByText('feature-a'))
+        await waitFor(() => expect(api.checkoutEditorGitBranch).toHaveBeenCalledWith('machine-1', '/repo', 'feature-a', '/repo'))
+    })
+
+    it('creates a new branch', async () => {
+        const api = {
+            ...defaultBranches,
+            getEditorGitStatusV2: vi.fn().mockResolvedValue({
+                success: true,
+                state: 'ready',
+                repositories: [{ root: '/repo', name: 'repo', branch: 'main', state: 'ready' }],
+                activeRepository: { root: '/repo', name: 'repo', branch: 'main', state: 'ready' },
+                branch: 'main',
+                ahead: 0,
+                behind: 0,
+                stagedFiles: [],
+                unstagedFiles: [],
+                totalStaged: 0,
+                totalUnstaged: 0
+            }),
+            createEditorGitBranch: vi.fn().mockResolvedValue({ success: true })
+        }
+        renderPanel(api)
+        const input = await screen.findByRole('textbox', { name: 'New branch name' })
+        fireEvent.change(input, { target: { value: 'feature-b' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Create branch' }))
+        await waitFor(() => expect(api.createEditorGitBranch).toHaveBeenCalledWith('machine-1', '/repo', 'feature-b', '/repo'))
     })
 })

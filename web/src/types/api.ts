@@ -320,3 +320,15 @@ export type EditorGitStatusV2Response = {
     totalUnstaged: number
     error?: string
 }
+export type EditorGitBranch = {
+    name: string
+    isCurrent: boolean
+}
+
+export type EditorGitListBranchesResponse = {
+    success: boolean
+    branches: EditorGitBranch[]
+    currentBranch: string | null
+    error?: string
+}
+

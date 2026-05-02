@@ -38,6 +38,10 @@ const gitCommitBodySchema = gitRepoBodySchema.extend({
     message: z.string().min(1)
 })
 
+const gitBranchBodySchema = gitRepoBodySchema.extend({
+    branch: z.string().min(1)
+})
+
 export function createEditorRoutes(getSyncEngine: () => SyncEngine | null): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
@@ -249,6 +253,39 @@ export function createEditorRoutes(getSyncEngine: () => SyncEngine | null): Hono
         const parsed = gitRepoBodySchema.safeParse(await c.req.json().catch(() => null))
         if (!parsed.success) return c.json({ success: false, error: 'Invalid body' }, 400)
         return c.json(await engine.pushEditorGit(parsed.data.machineId, parsed.data.path, parsed.data.repoRoot))
+    })
+
+
+    app.post('/editor/git-list-branches', async (c) => {
+        const engine = getSyncEngine()
+        if (!engine) return c.json({ success: false, error: 'Not connected' }, 503)
+        const parsed = gitRepoBodySchema.safeParse(await c.req.json().catch(() => null))
+        if (!parsed.success) return c.json({ success: false, error: 'Invalid body' }, 400)
+        return c.json(await engine.listEditorGitBranches(parsed.data.machineId, parsed.data.path, parsed.data.repoRoot))
+    })
+
+    app.post('/editor/git-checkout', async (c) => {
+        const engine = getSyncEngine()
+        if (!engine) return c.json({ success: false, error: 'Not connected' }, 503)
+        const parsed = gitBranchBodySchema.safeParse(await c.req.json().catch(() => null))
+        if (!parsed.success) return c.json({ success: false, error: 'Invalid body' }, 400)
+        return c.json(await engine.checkoutEditorGitBranch(parsed.data.machineId, parsed.data.path, parsed.data.branch, parsed.data.repoRoot))
+    })
+
+    app.post('/editor/git-create-branch', async (c) => {
+        const engine = getSyncEngine()
+        if (!engine) return c.json({ success: false, error: 'Not connected' }, 503)
+        const parsed = gitBranchBodySchema.safeParse(await c.req.json().catch(() => null))
+        if (!parsed.success) return c.json({ success: false, error: 'Invalid body' }, 400)
+        return c.json(await engine.createEditorGitBranch(parsed.data.machineId, parsed.data.path, parsed.data.branch, parsed.data.repoRoot))
+    })
+
+    app.post('/editor/git-fetch', async (c) => {
+        const engine = getSyncEngine()
+        if (!engine) return c.json({ success: false, error: 'Not connected' }, 503)
+        const parsed = gitRepoBodySchema.safeParse(await c.req.json().catch(() => null))
+        if (!parsed.success) return c.json({ success: false, error: 'Invalid body' }, 400)
+        return c.json(await engine.fetchEditorGit(parsed.data.machineId, parsed.data.path, parsed.data.repoRoot))
     })
 
     return app

@@ -113,6 +113,18 @@ export type RpcEditorGitStatusResponse = {
     totalUnstaged: number
     error?: string
 }
+export type RpcEditorGitBranch = {
+    name: string
+    isCurrent: boolean
+}
+
+export type RpcEditorGitListBranchesResponse = {
+    success: boolean
+    branches: RpcEditorGitBranch[]
+    currentBranch: string | null
+    error?: string
+}
+
 
 export class RpcGateway {
     constructor(
@@ -324,6 +336,31 @@ export class RpcGateway {
     async editorGitPush(machineId: string, path: string, repoRoot?: string): Promise<RpcCommandResponse> {
         const result = await this.machineRpc(machineId, 'editor-git-push', { path, repoRoot }) as RpcCommandResponse | unknown
         if (!result || typeof result !== 'object') return { success: false, error: 'Unexpected editor-git-push result' }
+        return result as RpcCommandResponse
+    }
+
+
+    async editorGitListBranches(machineId: string, path: string, repoRoot?: string): Promise<RpcEditorGitListBranchesResponse> {
+        const result = await this.machineRpc(machineId, 'editor-git-list-branches', { path, repoRoot }) as RpcEditorGitListBranchesResponse | unknown
+        if (!result || typeof result !== 'object') return { success: false, branches: [], currentBranch: null, error: 'Unexpected editor-git-list-branches result' }
+        return result as RpcEditorGitListBranchesResponse
+    }
+
+    async editorGitCheckout(machineId: string, path: string, branch: string, repoRoot?: string): Promise<RpcCommandResponse> {
+        const result = await this.machineRpc(machineId, 'editor-git-checkout', { path, repoRoot, branch }) as RpcCommandResponse | unknown
+        if (!result || typeof result !== 'object') return { success: false, error: 'Unexpected editor-git-checkout result' }
+        return result as RpcCommandResponse
+    }
+
+    async editorGitCreateBranch(machineId: string, path: string, branch: string, repoRoot?: string): Promise<RpcCommandResponse> {
+        const result = await this.machineRpc(machineId, 'editor-git-create-branch', { path, repoRoot, branch }) as RpcCommandResponse | unknown
+        if (!result || typeof result !== 'object') return { success: false, error: 'Unexpected editor-git-create-branch result' }
+        return result as RpcCommandResponse
+    }
+
+    async editorGitFetch(machineId: string, path: string, repoRoot?: string): Promise<RpcCommandResponse> {
+        const result = await this.machineRpc(machineId, 'editor-git-fetch', { path, repoRoot }) as RpcCommandResponse | unknown
+        if (!result || typeof result !== 'object') return { success: false, error: 'Unexpected editor-git-fetch result' }
         return result as RpcCommandResponse
     }
 

@@ -58,6 +58,21 @@ type EditorGitStatusResponse = {
 type EditorGitPathRequest = { path?: string; repoRoot?: string }
 type EditorGitFileRequest = EditorGitPathRequest & { filePath?: string; staged?: boolean }
 type EditorGitCommitRequest = EditorGitPathRequest & { message?: string }
+type EditorGitBranch = {
+    name: string
+    isCurrent: boolean
+}
+
+type EditorGitListBranchesResponse = {
+    success: boolean
+    branches: EditorGitBranch[]
+    currentBranch: string | null
+    error?: string
+}
+
+type EditorGitCheckoutRequest = EditorGitPathRequest & { branch?: string }
+type EditorGitCreateBranchRequest = EditorGitPathRequest & { branch?: string }
+
 
 const execGit = execFileAsync as (file: string, args: string[], options: ExecFileOptions) => Promise<{ stdout: string | Buffer; stderr: string | Buffer }>
 
@@ -458,4 +473,41 @@ export function registerEditorGitRpcHandlers(rpcHandlerManager: RpcHandlerManage
         if (!repo.repoRoot) return rpcError(repo.error ?? 'No Git repository found', { state: repo.state })
         return await runGit(['push'], repo.repoRoot)
     })
+    rpcHandlerManager.registerHandler<EditorGitPathRequest>('editor-git-list-branches', async (data) => {
+        const repo = await resolveCommandRepo(data ?? {}, editorRoot)
+        if (!repo.repoRoot) return { success: false, branches: [], currentBranch: null, error: repo.error ?? 'No Git repository found' }
+        
+        const result = await runGit(['branch', '--list', '--no-color'], repo.repoRoot)
+        if (!result.success) return { success: false, branches: [], currentBranch: null, error: result.error ?? result.stderr ?? 'Failed to list branches' }
+        
+        const lines = (result.stdout ?? '').split('\n').map(l => l.trim()).filter(Boolean)
+        const branches: EditorGitBranch[] = lines.map(line => ({
+            name: line.replace(/^\*\s+/, ''),
+            isCurrent: line.startsWith('*')
+        }))
+        const currentBranch = branches.find(b => b.isCurrent)?.name ?? null
+        
+        return { success: true, branches, currentBranch }
+    })
+
+    rpcHandlerManager.registerHandler<EditorGitCheckoutRequest>('editor-git-checkout', async (data) => {
+        const repo = await resolveCommandRepo(data ?? {}, editorRoot)
+        if (!repo.repoRoot) return rpcError(repo.error ?? 'No Git repository found', { state: repo.state })
+        if (!data?.branch?.trim()) return rpcError('Branch name is required')
+        return await runGit(['checkout', data.branch.trim()], repo.repoRoot)
+    })
+
+    rpcHandlerManager.registerHandler<EditorGitCreateBranchRequest>('editor-git-create-branch', async (data) => {
+        const repo = await resolveCommandRepo(data ?? {}, editorRoot)
+        if (!repo.repoRoot) return rpcError(repo.error ?? 'No Git repository found', { state: repo.state })
+        if (!data?.branch?.trim()) return rpcError('Branch name is required')
+        return await runGit(['checkout', '-b', data.branch.trim()], repo.repoRoot)
+    })
+
+    rpcHandlerManager.registerHandler<EditorGitPathRequest>('editor-git-fetch', async (data) => {
+        const repo = await resolveCommandRepo(data ?? {}, editorRoot)
+        if (!repo.repoRoot) return rpcError(repo.error ?? 'No Git repository found', { state: repo.state })
+        return await runGit(['fetch', '--all', '--prune'], repo.repoRoot)
+    })
+
 }

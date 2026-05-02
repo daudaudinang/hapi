@@ -4,6 +4,7 @@ import type {
     EditorFileResponse,
     EditorFileMutationResponse,
     EditorGitStatusV2Response,
+    EditorGitListBranchesResponse,
     EditorProjectsResponse,
     AuthResponse,
     CodexCollaborationMode,
@@ -620,6 +621,34 @@ export class ApiClient {
             body: JSON.stringify({ machineId, path: projectPath, repoRoot })
         })
     }
+    async listEditorGitBranches(machineId: string, projectPath: string, repoRoot?: string): Promise<EditorGitListBranchesResponse> {
+        return await this.request<EditorGitListBranchesResponse>('/api/editor/git-list-branches', {
+            method: 'POST',
+            body: JSON.stringify({ machineId, path: projectPath, repoRoot })
+        })
+    }
+
+    async checkoutEditorGitBranch(machineId: string, projectPath: string, branch: string, repoRoot?: string): Promise<GitCommandResponse> {
+        return await this.request<GitCommandResponse>('/api/editor/git-checkout', {
+            method: 'POST',
+            body: JSON.stringify({ machineId, path: projectPath, repoRoot, branch })
+        })
+    }
+
+    async createEditorGitBranch(machineId: string, projectPath: string, branch: string, repoRoot?: string): Promise<GitCommandResponse> {
+        return await this.request<GitCommandResponse>('/api/editor/git-create-branch', {
+            method: 'POST',
+            body: JSON.stringify({ machineId, path: projectPath, repoRoot, branch })
+        })
+    }
+
+    async fetchEditorGit(machineId: string, projectPath: string, repoRoot?: string): Promise<GitCommandResponse> {
+        return await this.request<GitCommandResponse>('/api/editor/git-fetch', {
+            method: 'POST',
+            body: JSON.stringify({ machineId, path: projectPath, repoRoot })
+        })
+    }
+
     async renameSession(sessionId: string, name: string): Promise<void> {
         await this.request(`/api/sessions/${encodeURIComponent(sessionId)}`, {
             method: 'PATCH',
