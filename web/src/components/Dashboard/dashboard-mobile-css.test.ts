@@ -20,4 +20,9 @@ describe('mobile dashboard CSS', () => {
         expect(indexCss).not.toContain('font-size: calc(95% * var(--app-font-scale, 1));')
         expect(indexCss).not.toContain('font-size: calc(87.5% * var(--app-font-scale, 1));')
     })
+
+    it('scales desktop pinned chat markdown down one step', () => {
+        expect(dashboardCss).toMatch(/@media \(min-width: 768px\)[\s\S]*\.db-pinned--compact\s+\.aui-md\s*\{[\s\S]*font-size:\s*0\.8125rem\s*!important;/)
+        expect(dashboardCss).toMatch(/@media \(min-width: 768px\)[\s\S]*\.db-pinned--compact\s+\.aui-md\s*\{[\s\S]*line-height:\s*1\.15rem\s*!important;/)
+    })
 })

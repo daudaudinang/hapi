@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EditorTab } from '@/hooks/useEditorState'
 import { EditorTerminal } from './EditorTerminal'
@@ -403,5 +404,34 @@ describe('EditorTerminal', () => {
 
         pressQuickKey('F5')
         expect(mocks.writesByTerminalId.get('term-machine')).toHaveBeenCalledWith('\u001b[15~')
+    })
+
+    it('groups mobile modifiers with Esc and Tab while keeping arrows together', () => {
+        render(
+            <EditorTerminal
+                tabs={[{ id: 'term-machine', type: 'terminal', label: 'Terminal: bash', shell: 'bash', machineId: 'machine-1', cwd: '/repo' }]}
+                activeTabId="term-machine"
+                isCollapsed={false}
+                mobileMode={true}
+                api={null}
+                onSelectTab={vi.fn()}
+                onCloseTab={vi.fn()}
+                onOpenTerminal={vi.fn()}
+                onToggleCollapsed={vi.fn()}
+            />
+        )
+
+        const modifierRow = screen.getByRole('group', { name: 'Terminal modifier keys' })
+        expect(within(modifierRow).getByRole('button', { name: 'Escape' })).toBeInTheDocument()
+        expect(within(modifierRow).getByRole('button', { name: 'Tab' })).toBeInTheDocument()
+        expect(within(modifierRow).getByRole('button', { name: 'Control' })).toBeInTheDocument()
+        expect(within(modifierRow).getByRole('button', { name: 'Alternate' })).toBeInTheDocument()
+        expect(within(modifierRow).queryByRole('button', { name: 'Arrow up' })).not.toBeInTheDocument()
+
+        const arrowRow = screen.getByRole('group', { name: 'Terminal arrow keys' })
+        for (const key of ['Arrow left', 'Arrow up', 'Arrow down', 'Arrow right']) {
+            expect(within(arrowRow).getByRole('button', { name: key })).toBeInTheDocument()
+        }
+        expect(within(arrowRow).queryByRole('button', { name: 'Control' })).not.toBeInTheDocument()
     })
 })

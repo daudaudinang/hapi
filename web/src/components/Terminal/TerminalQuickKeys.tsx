@@ -49,19 +49,25 @@ function shouldResetModifiers(sequence: string, state: ModifierState): boolean {
     return state.ctrl || state.alt
 }
 
-const QUICK_INPUT_ROWS: QuickInput[][] = [
-    [
-        { label: 'Esc', sequence: '\u001b', description: 'Escape' },
-        { label: 'Tab', sequence: '\t', description: 'Tab' },
-        { label: '↑', sequence: '\u001b[A', description: 'Arrow up' },
-    ],
-    [
-        { label: '←', sequence: '\u001b[D', description: 'Arrow left' },
-        { label: '↓', sequence: '\u001b[B', description: 'Arrow down' },
-        { label: '→', sequence: '\u001b[C', description: 'Arrow right' },
-        { label: 'Ctrl', description: 'Control', modifier: 'ctrl' },
-        { label: 'Alt', description: 'Alternate', modifier: 'alt' },
-    ],
+const QUICK_INPUT_ROWS: Array<{ label: string; keys: QuickInput[] }> = [
+    {
+        label: 'Terminal modifier keys',
+        keys: [
+            { label: 'Esc', sequence: '\u001b', description: 'Escape' },
+            { label: 'Tab', sequence: '\t', description: 'Tab' },
+            { label: 'Ctrl', description: 'Control', modifier: 'ctrl' },
+            { label: 'Alt', description: 'Alternate', modifier: 'alt' },
+        ],
+    },
+    {
+        label: 'Terminal arrow keys',
+        keys: [
+            { label: '←', sequence: '\u001b[D', description: 'Arrow left' },
+            { label: '↑', sequence: '\u001b[A', description: 'Arrow up' },
+            { label: '↓', sequence: '\u001b[B', description: 'Arrow down' },
+            { label: '→', sequence: '\u001b[C', description: 'Arrow right' },
+        ],
+    },
 ]
 
 const ADVANCED_KEY_GROUPS: Array<{ label: string; keys: QuickInput[] }> = [
@@ -323,12 +329,14 @@ export function TerminalQuickKeys(props: {
                         Ctrl+C
                     </button>
                 </div>
-                {QUICK_INPUT_ROWS.map((row, rowIndex) => (
+                {QUICK_INPUT_ROWS.map((row) => (
                     <div
-                        key={`terminal-quick-row-${rowIndex}`}
+                        key={row.label}
+                        role="group"
+                        aria-label={row.label}
                         className="flex items-stretch overflow-hidden rounded-md bg-[var(--app-secondary-bg)]"
                     >
-                        {row.map((input) => {
+                        {row.keys.map((input) => {
                             const modifier = input.modifier
                             const isCtrl = modifier === 'ctrl'
                             const isAlt = modifier === 'alt'
