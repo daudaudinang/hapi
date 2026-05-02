@@ -376,6 +376,31 @@ describe('EditorTerminal', () => {
         expect(terminal.focus).not.toHaveBeenCalled()
     })
 
+    it('blurs the focused terminal input before handling touch quick keys', () => {
+        render(
+            <EditorTerminal
+                tabs={[{ id: 'term-machine', type: 'terminal', label: 'Terminal: bash', shell: 'bash', machineId: 'machine-1', cwd: '/repo' }]}
+                activeTabId="term-machine"
+                isCollapsed={false}
+                mobileMode={true}
+                api={null}
+                onSelectTab={vi.fn()}
+                onCloseTab={vi.fn()}
+                onOpenTerminal={vi.fn()}
+                onToggleCollapsed={vi.fn()}
+            />
+        )
+        const terminalInput = document.createElement('textarea')
+        document.body.appendChild(terminalInput)
+        terminalInput.focus()
+        expect(document.activeElement).toBe(terminalInput)
+
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'Tab' }), { pointerType: 'touch' })
+
+        expect(document.activeElement).not.toBe(terminalInput)
+        terminalInput.remove()
+    })
+
     it('offers Ctrl+C on the primary mobile row and advanced keys in More', () => {
         render(
             <EditorTerminal

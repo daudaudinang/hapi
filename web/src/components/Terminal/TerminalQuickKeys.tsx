@@ -28,6 +28,20 @@ type ModifierState = {
     alt: boolean
 }
 
+function blurActiveEditableElement(): void {
+    if (typeof document === 'undefined') {
+        return
+    }
+    const active = document.activeElement
+    if (!(active instanceof HTMLElement)) {
+        return
+    }
+    const tagName = active.tagName.toLowerCase()
+    if (tagName === 'input' || tagName === 'textarea' || tagName === 'select' || active.isContentEditable) {
+        active.blur()
+    }
+}
+
 export function applyTerminalModifierState(sequence: string, state: ModifierState): string {
     let modified = sequence
     if (state.alt) {
@@ -210,6 +224,7 @@ function QuickKeyButton(props: {
     const longPressDisabled = disabled || Boolean(modifier) || !hasPopup
 
     const handleClick = useCallback(() => {
+        blurActiveEditableElement()
         if (modifier) {
             onToggleModifier(modifier)
             return
@@ -218,6 +233,7 @@ function QuickKeyButton(props: {
     }, [modifier, onToggleModifier, onPress, input.sequence])
 
     const handlePointerDown = useCallback((event: PointerEvent<HTMLButtonElement>) => {
+        blurActiveEditableElement()
         if (event.pointerType === 'touch') {
             event.preventDefault()
         }
