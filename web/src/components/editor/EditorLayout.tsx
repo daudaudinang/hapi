@@ -7,8 +7,10 @@ import type { PersistedEditorState } from '@/lib/editor-persistence'
 import type { RootSearch } from '@/router'
 import { appendEditorChatDraft, appendEditorChatDraftWithSelection, buildAddSelectionToChatText, expandSelectionRefs } from '@/lib/editor-chat-draft'
 import { queryKeys } from '@/lib/query-keys'
+import { filterSessionsForEditorProject } from '@/lib/editor-session-filter'
 import { clearPersistedEditorState, savePersistedEditorState } from '@/lib/editor-persistence'
 import { useEditorPaneResize } from '@/hooks/useEditorPaneResize'
+import { useSessions } from '@/hooks/queries/useSessions'
 import { useEditorState } from '@/hooks/useEditorState'
 import { useEditorNewSession } from '@/hooks/mutations/useEditorNewSession'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -75,6 +77,42 @@ function pruneDeleteItems(items: EditorTreeItem[]): EditorTreeItem[] {
         }
         return !directories.some((directory) => isPathInsideDirectory(item.path, directory.path))
     })
+}
+
+
+function useEditorProjectSessionSelection(args: {
+    api: ApiClient | null
+    machineId: string | null
+    projectPath: string | null
+    activeSessionId: string | null
+    onSelectSession: (sessionId: string) => void
+}) {
+    const { api, machineId, projectPath, activeSessionId, onSelectSession } = args
+    const { sessions, isLoading, error } = useSessions(api)
+    const projectSessions = useMemo(() => {
+        if (!machineId || !projectPath) return []
+        return filterSessionsForEditorProject(sessions, machineId, projectPath)
+    }, [machineId, projectPath, sessions])
+
+    useEffect(() => {
+        if (!machineId || !projectPath) return
+        if (isLoading || error || projectSessions.length === 0) return
+
+        if (!activeSessionId) {
+            onSelectSession(projectSessions[0].id)
+            return
+        }
+
+        if (projectSessions.some((session) => session.id === activeSessionId)) return
+
+        const activeSession = sessions.find((session) => session.id === activeSessionId)
+        // Newly-created editor sessions can be active before the sessions list
+        // refetch includes them. Keep the explicit selection instead of
+        // bouncing back to the first stale row.
+        if (!activeSession) return
+
+        onSelectSession(projectSessions[0].id)
+    }, [activeSessionId, error, isLoading, machineId, onSelectSession, projectPath, projectSessions, sessions])
 }
 
 function DeleteConfirmModal(props: {
@@ -208,6 +246,18 @@ export function EditorLayout(props: {
         }
         terminalCloseFnsRef.current.clear()
     }, [])
+
+    const handleSelectSession = useCallback((sessionId: string) => {
+        editor.setActiveSessionId(sessionId)
+    }, [editor.setActiveSessionId])
+
+    useEditorProjectSessionSelection({
+        api: props.api,
+        machineId: editor.machineId,
+        projectPath: editor.projectPath,
+        activeSessionId: editor.activeSessionId,
+        onSelectSession: handleSelectSession,
+    })
 
     useEffect(() => {
         if (!search.modalNewSessionId) return
@@ -470,10 +520,6 @@ export function EditorLayout(props: {
         editor.openFile(createdPath)
         return { success: true, path: createdPath }
     }, [editor, props.api, queryClient])
-
-    const handleSelectSession = useCallback((sessionId: string) => {
-        editor.setActiveSessionId(sessionId)
-    }, [editor])
 
     const handleSelectMachine = useCallback((machineId: string) => {
         setPendingDraftText(undefined)

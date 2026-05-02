@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useMemo } from 'react'
 import type { ApiClient } from '@/api/client'
 import type { SessionSummary } from '@/types/api'
 import { useSessions } from '@/hooks/queries/useSessions'
@@ -112,27 +112,10 @@ function SelectedEditorSessionList(props: {
     onNewSession: () => void
 }) {
     const { sessions, isLoading, error } = useSessions(props.api)
-    const { activeSessionId, onSelectSession } = props
     const projectSessions = useMemo(() => {
         return filterSessionsForEditorProject(sessions, props.machineId, props.projectPath)
     }, [props.machineId, props.projectPath, sessions])
 
-    useEffect(() => {
-        if (isLoading || error || projectSessions.length === 0) return
-        if (!activeSessionId) {
-            onSelectSession(projectSessions[0].id)
-            return
-        }
-        if (projectSessions.some((session) => session.id === activeSessionId)) return
-
-        const activeSession = sessions.find((session) => session.id === activeSessionId)
-        // Newly-created editor sessions can be active before the sessions list
-        // refetch includes them. Keep the explicit selection instead of
-        // bouncing back to the first stale row.
-        if (!activeSession) return
-
-        onSelectSession(projectSessions[0].id)
-    }, [activeSessionId, error, isLoading, onSelectSession, projectSessions, sessions])
 
     return (
         <div className="flex h-full min-h-0 flex-col border-b border-[var(--app-border)]">
