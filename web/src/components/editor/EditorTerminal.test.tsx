@@ -11,11 +11,24 @@ const mocks = vi.hoisted(() => ({
     onResizeTerminal: vi.fn(),
     terminalViewProps: [] as Array<{ compactFontSize?: boolean }>,
     disconnectsByTerminalId: new Map<string, ReturnType<typeof vi.fn>>(),
-    closesByTerminalId: new Map<string, ReturnType<typeof vi.fn>>()
+    closesByTerminalId: new Map<string, ReturnType<typeof vi.fn>>(),
+    writesByTerminalId: new Map<string, ReturnType<typeof vi.fn>>()
 }))
 
 vi.mock('@/lib/app-context', () => ({
     useAppContext: () => ({ token: 'token-1', baseUrl: 'http://hub.local' })
+}))
+
+vi.mock('@/lib/use-translation', () => ({
+    useTranslation: () => ({
+        t: (key: string) => ({
+            'button.paste': 'Paste',
+            'button.cancel': 'Cancel',
+            'terminal.paste.fallbackTitle': 'Paste input',
+            'terminal.paste.fallbackDescription': 'Clipboard read is unavailable. Paste your text below.',
+            'terminal.paste.placeholder': 'Paste terminal input here…',
+        }[key] ?? key)
+    })
 }))
 
 vi.mock('@/hooks/queries/useSession', () => ({
@@ -57,15 +70,18 @@ describe('EditorTerminal', () => {
         })
         mocks.disconnectsByTerminalId.clear()
         mocks.closesByTerminalId.clear()
+        mocks.writesByTerminalId.clear()
         mocks.useTerminalSocket.mockImplementation((options: { terminalId: string }) => {
             const disconnect = vi.fn()
             const close = vi.fn()
+            const write = vi.fn()
             mocks.disconnectsByTerminalId.set(options.terminalId, disconnect)
             mocks.closesByTerminalId.set(options.terminalId, close)
+            mocks.writesByTerminalId.set(options.terminalId, write)
             return {
             state: { status: 'connected' },
             connect: vi.fn(),
-            write: vi.fn(),
+            write,
             resize: vi.fn(),
             disconnect,
             close,
@@ -293,5 +309,29 @@ describe('EditorTerminal', () => {
 
         expect(closeTerminal).toHaveBeenCalled()
         expect(onCloseTab).toHaveBeenCalledWith('term-2')
+    })
+
+    it('shows mobile terminal quick keys and writes their escape sequences', () => {
+        render(
+            <EditorTerminal
+                tabs={[{ id: 'term-machine', type: 'terminal', label: 'Terminal: bash', shell: 'bash', machineId: 'machine-1', cwd: '/repo' }]}
+                activeTabId="term-machine"
+                isCollapsed={false}
+                mobileMode={true}
+                api={null}
+                onSelectTab={vi.fn()}
+                onCloseTab={vi.fn()}
+                onOpenTerminal={vi.fn()}
+                onToggleCollapsed={vi.fn()}
+            />
+        )
+
+        const tabButton = screen.getByRole('button', { name: 'Tab' })
+        fireEvent.mouseDown(tabButton)
+        fireEvent.mouseUp(tabButton)
+
+        expect(mocks.writesByTerminalId.get('term-machine')).toHaveBeenCalledWith('\t')
+        expect(screen.getByRole('button', { name: 'Escape' })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Control' })).toBeInTheDocument()
     })
 })

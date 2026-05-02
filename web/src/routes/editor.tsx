@@ -12,14 +12,18 @@ export default function EditorPage() {
     const { api } = useAppContext()
     const search = useSearch({ strict: false }) as EditorSearch
 
-    const persistedState = search.machine || search.project ? null : loadPersistedEditorState()
+    const persistedState = loadPersistedEditorState()
+    const shouldRestorePersistedState = persistedState && (
+        (!search.machine && !search.project) ||
+        (search.machine === persistedState.machineId && search.project === persistedState.projectPath)
+    )
 
     return (
         <EditorLayout
             api={api}
             initialMachineId={search.machine}
             initialProjectPath={search.project}
-            initialState={persistedState ?? undefined}
+            initialState={shouldRestorePersistedState ? persistedState : undefined}
         />
     )
 }
