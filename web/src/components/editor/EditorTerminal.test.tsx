@@ -227,4 +227,67 @@ describe('EditorTerminal', () => {
         expect(screen.queryAllByTestId('terminal-view')).toHaveLength(2)
         expect(screen.getByRole('button', { name: 'Expand terminal' })).toBeInTheDocument()
     })
+
+    it('hides collapse controls in mobile mode', () => {
+        render(
+            <EditorTerminal
+                tabs={[]}
+                activeTabId={null}
+                isCollapsed={true}
+                mobileMode={true}
+                api={null}
+                onSelectTab={vi.fn()}
+                onCloseTab={vi.fn()}
+                onOpenTerminal={vi.fn()}
+                onToggleCollapsed={vi.fn()}
+            />
+        )
+
+        expect(screen.queryByRole('button', { name: 'Expand terminal' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Collapse terminal' })).not.toBeInTheDocument()
+        expect(screen.getByText('No terminal open')).toBeInTheDocument()
+    })
+
+    it('confirms before closing a mobile terminal', () => {
+        const onCloseTab = vi.fn()
+
+        render(
+            <EditorTerminal
+                tabs={tabs}
+                activeTabId="term-2"
+                isCollapsed={true}
+                mobileMode={true}
+                api={null}
+                onSelectTab={vi.fn()}
+                onCloseTab={onCloseTab}
+                onOpenTerminal={vi.fn()}
+                onToggleCollapsed={vi.fn()}
+            />
+        )
+
+        expect(screen.getAllByTestId('terminal-view')).toHaveLength(2)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Close terminal Terminal: zsh' }))
+
+        const dialog = screen.getByRole('dialog', { name: 'Close terminal?' })
+        expect(dialog).toBeInTheDocument()
+        expect(dialog).toHaveClass('bottom-0', 'left-0', 'translate-x-0', 'rounded-t-xl')
+        expect(dialog).toHaveClass('sm:left-1/2', 'sm:-translate-x-1/2')
+        expect(screen.getByRole('button', { name: 'Stop process and close' })).toHaveClass('w-full', 'py-2')
+        expect(screen.getByRole('button', { name: 'Cancel' }).parentElement).toHaveClass('flex-col')
+        expect(onCloseTab).not.toHaveBeenCalled()
+        expect(mocks.closesByTerminalId.get('term-2')).not.toHaveBeenCalled()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+        expect(screen.queryByRole('dialog', { name: 'Close terminal?' })).not.toBeInTheDocument()
+        expect(onCloseTab).not.toHaveBeenCalled()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Close terminal Terminal: zsh' }))
+        const closeTerminal = mocks.closesByTerminalId.get('term-2')
+        fireEvent.click(screen.getByRole('button', { name: 'Stop process and close' }))
+
+        expect(closeTerminal).toHaveBeenCalled()
+        expect(onCloseTab).toHaveBeenCalledWith('term-2')
+    })
 })

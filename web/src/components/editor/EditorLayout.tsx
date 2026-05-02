@@ -11,6 +11,7 @@ import { clearPersistedEditorState, savePersistedEditorState } from '@/lib/edito
 import { useEditorPaneResize } from '@/hooks/useEditorPaneResize'
 import { useEditorState } from '@/hooks/useEditorState'
 import { useEditorNewSession } from '@/hooks/mutations/useEditorNewSession'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { EditorChatPanel } from './EditorChatPanel'
 import { EditorContextMenu } from './EditorContextMenu'
 import { EditorFileTree } from './EditorFileTree'
@@ -18,6 +19,7 @@ import { EditorHeader } from './EditorHeader'
 import { EditorSessionList } from './EditorSessionList'
 import { EditorTabs } from './EditorTabs'
 import { EditorTerminal } from './EditorTerminal'
+import { MobileEditorLayout } from './MobileEditorLayout'
 
 function joinPath(base: string, name: string): string {
     return base.endsWith('/') ? `${base}${name}` : `${base}/${name}`
@@ -151,6 +153,7 @@ export function EditorLayout(props: {
     const panes = useEditorPaneResize()
     const queryClient = useQueryClient()
     const navigate = useNavigate()
+    const isMobile = useMediaQuery('(max-width: 767px)')
     const search = useSearch({ strict: false }) as RootSearch
     const [pendingDraftText, setPendingDraftText] = useState<string | undefined>(undefined)
     const [newFileTargetPath, setNewFileTargetPath] = useState<string | null>(null)
@@ -416,6 +419,10 @@ export function EditorLayout(props: {
         } as any)
     }, [editor.machineId, editor.projectPath, navigate])
 
+    const handleBackToAgents = useCallback(() => {
+        void navigate({ to: '/sessions' } as any)
+    }, [navigate])
+
     const handleOpenItems = useCallback((items: EditorTreeItem[]) => {
         for (const item of uniqueItems(items)) {
             if (item.type === 'file') {
@@ -489,6 +496,70 @@ export function EditorLayout(props: {
             <div className="flex h-full items-center justify-center p-4 text-sm text-red-500">
                 Editor unavailable: API not connected
             </div>
+        )
+    }
+
+    if (isMobile) {
+        return (
+            <>
+                <MobileEditorLayout
+                    api={props.api}
+                    machineId={editor.machineId}
+                    projectPath={editor.projectPath}
+                    fileTabs={fileTabs}
+                    terminalTabs={terminalTabs}
+                    activeFileTab={activeFileTab}
+                    activeTerminalTab={activeTerminalTab}
+                    activeSessionId={editor.activeSessionId}
+                    pendingDraftText={pendingDraftText}
+                    newFileTargetPath={newFileTargetPath}
+                    newSessionError={newSession.error}
+                    onBackToAgents={handleBackToAgents}
+                    onBrowseProject={handleBrowseProject}
+                    onOpenFile={editor.openFile}
+                    onShowContextMenu={editor.showContextMenu}
+                    onCreateFile={handleCreateFile}
+                    onCancelNewFile={handleCancelNewFile}
+                    onNewFileFromTabs={handleNewFileFromTabs}
+                    onDirtyChange={editor.setTabDirty}
+                    onAddSelectionToChat={handleAddSelectionToChat}
+                    onSelectFileTab={editor.setActiveTabId}
+                    onCloseTab={editor.closeTab}
+                    onOpenNewSessionModal={handleOpenNewSessionModal}
+                    onSessionResolved={handleSessionResolved}
+                    onExpandDraft={handleExpandDraft}
+                    onDraftConsumed={() => setPendingDraftText(undefined)}
+                    onOpenTerminal={handleOpenTerminal}
+                    onSelectTerminalTab={editor.setActiveTabId}
+                    onCloseTerminalTab={editor.closeTab}
+                    onAddTerminalToChat={handleAddTerminalToChat}
+                    onRegisterTerminalClose={handleRegisterTerminalClose}
+                />
+                <EditorContextMenu
+                    filePath={editor.contextMenuFile}
+                    position={editor.contextMenuPosition}
+                    items={editor.contextMenuItems}
+                    onOpen={handleOpenItems}
+                    onNewFile={handleNewFile}
+                    onAddToChat={handleAddToChat}
+                    onCopyPath={handleCopyPath}
+                    onCopyRelativePath={handleCopyRelativePath}
+                    onRefresh={handleRefreshPath}
+                    onDelete={handleRequestDelete}
+                    onClose={editor.hideContextMenu}
+                />
+                <DeleteConfirmModal
+                    items={deleteItems}
+                    projectPath={editor.projectPath}
+                    isDeleting={isDeletingItems}
+                    error={deleteError}
+                    onCancel={() => {
+                        setDeleteItems([])
+                        setDeleteError(null)
+                    }}
+                    onConfirm={() => { void handleConfirmDelete() }}
+                />
+            </>
         )
     }
 

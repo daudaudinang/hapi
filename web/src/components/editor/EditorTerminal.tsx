@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Terminal } from '@xterm/xterm'
 import type { ApiClient } from '@/api/client'
 import { TerminalView } from '@/components/Terminal/TerminalView'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useAppContext } from '@/lib/app-context'
 import type { EditorTab } from '@/hooks/useEditorState'
 import { useSession } from '@/hooks/queries/useSession'
@@ -251,8 +252,10 @@ export function EditorTerminal(props: {
     onToggleCollapsed: () => void
     onAddToChat?: (text: string) => void
     onRegisterTerminalClose?: (tabId: string, close: (() => void) | null) => void
+    mobileMode?: boolean
 }) {
     const closeByTerminalIdRef = useRef<Map<string, () => void>>(new Map())
+    const [pendingCloseTerminalId, setPendingCloseTerminalId] = useState<string | null>(null)
     const terminalTabs = useMemo(
         () => props.tabs.filter((tab) => tab.type === 'terminal'),
         [props.tabs]
@@ -267,24 +270,33 @@ export function EditorTerminal(props: {
         closeByTerminalIdRef.current.set(tabId, close)
         props.onRegisterTerminalClose?.(tabId, close)
     }, [props.onRegisterTerminalClose])
-    const handleCloseTerminal = useCallback((tabId: string) => {
+    const closeTerminalNow = useCallback((tabId: string) => {
         closeByTerminalIdRef.current.get(tabId)?.()
         closeByTerminalIdRef.current.delete(tabId)
         props.onCloseTab(tabId)
     }, [props.onCloseTab])
+    const handleCloseTerminal = useCallback((tabId: string) => {
+        if (props.mobileMode) {
+            setPendingCloseTerminalId(tabId)
+            return
+        }
+        closeTerminalNow(tabId)
+    }, [closeTerminalNow, props.mobileMode])
 
     return (
         <div className="flex h-full min-h-0 flex-col border-t border-[var(--app-border)] bg-[var(--app-bg)]">
             <div className="flex h-8 shrink-0 items-center border-b border-[var(--app-border)] bg-[var(--app-subtle-bg)]">
-                <button
-                    type="button"
-                    aria-label={props.isCollapsed ? 'Expand terminal' : 'Collapse terminal'}
-                    className="flex h-full w-7 items-center justify-center text-xs text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
-                    onClick={() => props.onToggleCollapsed()}
-                    title={props.isCollapsed ? 'Expand terminal' : 'Collapse terminal'}
-                >
-                    {props.isCollapsed ? '›' : '⌄'}
-                </button>
+                {!props.mobileMode ? (
+                    <button
+                        type="button"
+                        aria-label={props.isCollapsed ? 'Expand terminal' : 'Collapse terminal'}
+                        className="flex h-full w-7 items-center justify-center text-xs text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
+                        onClick={() => props.onToggleCollapsed()}
+                        title={props.isCollapsed ? 'Expand terminal' : 'Collapse terminal'}
+                    >
+                        {props.isCollapsed ? '›' : '⌄'}
+                    </button>
+                ) : null}
                 <div className="px-2 text-xs font-medium text-[var(--app-hint)]">Terminal</div>
                 <div className="flex min-w-0 flex-1 items-center overflow-x-auto">
                     {terminalTabs.map((tab) => {
@@ -328,7 +340,7 @@ export function EditorTerminal(props: {
             </div>
 
             {terminalTabs.length > 0 ? (
-                <div className={`min-h-0 flex-1 overflow-hidden ${props.isCollapsed ? 'hidden' : ''}`}>
+                <div className={`min-h-0 flex-1 overflow-hidden ${props.isCollapsed && !props.mobileMode ? 'hidden' : ''}`}>
                     {terminalTabs.map((tab) => {
                         const isActive = tab.id === activeTerminal?.id
                         return (
@@ -343,11 +355,53 @@ export function EditorTerminal(props: {
                         )
                     })}
                 </div>
-            ) : !props.isCollapsed ? (
+            ) : !props.isCollapsed || props.mobileMode ? (
                 <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-xs text-[var(--app-hint)]">
                     <div>No terminal open</div>
                 </div>
             ) : null}
+
+            <Dialog
+                open={pendingCloseTerminalId !== null}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setPendingCloseTerminalId(null)
+                    }
+                }}
+            >
+                <DialogContent className="bottom-0 left-0 top-auto w-full max-w-none translate-x-0 translate-y-0 rounded-b-none rounded-t-xl p-4 sm:left-1/2 sm:bottom-auto sm:top-1/2 sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl sm:p-6">
+                    <div className="mx-auto flex max-w-md flex-col gap-3">
+                        <DialogHeader>
+                            <DialogTitle>Close terminal?</DialogTitle>
+                            <DialogDescription>
+                                This will stop the running process and close the terminal tab.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="flex flex-col gap-2">
+                            <button
+                                type="button"
+                                className="w-full rounded bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-500"
+                                onClick={() => {
+                                    if (!pendingCloseTerminalId) {
+                                        return
+                                    }
+                                    closeTerminalNow(pendingCloseTerminalId)
+                                    setPendingCloseTerminalId(null)
+                                }}
+                            >
+                                Stop process and close
+                            </button>
+                            <button
+                                type="button"
+                                className="w-full rounded border border-[var(--app-border)] px-3 py-2 text-sm text-[var(--app-fg)] hover:bg-[var(--app-secondary-bg)]"
+                                onClick={() => setPendingCloseTerminalId(null)}
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }
