@@ -14,6 +14,7 @@ function EditorTerminalBody(props: {
     tab: EditorTab
     onAddToChat?: (text: string) => void
     onRegisterClose?: (tabId: string, close: (() => void) | null) => void
+    compactFontSize?: boolean
 }) {
     const { token, baseUrl } = useAppContext()
     const sessionId = props.tab.sessionId ?? null
@@ -210,7 +211,12 @@ function EditorTerminalBody(props: {
                 className="min-h-0 flex-1 overflow-hidden p-2 relative"
             >
                 {terminalSupported && (machineId || session?.active) ? (
-                    <TerminalView onMount={handleTerminalMount} onResize={handleResize} className="h-full w-full" />
+                    <TerminalView
+                        onMount={handleTerminalMount}
+                        onResize={handleResize}
+                        className="h-full w-full"
+                        compactFontSize={props.compactFontSize}
+                    />
                 ) : (
                     <div className="flex h-full items-center justify-center rounded border border-[var(--app-border)] text-xs text-[var(--app-hint)]">
                         {errorMessage}
@@ -328,15 +334,17 @@ export function EditorTerminal(props: {
                         )
                     })}
                 </div>
-                <button
-                    type="button"
-                    aria-label="Open terminal"
-                    className="h-full px-3 text-sm text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
-                    onClick={() => props.onOpenTerminal()}
-                    title="Open terminal"
-                >
-                    +
-                </button>
+                {!props.mobileMode ? (
+                    <button
+                        type="button"
+                        aria-label="Open terminal"
+                        className="h-full px-3 text-sm text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
+                        onClick={() => props.onOpenTerminal()}
+                        title="Open terminal"
+                    >
+                        +
+                    </button>
+                ) : null}
             </div>
 
             {terminalTabs.length > 0 ? (
@@ -350,6 +358,7 @@ export function EditorTerminal(props: {
                                     tab={tab}
                                     onAddToChat={props.onAddToChat}
                                     onRegisterClose={handleRegisterClose}
+                                    compactFontSize={props.mobileMode}
                                 />
                             </div>
                         )

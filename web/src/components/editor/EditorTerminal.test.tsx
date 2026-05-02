@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
     isRemoteTerminalSupported: vi.fn(),
     onMountTerminal: vi.fn(),
     onResizeTerminal: vi.fn(),
+    terminalViewProps: [] as Array<{ compactFontSize?: boolean }>,
     disconnectsByTerminalId: new Map<string, ReturnType<typeof vi.fn>>(),
     closesByTerminalId: new Map<string, ReturnType<typeof vi.fn>>()
 }))
@@ -30,7 +31,8 @@ vi.mock('@/utils/terminalSupport', () => ({
 }))
 
 vi.mock('@/components/Terminal/TerminalView', () => ({
-    TerminalView: (props: { onMount?: (terminal: unknown) => void; onResize?: (cols: number, rows: number) => void }) => {
+    TerminalView: (props: { onMount?: (terminal: unknown) => void; onResize?: (cols: number, rows: number) => void; compactFontSize?: boolean }) => {
+        mocks.terminalViewProps.push({ compactFontSize: props.compactFontSize })
         mocks.onMountTerminal(props.onMount)
         mocks.onResizeTerminal(props.onResize)
         return <div data-testid="terminal-view" />
@@ -46,6 +48,7 @@ const tabs: EditorTab[] = [
 describe('EditorTerminal', () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        mocks.terminalViewProps = []
         mocks.useSession.mockReturnValue({
             session: { id: 'session-1', active: true, metadata: { os: 'linux', path: '/repo', host: 'dev' } },
             isLoading: false,
@@ -228,11 +231,11 @@ describe('EditorTerminal', () => {
         expect(screen.getByRole('button', { name: 'Expand terminal' })).toBeInTheDocument()
     })
 
-    it('hides collapse controls in mobile mode', () => {
+    it('hides chrome-only controls and uses compact terminal font in mobile mode', () => {
         render(
             <EditorTerminal
-                tabs={[]}
-                activeTabId={null}
+                tabs={[tabs[1]]}
+                activeTabId="term-1"
                 isCollapsed={true}
                 mobileMode={true}
                 api={null}
@@ -245,7 +248,8 @@ describe('EditorTerminal', () => {
 
         expect(screen.queryByRole('button', { name: 'Expand terminal' })).not.toBeInTheDocument()
         expect(screen.queryByRole('button', { name: 'Collapse terminal' })).not.toBeInTheDocument()
-        expect(screen.getByText('No terminal open')).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Open terminal' })).not.toBeInTheDocument()
+        expect(mocks.terminalViewProps).toContainEqual({ compactFontSize: true })
     })
 
     it('confirms before closing a mobile terminal', () => {

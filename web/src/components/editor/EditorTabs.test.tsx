@@ -166,6 +166,23 @@ describe('EditorTabs', () => {
         expect(onNewFile).toHaveBeenCalledWith()
     })
 
+    it('hides the tabbar new file button in mobile mode', () => {
+        render(
+            <EditorTabs
+                api={{} as ApiClient}
+                machineId="machine-1"
+                tabs={tabs}
+                activeTabId="tab-file"
+                onSelectTab={vi.fn()}
+                onCloseTab={vi.fn()}
+                onNewFile={vi.fn()}
+                mobileMode
+            />
+        )
+
+        expect(screen.queryByRole('button', { name: 'New File' })).not.toBeInTheDocument()
+    })
+
     it('loads active file content into an editable CodeMirror view', async () => {
         const api = {} as ApiClient
 

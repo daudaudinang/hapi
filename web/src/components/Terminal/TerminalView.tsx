@@ -5,7 +5,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import { CanvasAddon } from '@xterm/addon-canvas'
 import '@xterm/xterm/css/xterm.css'
 import { ensureBuiltinFontLoaded, getFontProvider } from '@/lib/terminalFont'
-import { getInitialTerminalFontSize } from '@/hooks/useTerminalFontSize'
+import { getCompactTerminalFontSize, getInitialTerminalFontSize } from '@/hooks/useTerminalFontSize'
 
 function resolveThemeColors(): { background: string; foreground: string; selectionBackground: string } {
     const styles = getComputedStyle(document.documentElement)
@@ -19,6 +19,7 @@ export function TerminalView(props: {
     onMount?: (terminal: Terminal) => void
     onResize?: (cols: number, rows: number) => void
     className?: string
+    compactFontSize?: boolean
 }) {
     const containerRef = useRef<HTMLDivElement | null>(null)
     const onMountRef = useRef(props.onMount)
@@ -39,7 +40,9 @@ export function TerminalView(props: {
         const abortController = new AbortController()
 
         const fontProvider = getFontProvider()
-        const fontSize = getInitialTerminalFontSize()
+        const fontSize = props.compactFontSize
+            ? getCompactTerminalFontSize()
+            : getInitialTerminalFontSize()
         const { background, foreground, selectionBackground } = resolveThemeColors()
         const terminal = new Terminal({
             cursorBlink: true,
@@ -118,7 +121,7 @@ export function TerminalView(props: {
         onMountRef.current?.(terminal)
 
         return () => abortController.abort()
-    }, [])
+    }, [props.compactFontSize])
 
     return (
         <div

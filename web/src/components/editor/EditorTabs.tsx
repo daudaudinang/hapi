@@ -470,15 +470,17 @@ export function EditorTabs(props: {
                         </div>
                     )
                 })}
-                <button
-                    type="button"
-                    aria-label="New File"
-                    className="px-2.5 py-1.5 text-[var(--app-hint)] hover:text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)] transition-colors text-sm font-light"
-                    onClick={() => props.onNewFile()}
-                    title="New File"
-                >
-                    +
-                </button>
+                {!props.mobileMode ? (
+                    <button
+                        type="button"
+                        aria-label="New File"
+                        className="px-2.5 py-1.5 text-[var(--app-hint)] hover:text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)] transition-colors text-sm font-light"
+                        onClick={() => props.onNewFile()}
+                        title="New File"
+                    >
+                        +
+                    </button>
+                ) : null}
                 <span className="flex-1" />
                 {activeTab?.type === 'file' && activeTab.path && (
                     <div className="flex items-center gap-2 px-3 text-[10px] text-[var(--app-hint)] border-l border-[var(--app-border)]">

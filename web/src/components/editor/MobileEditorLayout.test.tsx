@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '@/api/client'
 import type { EditorTab } from '@/hooks/useEditorState'
@@ -43,7 +43,7 @@ vi.mock('./EditorTerminal', () => ({
     EditorTerminal: (props: { mobileMode?: boolean; isCollapsed: boolean; onOpenTerminal: () => void; activeTabId?: string | null }) => (
         <div data-testid="mobile-terminal">
             mobile terminal: {props.mobileMode ? 'yes' : 'no'} collapsed: {props.isCollapsed ? 'yes' : 'no'} active: {props.activeTabId ?? ''}
-            <button type="button" onClick={props.onOpenTerminal}>Open terminal</button>
+            {!props.mobileMode ? <button type="button" onClick={props.onOpenTerminal}>Open terminal</button> : null}
         </div>
     )
 }))
@@ -160,10 +160,32 @@ describe('MobileEditorLayout', () => {
         render(<MobileEditorLayout {...props} />)
 
         fireEvent.click(screen.getByRole('button', { name: 'Terminal' }))
-        fireEvent.click(screen.getByText('Open terminal'))
+        fireEvent.click(screen.getByRole('button', { name: 'Open terminal' }))
 
         expect(props.onOpenTerminal).toHaveBeenCalledTimes(1)
         expect(screen.getByTestId('mobile-terminal')).toBeInTheDocument()
+    })
+
+    it('creates a new file from an Editor mobile bottom sheet instead of the hidden file tree inline flow', async () => {
+        const props = baseProps()
+        render(<MobileEditorLayout {...props} />)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Editor' }))
+        fireEvent.click(screen.getByRole('button', { name: 'New file' }))
+
+        expect(screen.getByRole('dialog', { name: 'New file' })).toBeInTheDocument()
+        expect(screen.getByText('/repo/src')).toBeInTheDocument()
+
+        fireEvent.change(screen.getByLabelText('File name'), { target: { value: 'New.ts' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+
+        await waitFor(() => {
+            expect(props.onCreateFile).toHaveBeenCalledWith('/repo/src', 'New.ts')
+        })
+        expect(props.onNewFileFromTabs).not.toHaveBeenCalled()
+        await waitFor(() => {
+            expect(screen.queryByRole('dialog', { name: 'New file' })).not.toBeInTheDocument()
+        })
     })
 
     it('wraps add selection to chat with a compact notice and open chat action', () => {
@@ -232,9 +254,18 @@ describe('MobileEditorLayout', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Terminal' }))
         fireEvent.click(screen.getByRole('button', { name: 'Use session session-2 for terminal' }))
-        fireEvent.click(screen.getByText('Open terminal'))
+        fireEvent.click(screen.getByRole('button', { name: 'Open terminal' }))
 
         expect(props.onOpenTerminal).toHaveBeenCalledWith('session-2')
+    })
+
+    it('keeps the Terminal header plus as the only open terminal action in mobile', () => {
+        render(<MobileEditorLayout {...baseProps()} />)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Terminal' }))
+
+        expect(screen.queryByRole('button', { name: 'New chat session' })).not.toBeInTheDocument()
+        expect(screen.getAllByRole('button', { name: 'Open terminal' })).toHaveLength(1)
     })
 
 })

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
     DEFAULT_TERMINAL_FONT_SIZE,
+    getCompactTerminalFontSize,
     getInitialTerminalFontSize,
     getTerminalFontSizeOptions,
 } from './useTerminalFontSize'
@@ -36,5 +37,12 @@ describe('useTerminalFontSize helpers', () => {
         window.localStorage.setItem('hapi-terminal-font-size', '17')
 
         expect(getInitialTerminalFontSize()).toBe(17)
+    })
+
+    it('maps terminal font size to a compact mobile size without going below 9px', () => {
+        expect(getCompactTerminalFontSize(17)).toBe(15)
+        expect(getCompactTerminalFontSize(13)).toBe(11)
+        expect(getCompactTerminalFontSize(11)).toBe(9)
+        expect(getCompactTerminalFontSize(9)).toBe(9)
     })
 })

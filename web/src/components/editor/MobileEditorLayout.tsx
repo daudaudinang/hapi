@@ -62,6 +62,13 @@ function getRelativeLabel(projectPath: string | null, path: string | null | unde
     return path
 }
 
+function getParentPath(path: string): string {
+    const normalized = path.replace(/\/+$/, '')
+    const index = normalized.lastIndexOf('/')
+    if (index <= 0) return '/'
+    return normalized.slice(0, index)
+}
+
 function MobileHeader(props: {
     title: string
     subtitle: string
@@ -167,6 +174,77 @@ function MobileConfirmModal(props: {
     )
 }
 
+function MobileNewFileModal(props: {
+    open: boolean
+    parentPath: string | null
+    fileName: string
+    error: string | null
+    isCreating: boolean
+    onFileNameChange: (fileName: string) => void
+    onCancel: () => void
+    onCreate: () => void
+}) {
+    if (!props.open) return null
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3" role="presentation">
+            <div
+                className="w-full max-w-sm rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)] p-4 shadow-xl"
+                role="dialog"
+                aria-modal="true"
+                aria-label="New file"
+            >
+                <div className="text-sm font-semibold text-[var(--app-fg)]">New file</div>
+                <div className="mt-1 text-xs text-[var(--app-hint)]">Create inside</div>
+                <div className="mt-1 truncate rounded-md border border-[var(--app-border)] bg-[var(--app-subtle-bg)] px-2 py-1.5 text-xs text-[var(--app-fg)]">
+                    {props.parentPath ?? 'Select a project first'}
+                </div>
+                <label className="mt-3 block text-xs font-semibold text-[var(--app-fg)]" htmlFor="mobile-new-file-name">
+                    File name
+                </label>
+                <input
+                    id="mobile-new-file-name"
+                    value={props.fileName}
+                    autoFocus
+                    className="mt-1 w-full rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-3 py-2 text-sm text-[var(--app-fg)] outline-none focus:border-[#818cf8]"
+                    placeholder="src/NewFile.ts"
+                    disabled={props.isCreating}
+                    onChange={(event) => props.onFileNameChange(event.target.value)}
+                    onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                            event.preventDefault()
+                            props.onCreate()
+                        }
+                    }}
+                />
+                {props.error ? (
+                    <div className="mt-2 rounded border border-red-500/40 bg-red-500/10 px-2 py-1 text-xs text-red-500">
+                        {props.error}
+                    </div>
+                ) : null}
+                <div className="mt-4 flex justify-end gap-2">
+                    <button
+                        type="button"
+                        className="rounded-md border border-[var(--app-border)] px-3 py-1.5 text-xs font-semibold text-[var(--app-fg)] disabled:opacity-60"
+                        disabled={props.isCreating}
+                        onClick={props.onCancel}
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        className="rounded-md bg-[#6366f1] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                        disabled={props.isCreating || !props.parentPath}
+                        onClick={props.onCreate}
+                    >
+                        {props.isCreating ? 'Creating...' : 'Create'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
 function MobileSessionTabs(props: {
     mode: 'chat' | 'terminal'
     sessions: SessionSummary[]
@@ -185,13 +263,24 @@ function MobileSessionTabs(props: {
     if (props.sessions.length === 0) {
         return (
             <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-[var(--app-border)] bg-[var(--app-secondary-bg)] px-2 py-2">
-                <button
-                    type="button"
-                    className="rounded-full border border-[var(--app-border)] bg-[var(--app-bg)] px-3 py-1 text-xs font-semibold text-[#818cf8]"
-                    onClick={props.onNewSession}
-                >
-                    + New Session
-                </button>
+                {props.mode === 'terminal' ? (
+                    <button
+                        type="button"
+                        aria-label="Use project for terminal"
+                        className="shrink-0 rounded-full border border-[#818cf8] bg-[#818cf8]/10 px-3 py-1 text-xs font-semibold text-[#818cf8]"
+                        onClick={() => props.onSelectTerminalScope(null)}
+                    >
+                        Project
+                    </button>
+                ) : (
+                    <button
+                        type="button"
+                        className="rounded-full border border-[var(--app-border)] bg-[var(--app-bg)] px-3 py-1 text-xs font-semibold text-[#818cf8]"
+                        onClick={props.onNewSession}
+                    >
+                        + New Session
+                    </button>
+                )}
             </div>
         )
     }
@@ -243,14 +332,16 @@ function MobileSessionTabs(props: {
                         </div>
                     )
                 })}
-                <button
-                    type="button"
-                    aria-label="New chat session"
-                    className="shrink-0 rounded-full border border-[var(--app-border)] bg-[var(--app-bg)] px-3 py-1 text-xs font-semibold text-[var(--app-fg)]"
-                    onClick={props.onNewSession}
-                >
-                    +
-                </button>
+                {props.mode === 'chat' ? (
+                    <button
+                        type="button"
+                        aria-label="New chat session"
+                        className="shrink-0 rounded-full border border-[var(--app-border)] bg-[var(--app-bg)] px-3 py-1 text-xs font-semibold text-[var(--app-fg)]"
+                        onClick={props.onNewSession}
+                    >
+                        +
+                    </button>
+                ) : null}
             </div>
             {actionSession ? (
                 <div className="absolute right-2 top-11 z-20 min-w-40 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg)] p-1 shadow-lg">
@@ -289,7 +380,14 @@ export function MobileEditorLayout(props: MobileEditorLayoutProps) {
     const [selectionNoticeVisible, setSelectionNoticeVisible] = useState(false)
     const [terminalScopeSessionId, setTerminalScopeSessionId] = useState<string | null>(null)
     const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm>(null)
+    const [newFileOpen, setNewFileOpen] = useState(false)
+    const [newFileName, setNewFileName] = useState('')
+    const [newFileError, setNewFileError] = useState<string | null>(null)
+    const [isCreatingFile, setIsCreatingFile] = useState(false)
     const activeFilePath = props.activeFileTab?.path ?? null
+    const newFileParentPath = activeFilePath
+        ? getParentPath(activeFilePath)
+        : props.projectPath
 
     const handleViewChange = useCallback((nextView: MobileEditorView) => {
         if (nextView === 'editor') {
@@ -339,6 +437,43 @@ export function MobileEditorLayout(props: MobileEditorLayoutProps) {
         setSelectionNoticeVisible(true)
     }, [props.onAddSelectionToChat])
 
+    const openNewFileModal = useCallback(() => {
+        setNewFileName('')
+        setNewFileError(null)
+        setNewFileOpen(true)
+    }, [])
+
+    const handleCreateMobileFile = useCallback(async () => {
+        if (!newFileParentPath) {
+            setNewFileError('Select a project before creating files')
+            return
+        }
+        const trimmedName = newFileName.trim()
+        if (!trimmedName) {
+            setNewFileError('Enter a file name')
+            return
+        }
+
+        setIsCreatingFile(true)
+        setNewFileError(null)
+        try {
+            const result = await props.onCreateFile(newFileParentPath, trimmedName)
+            if (result && typeof result === 'object' && 'success' in result && result.success === false) {
+                const error = 'error' in result && typeof result.error === 'string'
+                    ? result.error
+                    : 'Failed to create file'
+                setNewFileError(error)
+                return
+            }
+            setNewFileOpen(false)
+            setNewFileName('')
+        } catch (error) {
+            setNewFileError(error instanceof Error ? error.message : 'Failed to create file')
+        } finally {
+            setIsCreatingFile(false)
+        }
+    }, [newFileName, newFileParentPath, props])
+
     const headerAction = useMemo(() => {
         if (view === 'files') {
             return (
@@ -357,7 +492,7 @@ export function MobileEditorLayout(props: MobileEditorLayoutProps) {
                     type="button"
                     aria-label="New file"
                     className="rounded-md border border-[var(--app-border)] px-2 py-1 text-xs font-semibold text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)]"
-                    onClick={props.onNewFileFromTabs}
+                    onClick={openNewFileModal}
                 >
                     +
                 </button>
@@ -385,7 +520,7 @@ export function MobileEditorLayout(props: MobileEditorLayoutProps) {
                 +
             </button>
         )
-    }, [handleOpenTerminal, props.onBrowseProject, props.onNewFileFromTabs, props.onOpenNewSessionModal, view])
+    }, [handleOpenTerminal, openNewFileModal, props.onBrowseProject, props.onOpenNewSessionModal, view])
 
     const handleConfirmSessionAction = useCallback(async () => {
         if (!pendingConfirm) return
@@ -521,6 +656,24 @@ export function MobileEditorLayout(props: MobileEditorLayoutProps) {
                 pending={pendingConfirm}
                 onCancel={() => setPendingConfirm(null)}
                 onConfirm={handleConfirmSessionAction}
+            />
+
+            <MobileNewFileModal
+                open={newFileOpen}
+                parentPath={newFileParentPath}
+                fileName={newFileName}
+                error={newFileError}
+                isCreating={isCreatingFile}
+                onFileNameChange={(value) => {
+                    setNewFileName(value)
+                    setNewFileError(null)
+                }}
+                onCancel={() => {
+                    if (isCreatingFile) return
+                    setNewFileOpen(false)
+                    setNewFileError(null)
+                }}
+                onCreate={() => { void handleCreateMobileFile() }}
             />
 
             {props.newSessionError ? (
