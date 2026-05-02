@@ -91,7 +91,7 @@
 }
 
 html {
-    font-size: calc(100% * var(--app-font-scale, 1));
+    font-size: calc(120% * var(--app-font-scale, 1));
 }
 
 button, [role="button"] {
@@ -365,11 +365,11 @@ html[data-theme="dark"] .shiki span {
 }
 
 /* ─── Mobile Density ─────────────────────────────────────────────────────────
- * Boost rem base on mobile, but keep it slightly below the previous 120% mobile setting.
- * Desktop keeps the normal 100% baseline; user font scale still multiplies both.
+ * Use a slightly smaller mobile rem base than desktop while keeping mobile
+ * 10% larger than the previous setting; user font scale still multiplies both.
  * ─────────────────────────────────────────────────────────────────────────── */
 @media (max-width: 600px) {
     html {
-        font-size: calc(95% * var(--app-font-scale, 1));
+        font-size: calc(105% * var(--app-font-scale, 1));
     }
 }

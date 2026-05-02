@@ -14,9 +14,10 @@ describe('mobile dashboard CSS', () => {
         expect(dashboardCss).toMatch(/@media \(max-width: 600px\)[\s\S]*\.db__topbar-btn--editor\s+\.db__label\s*\{[\s\S]*display:\s*inline;/)
     })
 
-    it('uses the adjusted mobile font scale as the new mobile default', () => {
-        expect(indexCss).toContain('font-size: calc(95% * var(--app-font-scale, 1));')
-        expect(indexCss).not.toContain('font-size: calc(105% * var(--app-font-scale, 1));')
+    it('uses the adjusted font scales as the defaults', () => {
+        expect(indexCss).toContain('font-size: calc(120% * var(--app-font-scale, 1));')
+        expect(indexCss).toContain('font-size: calc(105% * var(--app-font-scale, 1));')
+        expect(indexCss).not.toContain('font-size: calc(95% * var(--app-font-scale, 1));')
         expect(indexCss).not.toContain('font-size: calc(87.5% * var(--app-font-scale, 1));')
     })
 })
