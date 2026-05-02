@@ -1439,6 +1439,13 @@
     font-size: 0.85em;
 }
 
+@media (min-width: 768px) {
+    .db-pinned--compact .aui-md {
+        font-size: 0.8125rem !important;
+        line-height: 1.15rem !important;
+    }
+}
+
 .db-pinned--compact .text-sm {
     font-size: 0.75rem !important;
     line-height: 1.1rem !important;

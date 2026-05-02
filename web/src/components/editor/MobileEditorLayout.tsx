@@ -5,10 +5,11 @@ import type { SessionSummary } from '@/types/api'
 import type { EditorTreeItem } from '@/types/editor'
 import { EditorChatPanel } from './EditorChatPanel'
 import { EditorFileTree } from './EditorFileTree'
+import { EditorGitPanel } from './EditorGitPanel'
 import { EditorTabs } from './EditorTabs'
 import { EditorTerminal } from './EditorTerminal'
 
-export type MobileEditorView = 'files' | 'editor' | 'chat' | 'terminal'
+export type MobileEditorView = 'files' | 'editor' | 'git' | 'chat' | 'terminal'
 
 type MobileEditorLayoutProps = {
     api: ApiClient | null
@@ -98,12 +99,13 @@ function BottomNav(props: { view: MobileEditorView; onViewChange: (view: MobileE
     const items: Array<{ view: MobileEditorView; label: string; ariaLabel?: string; icon: string }> = [
         { view: 'files', label: 'Files', icon: '📁' },
         { view: 'editor', label: 'Editor', icon: '⌨️' },
+        { view: 'git', label: 'Git', ariaLabel: 'Git source control', icon: '⑂' },
         { view: 'chat', label: 'Chat', icon: '💬' },
         { view: 'terminal', label: 'Term', ariaLabel: 'Terminal', icon: '▣' },
     ]
 
     return (
-        <nav aria-label="Mobile editor views" className="grid h-14 shrink-0 grid-cols-4 border-t border-[var(--app-border)] bg-[var(--app-bg)]">
+        <nav aria-label="Mobile editor views" className="grid h-14 shrink-0 grid-cols-5 border-t border-[var(--app-border)] bg-[var(--app-bg)]">
             {items.map((item) => {
                 const active = item.view === props.view
                 return (
@@ -401,6 +403,8 @@ export function MobileEditorLayout(props: MobileEditorLayoutProps) {
                 return 'HAPI Editor'
             case 'editor':
                 return props.activeFileTab?.label ?? 'Editor'
+            case 'git':
+                return 'Source Control'
             case 'chat':
                 return 'Chat'
             case 'terminal':
@@ -414,6 +418,8 @@ export function MobileEditorLayout(props: MobileEditorLayoutProps) {
                 return props.projectPath ?? 'Open a project'
             case 'editor':
                 return getRelativeLabel(props.projectPath, props.activeFileTab?.path) || 'Open a file'
+            case 'git':
+                return props.projectPath ?? 'Open a project'
             case 'chat':
                 return props.activeSessionId ? `Session ${props.activeSessionId.slice(0, 8)}` : 'No session selected'
             case 'terminal':
@@ -509,6 +515,7 @@ export function MobileEditorLayout(props: MobileEditorLayoutProps) {
                 </button>
             )
         }
+        if (view === 'git') return null
         return (
             <button
                 type="button"
@@ -571,6 +578,19 @@ export function MobileEditorLayout(props: MobileEditorLayoutProps) {
                             mobileMode={true}
                         />
                     </div>
+                ) : null}
+
+                {view === 'git' ? (
+                    <EditorGitPanel
+                        api={props.api}
+                        machineId={props.machineId}
+                        projectPath={props.projectPath}
+                        onOpenFile={(relativePath) => {
+                            const fullPath = props.projectPath ? `${props.projectPath.replace(/\/+$/, '')}/${relativePath}` : relativePath
+                            props.onOpenFile(fullPath)
+                            handleViewChange('editor')
+                        }}
+                    />
                 ) : null}
 
                 {view === 'chat' ? (

@@ -56,7 +56,6 @@ function EditorTerminalBody(props: {
     const quickInput = useTerminalQuickInput({
         disabled: quickInputDisabled,
         write,
-        focusTerminal: () => terminalRef.current?.focus(),
     })
 
     useEffect(() => {
@@ -109,8 +108,10 @@ function EditorTerminalBody(props: {
         }
 
         inputDisposableRef.current = terminal.onData(quickInput.writeTerminalData)
-        terminal.focus()
-    }, [quickInput.writeTerminalData])
+        if (!props.mobileMode) {
+            terminal.focus()
+        }
+    }, [props.mobileMode, quickInput.writeTerminalData])
 
     const handleResize = useCallback((cols: number, rows: number) => {
         lastSizeRef.current = { cols, rows }

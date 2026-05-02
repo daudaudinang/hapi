@@ -21,6 +21,7 @@ import {
     type RpcCommandResponse,
     type RpcDeleteUploadResponse,
     type RpcEditorFileMutationResponse,
+    type RpcEditorGitStatusResponse, RpcEditorGitListBranchesResponse, RpcEditorGitBranch,
     type RpcEditorProjectsResponse,
     type RpcListDirectoryResponse,
     type RpcListCodexModelsResponse,
@@ -38,6 +39,7 @@ export type {
     RpcCommandResponse,
     RpcDeleteUploadResponse,
     RpcEditorFileMutationResponse,
+    RpcEditorGitStatusResponse,
     RpcEditorProjectsResponse,
     RpcListDirectoryResponse,
     RpcListCodexModelsResponse,
@@ -598,9 +600,57 @@ export class SyncEngine {
         return await this.rpcGateway.editorListProjects(machineId)
     }
 
-    async getEditorGitStatus(machineId: string, path: string): Promise<RpcCommandResponse> {
-        return await this.rpcGateway.editorGitStatus(machineId, path)
+    async getEditorGitStatusV2(machineId: string, path: string, repoRoot?: string): Promise<RpcEditorGitStatusResponse> {
+        return await this.rpcGateway.editorGitStatusV2(machineId, path, repoRoot)
     }
+
+    async getEditorGitDiffFile(machineId: string, path: string, filePath: string, staged?: boolean, repoRoot?: string): Promise<RpcCommandResponse> {
+        return await this.rpcGateway.editorGitDiffFile(machineId, path, filePath, staged, repoRoot)
+    }
+
+    async stageEditorGitFile(machineId: string, path: string, filePath: string, repoRoot?: string): Promise<RpcCommandResponse> {
+        return await this.rpcGateway.editorGitStageFile(machineId, path, filePath, repoRoot)
+    }
+
+    async unstageEditorGitFile(machineId: string, path: string, filePath: string, repoRoot?: string): Promise<RpcCommandResponse> {
+        return await this.rpcGateway.editorGitUnstageFile(machineId, path, filePath, repoRoot)
+    }
+
+    async stageAllEditorGit(machineId: string, path: string, repoRoot?: string): Promise<RpcCommandResponse> {
+        return await this.rpcGateway.editorGitStageAll(machineId, path, repoRoot)
+    }
+
+    async unstageAllEditorGit(machineId: string, path: string, repoRoot?: string): Promise<RpcCommandResponse> {
+        return await this.rpcGateway.editorGitUnstageAll(machineId, path, repoRoot)
+    }
+
+    async commitEditorGit(machineId: string, path: string, message: string, repoRoot?: string): Promise<RpcCommandResponse> {
+        return await this.rpcGateway.editorGitCommit(machineId, path, message, repoRoot)
+    }
+
+    async pullEditorGit(machineId: string, path: string, repoRoot?: string): Promise<RpcCommandResponse> {
+        return await this.rpcGateway.editorGitPull(machineId, path, repoRoot)
+    }
+
+    async pushEditorGit(machineId: string, path: string, repoRoot?: string): Promise<RpcCommandResponse> {
+        return await this.rpcGateway.editorGitPush(machineId, path, repoRoot)
+    }
+    async listEditorGitBranches(machineId: string, path: string, repoRoot?: string): Promise<RpcEditorGitListBranchesResponse> {
+        return await this.rpcGateway.editorGitListBranches(machineId, path, repoRoot)
+    }
+
+    async checkoutEditorGitBranch(machineId: string, path: string, branch: string, repoRoot?: string): Promise<RpcCommandResponse> {
+        return await this.rpcGateway.editorGitCheckout(machineId, path, branch, repoRoot)
+    }
+
+    async createEditorGitBranch(machineId: string, path: string, branch: string, repoRoot?: string): Promise<RpcCommandResponse> {
+        return await this.rpcGateway.editorGitCreateBranch(machineId, path, branch, repoRoot)
+    }
+
+    async fetchEditorGit(machineId: string, path: string, repoRoot?: string): Promise<RpcCommandResponse> {
+        return await this.rpcGateway.editorGitFetch(machineId, path, repoRoot)
+    }
+
 
     async writeEditorFile(machineId: string, path: string, content: string): Promise<RpcEditorFileMutationResponse> {
         return await this.rpcGateway.editorWriteFile(machineId, path, content)

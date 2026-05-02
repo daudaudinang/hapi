@@ -39,6 +39,10 @@ vi.mock('./EditorChatPanel', () => ({
     )
 }))
 
+vi.mock('./EditorGitPanel', () => ({
+    EditorGitPanel: () => <div data-testid="mobile-git-panel">Git panel</div>
+}))
+
 vi.mock('./EditorTerminal', () => ({
     EditorTerminal: (props: { mobileMode?: boolean; isCollapsed: boolean; onOpenTerminal: () => void; activeTabId?: string | null }) => (
         <div data-testid="mobile-terminal">
@@ -125,6 +129,9 @@ describe('MobileEditorLayout', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Editor' }))
         expect(screen.getByTestId('mobile-editor-tabs')).toHaveTextContent('mobile tabs: yes')
 
+        fireEvent.click(screen.getByRole('button', { name: 'Git source control' }))
+        expect(screen.getByTestId('mobile-git-panel')).toBeInTheDocument()
+
         fireEvent.click(screen.getByRole('button', { name: 'Chat' }))
         expect(screen.getByTestId('mobile-chat-panel')).toBeInTheDocument()
 
@@ -140,6 +147,14 @@ describe('MobileEditorLayout', () => {
 
         expect(props.onOpenFile).toHaveBeenCalledWith('/repo/src/App.tsx')
         expect(screen.getByTestId('mobile-editor-tabs')).toBeInTheDocument()
+    })
+
+    it('opens the Git mobile view', () => {
+        render(<MobileEditorLayout {...baseProps()} />)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Git source control' }))
+
+        expect(screen.getByTestId('mobile-git-panel')).toBeInTheDocument()
     })
 
     it('preserves the editor buffer when switching away and back from the bottom navigation', () => {

@@ -20,6 +20,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { EditorChatPanel } from './EditorChatPanel'
 import { EditorContextMenu } from './EditorContextMenu'
 import { EditorFileTree } from './EditorFileTree'
+import { EditorGitPanel } from './EditorGitPanel'
 import { EditorHeader } from './EditorHeader'
 import { EditorSessionList } from './EditorSessionList'
 import { EditorTabs } from './EditorTabs'
@@ -205,6 +206,7 @@ export function EditorLayout(props: {
     const [deleteItems, setDeleteItems] = useState<EditorTreeItem[]>([])
     const [isDeletingItems, setIsDeletingItems] = useState(false)
     const [deleteError, setDeleteError] = useState<string | null>(null)
+    const [leftPaneView, setLeftPaneView] = useState<'files' | 'git'>('files')
     const pendingFileAfterSessionRef = useRef<string[] | null>(null)
     const selectionMapRef = useRef<Map<string, { path: string; start: number; end: number; content: string }>>(new Map())
     const lastActiveTerminalTabIdRef = useRef<string | null>(null)
@@ -664,18 +666,49 @@ export function EditorLayout(props: {
             />
 
             <div data-testid="editor-layout-body" className="flex min-h-0 flex-1 overflow-hidden">
-                <aside className="min-h-0 shrink-0 overflow-hidden border-r border-[var(--app-border)]" style={{ width: panes.leftWidth }}>
-                    <EditorFileTree
-                        api={props.api}
-                        machineId={editor.machineId}
-                        projectPath={editor.projectPath}
-                        onOpenFile={editor.openFile}
-                        onContextMenu={editor.showContextMenu}
-                        activeFilePath={activeFilePath}
-                        newFileTargetPath={newFileTargetPath}
-                        onCreateFile={handleCreateFile}
-                        onCancelNewFile={handleCancelNewFile}
-                    />
+                <aside className="flex min-h-0 shrink-0 flex-col overflow-hidden border-r border-[var(--app-border)]" style={{ width: panes.leftWidth }}>
+                    <div className="grid shrink-0 grid-cols-2 gap-1 border-b border-[var(--app-border)] p-1">
+                        <button
+                            type="button"
+                            aria-label="Files tree"
+                            aria-current={leftPaneView === 'files' ? 'page' : undefined}
+                            className={`rounded-md px-2 py-1 text-xs font-semibold ${leftPaneView === 'files' ? 'bg-[var(--app-subtle-bg)] text-[var(--app-fg)]' : 'text-[var(--app-hint)] hover:bg-[var(--app-subtle-bg)]'}`}
+                            onClick={() => setLeftPaneView('files')}
+                        >
+                            Files
+                        </button>
+                        <button
+                            type="button"
+                            aria-label="Git source control"
+                            aria-current={leftPaneView === 'git' ? 'page' : undefined}
+                            className={`rounded-md px-2 py-1 text-xs font-semibold ${leftPaneView === 'git' ? 'bg-[var(--app-subtle-bg)] text-[var(--app-fg)]' : 'text-[var(--app-hint)] hover:bg-[var(--app-subtle-bg)]'}`}
+                            onClick={() => setLeftPaneView('git')}
+                        >
+                            Git
+                        </button>
+                    </div>
+                    <div className="min-h-0 flex-1 overflow-hidden">
+                        {leftPaneView === 'files' ? (
+                            <EditorFileTree
+                                api={props.api}
+                                machineId={editor.machineId}
+                                projectPath={editor.projectPath}
+                                onOpenFile={editor.openFile}
+                                onContextMenu={editor.showContextMenu}
+                                activeFilePath={activeFilePath}
+                                newFileTargetPath={newFileTargetPath}
+                                onCreateFile={handleCreateFile}
+                                onCancelNewFile={handleCancelNewFile}
+                            />
+                        ) : (
+                            <EditorGitPanel
+                                api={props.api}
+                                machineId={editor.machineId}
+                                projectPath={editor.projectPath}
+                                onOpenFile={(relativePath) => editor.openFile(editor.projectPath ? joinPath(editor.projectPath, relativePath) : relativePath)}
+                            />
+                        )}
+                    </div>
                 </aside>
                 <div
                     role="separator"

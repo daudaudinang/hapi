@@ -288,8 +288,49 @@ export type EditorProjectsResponse = {
     error?: string
 }
 
-export type EditorGitStatusResponse = {
+export type EditorGitRepositoryState = 'ready' | 'notRepository' | 'repoOutsideRoot' | 'detached' | 'initial'
+export type EditorGitFileStatus = 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked' | 'conflicted'
+export type EditorGitRepository = {
+    root: string
+    name: string
+    branch: string | null
+    state: EditorGitRepositoryState
+    gitDir?: string
+}
+export type EditorGitFile = {
+    fileName: string
+    filePath: string
+    fullPath: string
+    status: EditorGitFileStatus
+    isStaged: boolean
+    linesAdded: number
+    linesRemoved: number
+    oldPath?: string
+}
+export type EditorGitStatusV2Response = {
     success: boolean
-    status?: GitStatusFiles
+    state: EditorGitRepositoryState
+    repositories: EditorGitRepository[]
+    activeRepository?: EditorGitRepository
+    branch?: string | null
+    upstream?: string
+    ahead?: number
+    behind?: number
+    stagedFiles: EditorGitFile[]
+    unstagedFiles: EditorGitFile[]
+    totalStaged: number
+    totalUnstaged: number
     error?: string
 }
+export type EditorGitBranch = {
+    name: string
+    isCurrent: boolean
+}
+
+export type EditorGitListBranchesResponse = {
+    success: boolean
+    branches: EditorGitBranch[]
+    currentBranch: string | null
+    error?: string
+}
+

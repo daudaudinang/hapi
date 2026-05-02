@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EditorTab } from '@/hooks/useEditorState'
 import { EditorTerminal } from './EditorTerminal'
@@ -57,6 +58,23 @@ const tabs: EditorTab[] = [
     { id: 'term-1', type: 'terminal', label: 'Terminal: bash', shell: 'bash', sessionId: 'session-1' },
     { id: 'term-2', type: 'terminal', label: 'Terminal: zsh', shell: 'zsh', sessionId: 'session-1' }
 ]
+
+function pressQuickKey(name: string): void {
+    const button = screen.getByRole('button', { name })
+    fireEvent.mouseDown(button)
+    fireEvent.mouseUp(button)
+}
+
+function mountLastTerminal() {
+    const focus = vi.fn()
+    const onData = vi.fn(() => ({ dispose: vi.fn() }))
+    const onSelectionChange = vi.fn(() => ({ dispose: vi.fn() }))
+    const getSelection = vi.fn(() => '')
+    const element = document.createElement('div')
+    const mount = mocks.onMountTerminal.mock.calls.at(-1)?.[0] as ((terminal: unknown) => void) | undefined
+    mount?.({ focus, onData, onSelectionChange, getSelection, element })
+    return { focus }
+}
 
 describe('EditorTerminal', () => {
     beforeEach(() => {
@@ -326,12 +344,119 @@ describe('EditorTerminal', () => {
             />
         )
 
-        const tabButton = screen.getByRole('button', { name: 'Tab' })
-        fireEvent.mouseDown(tabButton)
-        fireEvent.mouseUp(tabButton)
+        pressQuickKey('Tab')
 
         expect(mocks.writesByTerminalId.get('term-machine')).toHaveBeenCalledWith('\t')
         expect(screen.getByRole('button', { name: 'Escape' })).toBeInTheDocument()
         expect(screen.getByRole('button', { name: 'Control' })).toBeInTheDocument()
+    })
+
+    it('does not focus the hidden xterm input when tapping mobile quick keys', () => {
+        render(
+            <EditorTerminal
+                tabs={[{ id: 'term-machine', type: 'terminal', label: 'Terminal: bash', shell: 'bash', machineId: 'machine-1', cwd: '/repo' }]}
+                activeTabId="term-machine"
+                isCollapsed={false}
+                mobileMode={true}
+                api={null}
+                onSelectTab={vi.fn()}
+                onCloseTab={vi.fn()}
+                onOpenTerminal={vi.fn()}
+                onToggleCollapsed={vi.fn()}
+            />
+        )
+        const terminal = mountLastTerminal()
+        terminal.focus.mockClear()
+
+        pressQuickKey('Escape')
+        pressQuickKey('Tab')
+
+        expect(mocks.writesByTerminalId.get('term-machine')).toHaveBeenCalledWith('\u001b')
+        expect(mocks.writesByTerminalId.get('term-machine')).toHaveBeenCalledWith('\t')
+        expect(terminal.focus).not.toHaveBeenCalled()
+    })
+
+    it('blurs the focused terminal input before handling touch quick keys', () => {
+        render(
+            <EditorTerminal
+                tabs={[{ id: 'term-machine', type: 'terminal', label: 'Terminal: bash', shell: 'bash', machineId: 'machine-1', cwd: '/repo' }]}
+                activeTabId="term-machine"
+                isCollapsed={false}
+                mobileMode={true}
+                api={null}
+                onSelectTab={vi.fn()}
+                onCloseTab={vi.fn()}
+                onOpenTerminal={vi.fn()}
+                onToggleCollapsed={vi.fn()}
+            />
+        )
+        const terminalInput = document.createElement('textarea')
+        document.body.appendChild(terminalInput)
+        terminalInput.focus()
+        expect(document.activeElement).toBe(terminalInput)
+
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'Tab' }), { pointerType: 'touch' })
+
+        expect(document.activeElement).not.toBe(terminalInput)
+        terminalInput.remove()
+    })
+
+    it('offers Ctrl+C on the primary mobile row and advanced keys in More', () => {
+        render(
+            <EditorTerminal
+                tabs={[{ id: 'term-machine', type: 'terminal', label: 'Terminal: bash', shell: 'bash', machineId: 'machine-1', cwd: '/repo' }]}
+                activeTabId="term-machine"
+                isCollapsed={false}
+                mobileMode={true}
+                api={null}
+                onSelectTab={vi.fn()}
+                onCloseTab={vi.fn()}
+                onOpenTerminal={vi.fn()}
+                onToggleCollapsed={vi.fn()}
+            />
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: 'Ctrl+C' }))
+        expect(mocks.writesByTerminalId.get('term-machine')).toHaveBeenCalledWith('\u0003')
+
+        expect(screen.queryByRole('button', { name: 'F1' })).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'More terminal keys' }))
+
+        expect(screen.getByRole('dialog', { name: 'More terminal keys' })).toBeInTheDocument()
+        for (const key of ['F1', 'F6', 'F12', 'Ctrl+D', 'Ctrl+Z', 'Ctrl+L', 'Home', 'End', 'PgUp', 'PgDn']) {
+            expect(screen.getByRole('button', { name: key })).toBeInTheDocument()
+        }
+
+        pressQuickKey('F5')
+        expect(mocks.writesByTerminalId.get('term-machine')).toHaveBeenCalledWith('\u001b[15~')
+    })
+
+    it('groups mobile modifiers with Esc and Tab while keeping arrows together', () => {
+        render(
+            <EditorTerminal
+                tabs={[{ id: 'term-machine', type: 'terminal', label: 'Terminal: bash', shell: 'bash', machineId: 'machine-1', cwd: '/repo' }]}
+                activeTabId="term-machine"
+                isCollapsed={false}
+                mobileMode={true}
+                api={null}
+                onSelectTab={vi.fn()}
+                onCloseTab={vi.fn()}
+                onOpenTerminal={vi.fn()}
+                onToggleCollapsed={vi.fn()}
+            />
+        )
+
+        const modifierRow = screen.getByRole('group', { name: 'Terminal modifier keys' })
+        expect(within(modifierRow).getByRole('button', { name: 'Escape' })).toBeInTheDocument()
+        expect(within(modifierRow).getByRole('button', { name: 'Tab' })).toBeInTheDocument()
+        expect(within(modifierRow).getByRole('button', { name: 'Control' })).toBeInTheDocument()
+        expect(within(modifierRow).getByRole('button', { name: 'Alternate' })).toBeInTheDocument()
+        expect(within(modifierRow).queryByRole('button', { name: 'Arrow up' })).not.toBeInTheDocument()
+
+        const arrowRow = screen.getByRole('group', { name: 'Terminal arrow keys' })
+        for (const key of ['Arrow left', 'Arrow up', 'Arrow down', 'Arrow right']) {
+            expect(within(arrowRow).getByRole('button', { name: key })).toBeInTheDocument()
+        }
+        expect(within(arrowRow).queryByRole('button', { name: 'Control' })).not.toBeInTheDocument()
     })
 })

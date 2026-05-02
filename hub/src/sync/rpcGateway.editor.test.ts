@@ -93,20 +93,45 @@ describe('RpcGateway editor RPC', () => {
         })
     })
 
-    it('sends editor-git-status through machine-level RPC', async () => {
-        const expected = { success: true, stdout: ' M README.md\n' }
+    it('sends editor-git-status-v2 through machine-level RPC', async () => {
+        const expected = { success: true, state: 'notRepository', repositories: [], stagedFiles: [], unstagedFiles: [], totalStaged: 0, totalUnstaged: 0 }
         const { gateway, calls } = createGateway(expected)
 
-        const result = await gateway.editorGitStatus('machine-1', '/repo')
+        const result = await gateway.editorGitStatusV2('machine-1', '/repo')
 
-        expect(result).toEqual(expected)
+        expect(result).toMatchObject({ success: true, state: 'notRepository' })
         expect(calls[0]).toEqual({
             event: 'rpc-request',
             payload: {
-                method: 'machine-1:editor-git-status',
+                method: 'machine-1:editor-git-status-v2',
                 params: JSON.stringify({ path: '/repo' })
             }
         })
+    })
+
+    it('sends editor git mutations through machine-level RPC', async () => {
+        const expected = { success: true, stdout: '', stderr: '', exitCode: 0 }
+        const { gateway, calls } = createGateway(expected)
+
+        await expect(gateway.editorGitStageFile('machine-1', '/repo', 'src/App.tsx', '/repo')).resolves.toMatchObject({ success: true })
+        await expect(gateway.editorGitCommit('machine-1', '/repo', 'message', '/repo')).resolves.toMatchObject({ success: true })
+
+        expect(calls).toEqual([
+            {
+                event: 'rpc-request',
+                payload: {
+                    method: 'machine-1:editor-git-stage-file',
+                    params: JSON.stringify({ path: '/repo', repoRoot: '/repo', filePath: 'src/App.tsx' })
+                }
+            },
+            {
+                event: 'rpc-request',
+                payload: {
+                    method: 'machine-1:editor-git-commit',
+                    params: JSON.stringify({ path: '/repo', repoRoot: '/repo', message: 'message' })
+                }
+            }
+        ])
     })
 
     it('sends editor-write-file through machine-level RPC', async () => {
@@ -171,10 +196,6 @@ describe('RpcGateway editor RPC', () => {
         await expect(gateway.editorListProjects('machine-1')).resolves.toEqual({
             success: false,
             error: 'Unexpected editor-list-projects result'
-        })
-        await expect(gateway.editorGitStatus('machine-1', '/repo')).resolves.toEqual({
-            success: false,
-            error: 'Unexpected editor-git-status result'
         })
         await expect(gateway.editorWriteFile('machine-1', '/repo/file.ts', 'content')).resolves.toEqual({
             success: false,

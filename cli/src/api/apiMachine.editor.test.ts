@@ -34,6 +34,6 @@ describe('ApiMachineClient editor RPC registration', () => {
         expect(client.rpcHandlerManager.hasHandler('editor-list-directory')).toBe(true)
         expect(client.rpcHandlerManager.hasHandler('editor-read-file')).toBe(true)
         expect(client.rpcHandlerManager.hasHandler('editor-list-projects')).toBe(true)
-        expect(client.rpcHandlerManager.hasHandler('editor-git-status')).toBe(true)
+        expect(client.rpcHandlerManager.hasHandler('editor-git-status-v2')).toBe(true)
     })
 })

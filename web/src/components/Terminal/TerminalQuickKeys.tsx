@@ -28,6 +28,20 @@ type ModifierState = {
     alt: boolean
 }
 
+function blurActiveEditableElement(): void {
+    if (typeof document === 'undefined') {
+        return
+    }
+    const active = document.activeElement
+    if (!(active instanceof HTMLElement)) {
+        return
+    }
+    const tagName = active.tagName.toLowerCase()
+    if (tagName === 'input' || tagName === 'textarea' || tagName === 'select' || active.isContentEditable) {
+        active.blur()
+    }
+}
+
 export function applyTerminalModifierState(sequence: string, state: ModifierState): string {
     let modified = sequence
     if (state.alt) {
@@ -49,41 +63,78 @@ function shouldResetModifiers(sequence: string, state: ModifierState): boolean {
     return state.ctrl || state.alt
 }
 
-const QUICK_INPUT_ROWS: QuickInput[][] = [
-    [
-        { label: 'Esc', sequence: '\u001b', description: 'Escape' },
-        {
-            label: '/',
-            sequence: '/',
-            description: 'Forward slash',
-            popup: { label: '?', sequence: '?', description: 'Question mark' },
-        },
-        {
-            label: '-',
-            sequence: '-',
-            description: 'Hyphen',
-            popup: { label: '|', sequence: '|', description: 'Pipe' },
-        },
-        { label: 'Home', sequence: '\u001b[H', description: 'Home' },
-        { label: '↑', sequence: '\u001b[A', description: 'Arrow up' },
-        { label: 'End', sequence: '\u001b[F', description: 'End' },
-        { label: 'PgUp', sequence: '\u001b[5~', description: 'Page up' },
-    ],
-    [
-        { label: 'Tab', sequence: '\t', description: 'Tab' },
-        { label: 'Ctrl', description: 'Control', modifier: 'ctrl' },
-        { label: 'Alt', description: 'Alternate', modifier: 'alt' },
-        { label: '←', sequence: '\u001b[D', description: 'Arrow left' },
-        { label: '↓', sequence: '\u001b[B', description: 'Arrow down' },
-        { label: '→', sequence: '\u001b[C', description: 'Arrow right' },
-        { label: 'PgDn', sequence: '\u001b[6~', description: 'Page down' },
-    ],
+const QUICK_INPUT_ROWS: Array<{ label: string; keys: QuickInput[] }> = [
+    {
+        label: 'Terminal modifier keys',
+        keys: [
+            { label: 'Esc', sequence: '\u001b', description: 'Escape' },
+            { label: 'Tab', sequence: '\t', description: 'Tab' },
+            { label: 'Ctrl', description: 'Control', modifier: 'ctrl' },
+            { label: 'Alt', description: 'Alternate', modifier: 'alt' },
+        ],
+    },
+    {
+        label: 'Terminal arrow keys',
+        keys: [
+            { label: '←', sequence: '\u001b[D', description: 'Arrow left' },
+            { label: '↑', sequence: '\u001b[A', description: 'Arrow up' },
+            { label: '↓', sequence: '\u001b[B', description: 'Arrow down' },
+            { label: '→', sequence: '\u001b[C', description: 'Arrow right' },
+        ],
+    },
+]
+
+const ADVANCED_KEY_GROUPS: Array<{ label: string; keys: QuickInput[] }> = [
+    {
+        label: 'Signals',
+        keys: [
+            { label: 'Ctrl+D', sequence: '\u0004', description: 'Ctrl+D' },
+            { label: 'Ctrl+Z', sequence: '\u001a', description: 'Ctrl+Z' },
+            { label: 'Ctrl+L', sequence: '\u000c', description: 'Ctrl+L' },
+        ],
+    },
+    {
+        label: 'Navigation',
+        keys: [
+            { label: 'Home', sequence: '\u001b[H', description: 'Home' },
+            { label: 'End', sequence: '\u001b[F', description: 'End' },
+            { label: 'PgUp', sequence: '\u001b[5~', description: 'PgUp' },
+            { label: 'PgDn', sequence: '\u001b[6~', description: 'PgDn' },
+        ],
+    },
+    {
+        label: 'Function keys',
+        keys: [
+            { label: 'F1', sequence: '\u001bOP', description: 'F1' },
+            { label: 'F2', sequence: '\u001bOQ', description: 'F2' },
+            { label: 'F3', sequence: '\u001bOR', description: 'F3' },
+            { label: 'F4', sequence: '\u001bOS', description: 'F4' },
+            { label: 'F5', sequence: '\u001b[15~', description: 'F5' },
+            { label: 'F6', sequence: '\u001b[17~', description: 'F6' },
+            { label: 'F7', sequence: '\u001b[18~', description: 'F7' },
+            { label: 'F8', sequence: '\u001b[19~', description: 'F8' },
+            { label: 'F9', sequence: '\u001b[20~', description: 'F9' },
+            { label: 'F10', sequence: '\u001b[21~', description: 'F10' },
+            { label: 'F11', sequence: '\u001b[23~', description: 'F11' },
+            { label: 'F12', sequence: '\u001b[24~', description: 'F12' },
+        ],
+    },
+    {
+        label: 'Symbols',
+        keys: [
+            { label: '/', sequence: '/', description: 'Forward slash' },
+            { label: '|', sequence: '|', description: 'Pipe' },
+            { label: '~', sequence: '~', description: 'Tilde' },
+            { label: '\\', sequence: '\\', description: 'Backslash' },
+            { label: '-', sequence: '-', description: 'Hyphen' },
+            { label: '_', sequence: '_', description: 'Underscore' },
+        ],
+    },
 ]
 
 export function useTerminalQuickInput(args: {
     disabled: boolean
     write: (text: string) => void
-    focusTerminal?: () => void
 }): {
     ctrlActive: boolean
     altActive: boolean
@@ -117,7 +168,6 @@ export function useTerminalQuickInput(args: {
             return
         }
         writeWithModifiers(sequence, { ctrl: ctrlActive, alt: altActive })
-        args.focusTerminal?.()
     }, [args, ctrlActive, altActive, writeWithModifiers])
 
     const toggleModifier = useCallback((modifier: 'ctrl' | 'alt') => {
@@ -131,7 +181,6 @@ export function useTerminalQuickInput(args: {
             setAltActive((value) => !value)
             setCtrlActive(false)
         }
-        args.focusTerminal?.()
     }, [args])
 
     const writePlainInput = useCallback((text: string) => {
@@ -140,7 +189,6 @@ export function useTerminalQuickInput(args: {
         }
         args.write(text)
         resetModifiers()
-        args.focusTerminal?.()
         return true
     }, [args, resetModifiers])
 
@@ -176,6 +224,7 @@ function QuickKeyButton(props: {
     const longPressDisabled = disabled || Boolean(modifier) || !hasPopup
 
     const handleClick = useCallback(() => {
+        blurActiveEditableElement()
         if (modifier) {
             onToggleModifier(modifier)
             return
@@ -184,6 +233,7 @@ function QuickKeyButton(props: {
     }, [modifier, onToggleModifier, onPress, input.sequence])
 
     const handlePointerDown = useCallback((event: PointerEvent<HTMLButtonElement>) => {
+        blurActiveEditableElement()
         if (event.pointerType === 'touch') {
             event.preventDefault()
         }
@@ -227,6 +277,7 @@ export function TerminalQuickKeys(props: {
 }) {
     const { t } = useTranslation()
     const [pasteDialogOpen, setPasteDialogOpen] = useState(false)
+    const [moreOpen, setMoreOpen] = useState(false)
     const [manualPasteText, setManualPasteText] = useState('')
 
     const handlePasteAction = useCallback(async () => {
@@ -274,12 +325,34 @@ export function TerminalQuickKeys(props: {
                 >
                     {t('button.paste')}
                 </button>
-                {QUICK_INPUT_ROWS.map((row, rowIndex) => (
+                <div className="grid grid-cols-2 gap-2">
+                    <button
+                        type="button"
+                        aria-label="More terminal keys"
+                        disabled={props.disabled}
+                        className="rounded-md border border-[var(--app-border)] bg-[var(--app-secondary-bg)] px-3 py-2 text-sm font-medium text-[var(--app-fg)] transition-colors hover:bg-[var(--app-subtle-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-button)] disabled:cursor-not-allowed disabled:opacity-50"
+                        onClick={() => setMoreOpen(true)}
+                    >
+                        More
+                    </button>
+                    <button
+                        type="button"
+                        aria-label="Ctrl+C"
+                        disabled={props.disabled}
+                        className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                        onClick={() => props.onQuickInput('\u0003')}
+                    >
+                        Ctrl+C
+                    </button>
+                </div>
+                {QUICK_INPUT_ROWS.map((row) => (
                     <div
-                        key={`terminal-quick-row-${rowIndex}`}
+                        key={row.label}
+                        role="group"
+                        aria-label={row.label}
                         className="flex items-stretch overflow-hidden rounded-md bg-[var(--app-secondary-bg)]"
                     >
-                        {row.map((input) => {
+                        {row.keys.map((input) => {
                             const modifier = input.modifier
                             const isCtrl = modifier === 'ctrl'
                             const isAlt = modifier === 'alt'
@@ -298,6 +371,38 @@ export function TerminalQuickKeys(props: {
                     </div>
                 ))}
             </div>
+
+            <Dialog open={moreOpen} onOpenChange={setMoreOpen}>
+                <DialogContent className="bottom-0 left-0 top-auto max-h-[82vh] w-full max-w-none translate-x-0 translate-y-0 overflow-y-auto rounded-b-none rounded-t-xl p-4 sm:left-1/2 sm:bottom-auto sm:top-1/2 sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl">
+                    <DialogHeader>
+                        <DialogTitle>More terminal keys</DialogTitle>
+                        <DialogDescription>
+                            Advanced terminal shortcuts for mobile.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="mt-3 space-y-4">
+                        {ADVANCED_KEY_GROUPS.map((group) => (
+                            <section key={group.label} className="space-y-2">
+                                <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--app-hint)]">
+                                    {group.label}
+                                </h3>
+                                <div className="grid grid-cols-4 gap-2">
+                                    {group.keys.map((input) => (
+                                        <QuickKeyButton
+                                            key={input.label}
+                                            input={input}
+                                            disabled={props.disabled}
+                                            isActive={false}
+                                            onPress={props.onQuickInput}
+                                            onToggleModifier={props.onModifierToggle}
+                                        />
+                                    ))}
+                                </div>
+                            </section>
+                        ))}
+                    </div>
+                </DialogContent>
+            </Dialog>
 
             <Dialog
                 open={pasteDialogOpen}
