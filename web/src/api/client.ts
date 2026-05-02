@@ -4,6 +4,7 @@ import type {
     EditorFileResponse,
     EditorFileMutationResponse,
     EditorGitStatusResponse,
+    EditorGitStatusV2Response,
     EditorProjectsResponse,
     AuthResponse,
     CodexCollaborationMode,
@@ -569,6 +570,69 @@ export class ApiClient {
                 body: JSON.stringify({ machineId, path: projectPath })
             }
         )
+    }
+
+    async getEditorGitStatusV2(machineId: string, projectPath: string, repoRoot?: string): Promise<EditorGitStatusV2Response> {
+        return await this.request<EditorGitStatusV2Response>('/api/editor/git-status-v2', {
+            method: 'POST',
+            body: JSON.stringify({ machineId, path: projectPath, repoRoot })
+        })
+    }
+
+    async getEditorGitDiffFile(machineId: string, projectPath: string, filePath: string, staged?: boolean, repoRoot?: string): Promise<GitCommandResponse> {
+        return await this.request<GitCommandResponse>('/api/editor/git-diff-file', {
+            method: 'POST',
+            body: JSON.stringify({ machineId, path: projectPath, repoRoot, filePath, staged })
+        })
+    }
+
+    async stageEditorGitFile(machineId: string, projectPath: string, filePath: string, repoRoot?: string): Promise<GitCommandResponse> {
+        return await this.request<GitCommandResponse>('/api/editor/git-stage-file', {
+            method: 'POST',
+            body: JSON.stringify({ machineId, path: projectPath, repoRoot, filePath })
+        })
+    }
+
+    async unstageEditorGitFile(machineId: string, projectPath: string, filePath: string, repoRoot?: string): Promise<GitCommandResponse> {
+        return await this.request<GitCommandResponse>('/api/editor/git-unstage-file', {
+            method: 'POST',
+            body: JSON.stringify({ machineId, path: projectPath, repoRoot, filePath })
+        })
+    }
+
+    async stageAllEditorGit(machineId: string, projectPath: string, repoRoot?: string): Promise<GitCommandResponse> {
+        return await this.request<GitCommandResponse>('/api/editor/git-stage-all', {
+            method: 'POST',
+            body: JSON.stringify({ machineId, path: projectPath, repoRoot })
+        })
+    }
+
+    async unstageAllEditorGit(machineId: string, projectPath: string, repoRoot?: string): Promise<GitCommandResponse> {
+        return await this.request<GitCommandResponse>('/api/editor/git-unstage-all', {
+            method: 'POST',
+            body: JSON.stringify({ machineId, path: projectPath, repoRoot })
+        })
+    }
+
+    async commitEditorGit(machineId: string, projectPath: string, message: string, repoRoot?: string): Promise<GitCommandResponse> {
+        return await this.request<GitCommandResponse>('/api/editor/git-commit', {
+            method: 'POST',
+            body: JSON.stringify({ machineId, path: projectPath, repoRoot, message })
+        })
+    }
+
+    async pullEditorGit(machineId: string, projectPath: string, repoRoot?: string): Promise<GitCommandResponse> {
+        return await this.request<GitCommandResponse>('/api/editor/git-pull', {
+            method: 'POST',
+            body: JSON.stringify({ machineId, path: projectPath, repoRoot })
+        })
+    }
+
+    async pushEditorGit(machineId: string, projectPath: string, repoRoot?: string): Promise<GitCommandResponse> {
+        return await this.request<GitCommandResponse>('/api/editor/git-push', {
+            method: 'POST',
+            body: JSON.stringify({ machineId, path: projectPath, repoRoot })
+        })
     }
     async renameSession(sessionId: string, name: string): Promise<void> {
         await this.request(`/api/sessions/${encodeURIComponent(sessionId)}`, {
