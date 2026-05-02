@@ -86,6 +86,15 @@ vi.mock('./EditorFileTree', () => ({
     )
 }))
 
+vi.mock('./EditorGitPanel', () => ({
+    EditorGitPanel: (props: { onOpenFile: (path: string) => void }) => (
+        <div data-testid="editor-git-panel">
+            GitPanel
+            <button type="button" onClick={() => props.onOpenFile('src/GitFile.tsx')}>Open git file</button>
+        </div>
+    )
+}))
+
 vi.mock('./EditorTabs', () => ({
     EditorTabs: (props: { tabs: Array<{ label: string }>; onNewFile: () => void }) => (
         <div data-testid="editor-tabs">
@@ -443,6 +452,18 @@ describe('EditorLayout', () => {
 
         expect(screen.getByTestId('editor-tabs')).toHaveTextContent('App.tsx')
         expect(screen.getByTestId('editor-file-tree')).toHaveTextContent('Active file: /repo/src/App.tsx')
+    })
+
+    it('switches the desktop left pane between files and git', () => {
+        renderEditorLayout({} as ApiClient)
+
+        expect(screen.getByTestId('editor-file-tree')).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Git source control' }))
+        expect(screen.getByTestId('editor-git-panel')).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open git file' }))
+
+        expect(screen.getByTestId('editor-tabs')).toHaveTextContent('GitFile.tsx')
     })
 
     it('starts new-file flow from the editor tab plus using active file or project root', () => {
