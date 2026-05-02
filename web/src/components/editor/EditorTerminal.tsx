@@ -305,7 +305,7 @@ export function EditorTerminal(props: {
                             <div
                                 key={tab.id}
                                 className={`flex items-center gap-1 border-l border-[var(--app-border)] px-2 py-1 text-xs ${
-                                    isActive ? 'bg-[var(--app-bg)] text-[var(--app-fg)]' : 'text-[var(--app-hint)]'
+                                    isActive ? 'bg-[var(--app-bg)] text-[#818cf8]' : 'text-[var(--app-hint)]'
                                 }`}
                             >
                                 <button

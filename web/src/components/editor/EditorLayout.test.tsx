@@ -282,6 +282,44 @@ describe('EditorLayout', () => {
         expect(screen.getByTestId('editor-terminal')).toHaveTextContent('Terminal tabs: Terminal: bash:machine-1:/repo')
     })
 
+    it('opens mobile terminals scoped to the selected session tab', () => {
+        mocks.isMobile = true
+        mocks.sessions = [
+            makeSession({ id: 'session-1', metadata: { path: '/repo', machineId: 'machine-1', name: 'Session 1' } }),
+            makeSession({ id: 'session-2', metadata: { path: '/repo', machineId: 'machine-1', name: 'Session 2' } })
+        ]
+
+        renderEditorLayout({} as ApiClient)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Terminal' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Use session session-2 for terminal' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Open terminal' }))
+
+        expect(screen.getByTestId('editor-terminal')).toHaveTextContent('Terminal tabs: Terminal: bash:session-2:')
+    })
+
+    it('archives mobile chat sessions through the editor API', async () => {
+        mocks.isMobile = true
+        mocks.sessions = [
+            makeSession({ id: 'project-session', metadata: { path: '/repo', machineId: 'machine-1', name: 'Project session' } })
+        ]
+        const api = {
+            archiveSession: vi.fn(async () => undefined)
+        } as unknown as ApiClient
+
+        renderEditorLayout(api)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Chat' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Session actions project-session' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Archive session' }))
+        expect(screen.getByText('Archive session?')).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Archive' }))
+
+        await waitFor(() => {
+            expect(api.archiveSession).toHaveBeenCalledWith('project-session')
+        })
+    })
+
 
 
     it('auto-selects the first project session in mobile layout so chat persists like desktop', async () => {

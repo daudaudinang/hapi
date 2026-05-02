@@ -2,12 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import type { ApiClient } from '@/api/client'
+import type { SessionSummary } from '@/types/api'
 import type { EditorTreeItem } from '@/types/editor'
 import type { PersistedEditorState } from '@/lib/editor-persistence'
 import type { RootSearch } from '@/router'
 import { appendEditorChatDraft, appendEditorChatDraftWithSelection, buildAddSelectionToChatText, expandSelectionRefs } from '@/lib/editor-chat-draft'
 import { queryKeys } from '@/lib/query-keys'
 import { filterSessionsForEditorProject } from '@/lib/editor-session-filter'
+import { clearMessageWindow } from '@/lib/message-window-store'
 import { clearPersistedEditorState, savePersistedEditorState } from '@/lib/editor-persistence'
 import { useEditorPaneResize } from '@/hooks/useEditorPaneResize'
 import { useRegisterActiveEditorSession } from '@/lib/active-chat-session'
@@ -87,7 +89,7 @@ function useEditorProjectSessionSelection(args: {
     projectPath: string | null
     activeSessionId: string | null
     onSelectSession: (sessionId: string) => void
-}) {
+}): { projectSessions: SessionSummary[] } {
     const { api, machineId, projectPath, activeSessionId, onSelectSession } = args
     const { sessions, isLoading, error } = useSessions(api)
     const projectSessions = useMemo(() => {
@@ -114,6 +116,8 @@ function useEditorProjectSessionSelection(args: {
 
         onSelectSession(projectSessions[0].id)
     }, [activeSessionId, error, isLoading, machineId, onSelectSession, projectPath, projectSessions, sessions])
+
+    return { projectSessions }
 }
 
 function DeleteConfirmModal(props: {
@@ -253,7 +257,7 @@ export function EditorLayout(props: {
         editor.setActiveSessionId(sessionId)
     }, [editor.setActiveSessionId])
 
-    useEditorProjectSessionSelection({
+    const { projectSessions } = useEditorProjectSessionSelection({
         api: props.api,
         machineId: editor.machineId,
         projectPath: editor.projectPath,
@@ -491,13 +495,45 @@ export function EditorLayout(props: {
         setNewFileTargetPath(activeFilePath ?? editor.projectPath)
     }, [activeFilePath, editor.projectPath])
 
-    const handleOpenTerminal = useCallback(() => {
+    const handleOpenTerminal = useCallback((sessionId?: string | null) => {
+        if (sessionId) {
+            editor.openTerminal({ sessionId })
+            setIsTerminalCollapsed(false)
+            return
+        }
         if (editor.machineId && editor.projectPath) {
             editor.openTerminal({ machineId: editor.machineId, cwd: editor.projectPath })
             setIsTerminalCollapsed(false)
             return
         }
     }, [editor])
+
+    const handleArchiveSession = useCallback(async (sessionId: string) => {
+        if (!props.api) {
+            throw new Error('Session unavailable')
+        }
+
+        await props.api.archiveSession(sessionId)
+        await Promise.all([
+            queryClient.invalidateQueries({ queryKey: queryKeys.session(sessionId) }),
+            queryClient.invalidateQueries({ queryKey: queryKeys.sessions }),
+        ])
+    }, [props.api, queryClient])
+
+    const handleDeleteSession = useCallback(async (sessionId: string) => {
+        if (!props.api) {
+            throw new Error('Session unavailable')
+        }
+
+        await props.api.deleteSession(sessionId)
+        queryClient.removeQueries({ queryKey: queryKeys.session(sessionId) })
+        clearMessageWindow(sessionId)
+        if (editor.activeSessionId === sessionId) {
+            const nextSession = projectSessions.find((session) => session.id !== sessionId) ?? null
+            editor.setActiveSessionId(nextSession?.id ?? null)
+        }
+        await queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
+    }, [editor, projectSessions, props.api, queryClient])
 
     const handleCancelNewFile = useCallback(() => {
         setNewFileTargetPath(null)
@@ -559,6 +595,7 @@ export function EditorLayout(props: {
                     activeFileTab={activeFileTab}
                     activeTerminalTab={activeTerminalTab}
                     activeSessionId={editor.activeSessionId}
+                    projectSessions={projectSessions}
                     pendingDraftText={pendingDraftText}
                     newFileTargetPath={newFileTargetPath}
                     newSessionError={newSession.error}
@@ -574,6 +611,9 @@ export function EditorLayout(props: {
                     onSelectFileTab={editor.setActiveTabId}
                     onCloseTab={editor.closeTab}
                     onOpenNewSessionModal={handleOpenNewSessionModal}
+                    onSelectSession={handleSelectSession}
+                    onArchiveSession={handleArchiveSession}
+                    onDeleteSession={handleDeleteSession}
                     onSessionResolved={handleSessionResolved}
                     onExpandDraft={handleExpandDraft}
                     onDraftConsumed={() => setPendingDraftText(undefined)}

@@ -433,7 +433,7 @@ export function EditorTabs(props: {
                             aria-label={`Select tab ${tab.label}`}
                             className={`flex items-center gap-1.5 ${props.mobileMode ? 'px-2' : 'px-3'} py-1.5 text-xs border-r border-[var(--app-border)] whitespace-nowrap cursor-pointer transition-colors ${
                                 isActive
-                                    ? 'bg-[var(--app-bg)] border-b-2 border-b-[#6366f1] text-[var(--app-fg)]'
+                                    ? 'bg-[var(--app-bg)] border-b-2 border-b-[#6366f1] text-[#818cf8]'
                                     : 'text-[var(--app-hint)] hover:bg-[var(--app-subtle-bg)]'
                             }`}
                             onClick={() => props.onSelectTab(tab.id)}

@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '@/api/client'
 import type { EditorTab } from '@/hooks/useEditorState'
+import type { SessionSummary } from '@/types/api'
 import { MobileEditorLayout } from './MobileEditorLayout'
 
 vi.mock('./EditorFileTree', () => ({
@@ -33,19 +34,35 @@ vi.mock('./EditorTabs', () => ({
 }))
 
 vi.mock('./EditorChatPanel', () => ({
-    EditorChatPanel: (props: { pendingDraftText?: string }) => (
-        <div data-testid="mobile-chat-panel">draft: {props.pendingDraftText ?? ''}</div>
+    EditorChatPanel: (props: { pendingDraftText?: string; sessionId?: string | null }) => (
+        <div data-testid="mobile-chat-panel">session: {props.sessionId ?? ''} draft: {props.pendingDraftText ?? ''}</div>
     )
 }))
 
 vi.mock('./EditorTerminal', () => ({
-    EditorTerminal: (props: { mobileMode?: boolean; isCollapsed: boolean; onOpenTerminal: () => void }) => (
+    EditorTerminal: (props: { mobileMode?: boolean; isCollapsed: boolean; onOpenTerminal: () => void; activeTabId?: string | null }) => (
         <div data-testid="mobile-terminal">
-            mobile terminal: {props.mobileMode ? 'yes' : 'no'} collapsed: {props.isCollapsed ? 'yes' : 'no'}
+            mobile terminal: {props.mobileMode ? 'yes' : 'no'} collapsed: {props.isCollapsed ? 'yes' : 'no'} active: {props.activeTabId ?? ''}
             <button type="button" onClick={props.onOpenTerminal}>Open terminal</button>
         </div>
     )
 }))
+
+function makeSession(id: string, overrides: Partial<SessionSummary> = {}): SessionSummary {
+    return {
+        id,
+        active: true,
+        thinking: false,
+        activeAt: Date.now(),
+        updatedAt: Date.now(),
+        metadata: { path: '/repo', machineId: 'machine-1', name: id },
+        todoProgress: null,
+        pendingRequestsCount: 0,
+        model: null,
+        effort: null,
+        ...overrides,
+    }
+}
 
 function baseProps() {
     const fileTabs: EditorTab[] = [{ id: 'file-1', type: 'file', path: '/repo/src/App.tsx', label: 'App.tsx' }]
@@ -59,6 +76,7 @@ function baseProps() {
         activeFileTab: fileTabs[0],
         activeTerminalTab: terminalTabs[0],
         activeSessionId: 'session-1',
+        projectSessions: [makeSession('session-1'), makeSession('session-2'), makeSession('archived-session', { active: false })],
         pendingDraftText: undefined as string | undefined,
         newFileTargetPath: null as string | null,
         newSessionError: null as string | null,
@@ -74,6 +92,9 @@ function baseProps() {
         onSelectFileTab: vi.fn(),
         onCloseTab: vi.fn(),
         onOpenNewSessionModal: vi.fn(),
+        onSelectSession: vi.fn(),
+        onArchiveSession: vi.fn(async () => undefined),
+        onDeleteSession: vi.fn(async () => undefined),
         onSessionResolved: vi.fn(),
         onExpandDraft: (text: string) => text,
         onDraftConsumed: vi.fn(),
@@ -158,4 +179,62 @@ describe('MobileEditorLayout', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Open chat' }))
         expect(screen.getByTestId('mobile-chat-panel')).toBeInTheDocument()
     })
+
+    it('highlights the active bottom navigation tab with purple text', () => {
+        render(<MobileEditorLayout {...baseProps()} />)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Chat' }))
+
+        expect(screen.getByRole('button', { name: 'Chat' })).toHaveClass('text-[#818cf8]')
+    })
+
+    it('shows session tabs in Chat and switches the selected session', () => {
+        const props = baseProps()
+        render(<MobileEditorLayout {...props} />)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Chat' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Select session session-2' }))
+
+        expect(props.onSelectSession).toHaveBeenCalledWith('session-2')
+    })
+
+    it('archives chat sessions through a custom confirmation modal', async () => {
+        const props = baseProps()
+        render(<MobileEditorLayout {...props} />)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Chat' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Session actions session-1' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Archive session' }))
+
+        expect(screen.getByText('Archive session?')).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Archive' }))
+
+        expect(props.onArchiveSession).toHaveBeenCalledWith('session-1')
+    })
+
+    it('deletes archived chat sessions through a custom confirmation modal', async () => {
+        const props = baseProps()
+        render(<MobileEditorLayout {...props} />)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Chat' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Session actions archived-session' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Delete session' }))
+
+        expect(screen.getByText('Delete archived session?')).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+        expect(props.onDeleteSession).toHaveBeenCalledWith('archived-session')
+    })
+
+    it('uses session tabs in Terminal to choose the terminal scope before opening a terminal', () => {
+        const props = baseProps()
+        render(<MobileEditorLayout {...props} />)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Terminal' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Use session session-2 for terminal' }))
+        fireEvent.click(screen.getByText('Open terminal'))
+
+        expect(props.onOpenTerminal).toHaveBeenCalledWith('session-2')
+    })
+
 })

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import type { ApiClient } from '@/api/client'
 import type { EditorTab } from '@/hooks/useEditorState'
+import type { SessionSummary } from '@/types/api'
 import type { EditorTreeItem } from '@/types/editor'
 import { EditorChatPanel } from './EditorChatPanel'
 import { EditorFileTree } from './EditorFileTree'
@@ -18,6 +19,7 @@ type MobileEditorLayoutProps = {
     activeFileTab: EditorTab | null
     activeTerminalTab: EditorTab | null
     activeSessionId: string | null
+    projectSessions: SessionSummary[]
     pendingDraftText?: string
     newFileTargetPath: string | null
     newSessionError: string | null
@@ -33,10 +35,13 @@ type MobileEditorLayoutProps = {
     onSelectFileTab: (tabId: string) => void
     onCloseTab: (tabId: string) => void
     onOpenNewSessionModal: () => void
+    onSelectSession: (sessionId: string) => void
+    onArchiveSession: (sessionId: string) => Promise<void>
+    onDeleteSession: (sessionId: string) => Promise<void>
     onSessionResolved: (resolvedSessionId: string) => void
     onExpandDraft: (text: string) => string
     onDraftConsumed: () => void
-    onOpenTerminal: () => void
+    onOpenTerminal: (sessionId?: string | null) => void
     onSelectTerminalTab: (tabId: string) => void
     onCloseTerminalTab: (tabId: string) => void
     onAddTerminalToChat: (text: string) => void
@@ -100,7 +105,7 @@ function BottomNav(props: { view: MobileEditorView; onViewChange: (view: MobileE
                         type="button"
                         aria-label={item.ariaLabel ?? item.label}
                         aria-current={active ? 'page' : undefined}
-                        className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1 text-xs ${active ? 'font-semibold text-[var(--app-fg)]' : 'text-[var(--app-hint)]'}`}
+                        className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1 text-xs rounded-lg transition-colors ${active ? 'font-semibold text-[#818cf8] bg-[#818cf8]/10' : 'text-[var(--app-hint)]'}`}
                         onClick={() => props.onViewChange(item.view)}
                     >
                         <span aria-hidden="true">{item.icon}</span>
@@ -112,10 +117,178 @@ function BottomNav(props: { view: MobileEditorView; onViewChange: (view: MobileE
     )
 }
 
+function getSessionTabTitle(session: SessionSummary): string {
+    if (session.metadata?.name) return session.metadata.name
+    if (session.metadata?.summary?.text) return session.metadata.summary.text
+    return session.id
+}
+
+type PendingConfirm =
+    | { type: 'archive'; session: SessionSummary }
+    | { type: 'delete'; session: SessionSummary }
+    | null
+
+function MobileConfirmModal(props: {
+    pending: PendingConfirm
+    onCancel: () => void
+    onConfirm: () => Promise<void>
+}) {
+    if (!props.pending) return null
+    const isDelete = props.pending.type === 'delete'
+    return (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3" role="presentation">
+            <div className="w-full max-w-sm rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)] p-4 shadow-xl" role="dialog" aria-modal="true">
+                <div className="text-sm font-semibold text-[var(--app-fg)]">
+                    {isDelete ? 'Delete archived session?' : 'Archive session?'}
+                </div>
+                <div className="mt-1 text-xs text-[var(--app-hint)]">
+                    {isDelete
+                        ? 'This permanently removes the archived session and its messages.'
+                        : 'You can still find this session in archived sessions.'}
+                </div>
+                <div className="mt-4 flex justify-end gap-2">
+                    <button
+                        type="button"
+                        className="rounded-md border border-[var(--app-border)] px-3 py-1.5 text-xs font-semibold text-[var(--app-fg)]"
+                        onClick={props.onCancel}
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        className="rounded-md bg-red-500 px-3 py-1.5 text-xs font-semibold text-white"
+                        onClick={() => { void props.onConfirm() }}
+                    >
+                        {isDelete ? 'Delete' : 'Archive'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+function MobileSessionTabs(props: {
+    mode: 'chat' | 'terminal'
+    sessions: SessionSummary[]
+    activeSessionId: string | null
+    terminalScopeSessionId?: string | null
+    onSelectSession: (sessionId: string) => void
+    onSelectTerminalScope: (sessionId: string | null) => void
+    onRequestArchive: (session: SessionSummary) => void
+    onRequestDelete: (session: SessionSummary) => void
+    onNewSession: () => void
+}) {
+    const [actionSessionId, setActionSessionId] = useState<string | null>(null)
+    const actionSession = props.sessions.find((session) => session.id === actionSessionId) ?? null
+    const activeId = props.mode === 'terminal' ? props.terminalScopeSessionId : props.activeSessionId
+
+    if (props.sessions.length === 0) {
+        return (
+            <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-[var(--app-border)] bg-[var(--app-secondary-bg)] px-2 py-2">
+                <button
+                    type="button"
+                    className="rounded-full border border-[var(--app-border)] bg-[var(--app-bg)] px-3 py-1 text-xs font-semibold text-[#818cf8]"
+                    onClick={props.onNewSession}
+                >
+                    + New Session
+                </button>
+            </div>
+        )
+    }
+
+    return (
+        <div className="relative shrink-0 border-b border-[var(--app-border)] bg-[var(--app-secondary-bg)]">
+            <div className="flex items-center gap-1 overflow-x-auto px-2 py-2">
+                {props.mode === 'terminal' ? (
+                    <button
+                        type="button"
+                        aria-label="Use project for terminal"
+                        className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold ${activeId === null ? 'border-[#818cf8] bg-[#818cf8]/10 text-[#818cf8]' : 'border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-hint)]'}`}
+                        onClick={() => props.onSelectTerminalScope(null)}
+                    >
+                        Project
+                    </button>
+                ) : null}
+                {props.sessions.map((session) => {
+                    const isActive = activeId === session.id
+                    const title = getSessionTabTitle(session)
+                    const selectLabel = props.mode === 'terminal'
+                        ? `Use session ${session.id} for terminal`
+                        : `Select session ${session.id}`
+                    return (
+                        <div key={session.id} className={`flex shrink-0 items-center rounded-full border ${isActive ? 'border-[#818cf8] bg-[#818cf8]/10 text-[#818cf8]' : 'border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-hint)]'}`}>
+                            <button
+                                type="button"
+                                aria-label={selectLabel}
+                                className="max-w-[120px] truncate px-3 py-1 text-xs font-semibold"
+                                onClick={() => {
+                                    if (props.mode === 'terminal') {
+                                        props.onSelectTerminalScope(session.id)
+                                    } else {
+                                        props.onSelectSession(session.id)
+                                    }
+                                }}
+                            >
+                                <span className={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${session.active ? 'bg-emerald-400' : 'bg-slate-500'}`} />
+                                {title}
+                            </button>
+                            <button
+                                type="button"
+                                aria-label={`Session actions ${session.id}`}
+                                className="border-l border-[var(--app-border)] px-2 py-1 text-xs"
+                                onClick={() => setActionSessionId((current) => current === session.id ? null : session.id)}
+                            >
+                                ⋯
+                            </button>
+                        </div>
+                    )
+                })}
+                <button
+                    type="button"
+                    aria-label="New chat session"
+                    className="shrink-0 rounded-full border border-[var(--app-border)] bg-[var(--app-bg)] px-3 py-1 text-xs font-semibold text-[var(--app-fg)]"
+                    onClick={props.onNewSession}
+                >
+                    +
+                </button>
+            </div>
+            {actionSession ? (
+                <div className="absolute right-2 top-11 z-20 min-w-40 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg)] p-1 shadow-lg">
+                    {actionSession.active ? (
+                        <button
+                            type="button"
+                            className="w-full rounded-md px-3 py-2 text-left text-xs text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)]"
+                            onClick={() => {
+                                setActionSessionId(null)
+                                props.onRequestArchive(actionSession)
+                            }}
+                        >
+                            Archive session
+                        </button>
+                    ) : (
+                        <button
+                            type="button"
+                            className="w-full rounded-md px-3 py-2 text-left text-xs text-red-500 hover:bg-[var(--app-subtle-bg)]"
+                            onClick={() => {
+                                setActionSessionId(null)
+                                props.onRequestDelete(actionSession)
+                            }}
+                        >
+                            Delete session
+                        </button>
+                    )}
+                </div>
+            ) : null}
+        </div>
+    )
+}
+
 export function MobileEditorLayout(props: MobileEditorLayoutProps) {
     const [view, setView] = useState<MobileEditorView>('files')
     const [hasOpenedEditorSurface, setHasOpenedEditorSurface] = useState(false)
     const [selectionNoticeVisible, setSelectionNoticeVisible] = useState(false)
+    const [terminalScopeSessionId, setTerminalScopeSessionId] = useState<string | null>(null)
+    const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm>(null)
     const activeFilePath = props.activeFileTab?.path ?? null
 
     const handleViewChange = useCallback((nextView: MobileEditorView) => {
@@ -157,9 +330,9 @@ export function MobileEditorLayout(props: MobileEditorLayoutProps) {
     }, [handleViewChange, props.onOpenFile])
 
     const handleOpenTerminal = useCallback(() => {
-        props.onOpenTerminal()
+        props.onOpenTerminal(terminalScopeSessionId)
         setView('terminal')
-    }, [props.onOpenTerminal])
+    }, [props.onOpenTerminal, terminalScopeSessionId])
 
     const handleAddSelectionToChat = useCallback((filePath: string, startLine: number, endLine: number, content: string) => {
         props.onAddSelectionToChat(filePath, startLine, endLine, content)
@@ -214,6 +387,16 @@ export function MobileEditorLayout(props: MobileEditorLayoutProps) {
         )
     }, [handleOpenTerminal, props.onBrowseProject, props.onNewFileFromTabs, props.onOpenNewSessionModal, view])
 
+    const handleConfirmSessionAction = useCallback(async () => {
+        if (!pendingConfirm) return
+        if (pendingConfirm.type === 'archive') {
+            await props.onArchiveSession(pendingConfirm.session.id)
+        } else {
+            await props.onDeleteSession(pendingConfirm.session.id)
+        }
+        setPendingConfirm(null)
+    }, [pendingConfirm, props])
+
     return (
         <div data-testid="mobile-editor-layout" className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--app-bg)] text-[var(--app-fg)]">
             <MobileHeader
@@ -256,31 +439,61 @@ export function MobileEditorLayout(props: MobileEditorLayoutProps) {
                 ) : null}
 
                 {view === 'chat' ? (
-                    <EditorChatPanel
-                        api={props.api}
-                        sessionId={props.activeSessionId}
-                        pendingDraftText={props.pendingDraftText}
-                        onDraftConsumed={props.onDraftConsumed}
-                        onExpandDraft={props.onExpandDraft}
-                        onSessionResolved={props.onSessionResolved}
-                        onNewSessionRequested={props.onOpenNewSessionModal}
-                    />
+                    <div className="flex h-full min-h-0 flex-col">
+                        <MobileSessionTabs
+                            mode="chat"
+                            sessions={props.projectSessions}
+                            activeSessionId={props.activeSessionId}
+                            terminalScopeSessionId={terminalScopeSessionId}
+                            onSelectSession={props.onSelectSession}
+                            onSelectTerminalScope={setTerminalScopeSessionId}
+                            onRequestArchive={(session) => setPendingConfirm({ type: 'archive', session })}
+                            onRequestDelete={(session) => setPendingConfirm({ type: 'delete', session })}
+                            onNewSession={props.onOpenNewSessionModal}
+                        />
+                        <div className="min-h-0 flex-1">
+                            <EditorChatPanel
+                                api={props.api}
+                                sessionId={props.activeSessionId}
+                                pendingDraftText={props.pendingDraftText}
+                                onDraftConsumed={props.onDraftConsumed}
+                                onExpandDraft={props.onExpandDraft}
+                                onSessionResolved={props.onSessionResolved}
+                                onNewSessionRequested={props.onOpenNewSessionModal}
+                            />
+                        </div>
+                    </div>
                 ) : null}
 
                 {view === 'terminal' ? (
-                    <EditorTerminal
-                        api={props.api}
-                        tabs={props.terminalTabs}
-                        activeTabId={props.activeTerminalTab?.id ?? null}
-                        isCollapsed={false}
-                        onSelectTab={props.onSelectTerminalTab}
-                        onCloseTab={props.onCloseTerminalTab}
-                        onOpenTerminal={handleOpenTerminal}
-                        onToggleCollapsed={() => {}}
-                        onAddToChat={props.onAddTerminalToChat}
-                        onRegisterTerminalClose={props.onRegisterTerminalClose}
-                        mobileMode={true}
-                    />
+                    <div className="flex h-full min-h-0 flex-col">
+                        <MobileSessionTabs
+                            mode="terminal"
+                            sessions={props.projectSessions}
+                            activeSessionId={props.activeSessionId}
+                            terminalScopeSessionId={terminalScopeSessionId}
+                            onSelectSession={props.onSelectSession}
+                            onSelectTerminalScope={setTerminalScopeSessionId}
+                            onRequestArchive={(session) => setPendingConfirm({ type: 'archive', session })}
+                            onRequestDelete={(session) => setPendingConfirm({ type: 'delete', session })}
+                            onNewSession={props.onOpenNewSessionModal}
+                        />
+                        <div className="min-h-0 flex-1">
+                            <EditorTerminal
+                                api={props.api}
+                                tabs={props.terminalTabs}
+                                activeTabId={props.activeTerminalTab?.id ?? null}
+                                isCollapsed={false}
+                                onSelectTab={props.onSelectTerminalTab}
+                                onCloseTab={props.onCloseTerminalTab}
+                                onOpenTerminal={handleOpenTerminal}
+                                onToggleCollapsed={() => {}}
+                                onAddToChat={props.onAddTerminalToChat}
+                                onRegisterTerminalClose={props.onRegisterTerminalClose}
+                                mobileMode={true}
+                            />
+                        </div>
+                    </div>
                 ) : null}
             </div>
 
@@ -303,6 +516,12 @@ export function MobileEditorLayout(props: MobileEditorLayoutProps) {
                     </button>
                 </div>
             ) : null}
+
+            <MobileConfirmModal
+                pending={pendingConfirm}
+                onCancel={() => setPendingConfirm(null)}
+                onConfirm={handleConfirmSessionAction}
+            />
 
             {props.newSessionError ? (
                 <div className="shrink-0 border-t border-[var(--app-border)] px-3 py-2 text-xs text-red-500">
