@@ -4,6 +4,7 @@ import type { Dirent } from 'node:fs'
 import { mkdir, readdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
+import { registerEditorGitRpcHandlers } from './editorGitRpc'
 
 const execFileAsync = promisify(execFile)
 const GIT_STATUS_TTL = 5_000
@@ -224,6 +225,8 @@ function getErrorMessage(error: unknown, fallback: string): string {
 }
 
 export function registerEditorRpcHandlers(rpcHandlerManager: RpcHandlerManager, editorRoot: string): void {
+    registerEditorGitRpcHandlers(rpcHandlerManager, editorRoot)
+
     rpcHandlerManager.registerHandler<EditorListDirectoryRequest>('editor-list-directory', async (data) => {
         const resolved = await resolveExistingInsideRoot(data?.path, editorRoot)
         if (resolved.error) {

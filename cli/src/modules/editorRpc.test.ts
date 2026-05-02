@@ -19,6 +19,18 @@ async function request(rpc: RpcHandlerManager, method: string, params: unknown):
     return JSON.parse(response)
 }
 
+async function runGit(args: string[], cwd: string): Promise<void> {
+    const { execFile } = await import('node:child_process')
+    const { promisify } = await import('node:util')
+    await promisify(execFile)('git', args, { cwd })
+}
+
+async function initRepo(path: string): Promise<void> {
+    await runGit(['init'], path)
+    await runGit(['config', 'user.email', 'hapi@example.com'], path)
+    await runGit(['config', 'user.name', 'Hapi Test'], path)
+}
+
 describe('editor RPC handlers', () => {
     let rootDir: string
     let rpc: RpcHandlerManager
@@ -176,6 +188,95 @@ describe('editor RPC handlers', () => {
         await expect(request(rpc, 'editor-git-status', { path: resolve(rootDir, '..') })).resolves.toMatchObject({
             success: false,
             error: 'Path outside editor root'
+        })
+    })
+
+    it('reports notRepository for a folder without git metadata', async () => {
+        const parsed = await request(rpc, 'editor-git-status-v2', { path: rootDir }) as {
+            success: boolean
+            state?: string
+            repositories?: unknown[]
+        }
+
+        expect(parsed).toMatchObject({ success: true, state: 'notRepository', repositories: [] })
+    })
+
+    it('discovers a repository from a nested project path and reports changed files', async () => {
+        await initRepo(rootDir)
+        await runGit(['add', 'README.md'], rootDir)
+        await runGit(['commit', '-m', 'initial'], rootDir)
+        await writeFile(join(rootDir, 'README.md'), '# changed')
+        await writeFile(join(rootDir, 'space name.txt'), 'hello')
+
+        const parsed = await request(rpc, 'editor-git-status-v2', { path: join(rootDir, 'src') }) as {
+            success: boolean
+            state?: string
+            activeRepository?: { root: string; branch: string | null }
+            unstagedFiles?: Array<{ fullPath: string; status: string }>
+        }
+
+        expect(parsed.success).toBe(true)
+        expect(parsed.state).toBe('ready')
+        expect(parsed.activeRepository?.root).toBe(rootDir)
+        expect(parsed.unstagedFiles).toEqual(expect.arrayContaining([
+            expect.objectContaining({ fullPath: 'README.md', status: 'modified' }),
+            expect.objectContaining({ fullPath: 'space name.txt', status: 'untracked' })
+        ]))
+    })
+
+    it('rejects repository roots outside the editor root', async () => {
+        const outerDir = await createTempDir('hapi-editor-rpc-outer')
+        const editorRoot = join(outerDir, 'nested')
+        await mkdir(editorRoot, { recursive: true })
+        await initRepo(outerDir)
+        const nestedRpc = new RpcHandlerManager({ scopePrefix: 'machine-test' })
+        registerEditorRpcHandlers(nestedRpc, editorRoot)
+
+        try {
+            const parsed = await request(nestedRpc, 'editor-git-status-v2', { path: editorRoot }) as {
+                success: boolean
+                state?: string
+                error?: string
+            }
+
+            expect(parsed).toMatchObject({ success: false, state: 'repoOutsideRoot' })
+            expect(parsed.error).toContain('outside editor root')
+        } finally {
+            await rm(outerDir, { recursive: true, force: true })
+        }
+    })
+
+    it('stages, unstages, and commits files inside the active repository', async () => {
+        await initRepo(rootDir)
+        await writeFile(join(rootDir, 'tracked.txt'), 'one')
+        await runGit(['add', 'tracked.txt'], rootDir)
+        await runGit(['commit', '-m', 'initial'], rootDir)
+        await writeFile(join(rootDir, 'tracked.txt'), 'two')
+
+        await expect(request(rpc, 'editor-git-stage-file', { path: rootDir, filePath: 'tracked.txt' })).resolves.toMatchObject({ success: true })
+        let status = await request(rpc, 'editor-git-status-v2', { path: rootDir }) as { stagedFiles?: Array<{ fullPath: string }> }
+        expect(status.stagedFiles).toEqual(expect.arrayContaining([expect.objectContaining({ fullPath: 'tracked.txt' })]))
+
+        await expect(request(rpc, 'editor-git-unstage-file', { path: rootDir, filePath: 'tracked.txt' })).resolves.toMatchObject({ success: true })
+        status = await request(rpc, 'editor-git-status-v2', { path: rootDir }) as { stagedFiles?: Array<{ fullPath: string }> }
+        expect(status.stagedFiles).toEqual([])
+
+        await expect(request(rpc, 'editor-git-stage-all', { path: rootDir })).resolves.toMatchObject({ success: true })
+        await expect(request(rpc, 'editor-git-commit', { path: rootDir, message: 'update tracked' })).resolves.toMatchObject({ success: true })
+        const log = await request(rpc, 'editor-git-status-v2', { path: rootDir }) as { totalStaged?: number; totalUnstaged?: number }
+        expect(log.totalStaged).toBe(0)
+        expect(log.totalUnstaged).toBe(0)
+    })
+
+    it('requires a commit message and rejects unsafe git file paths', async () => {
+        await initRepo(rootDir)
+        await expect(request(rpc, 'editor-git-commit', { path: rootDir, message: '   ' })).resolves.toMatchObject({
+            success: false,
+            error: 'Commit message is required'
+        })
+        await expect(request(rpc, 'editor-git-stage-file', { path: rootDir, filePath: '../outside.txt' })).resolves.toMatchObject({
+            success: false,
+            error: 'Invalid file path'
         })
     })
 })
