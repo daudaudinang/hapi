@@ -240,6 +240,21 @@ body {
     background-color: transparent !important;
 }
 
+/* Desktop editor embeds chat beside dense file/tree/terminal UI. Keep markdown
+ * readable, but align it with editor chrome instead of full-page chat sizing.
+ */
+@media (min-width: 768px) {
+    .editor-chat--compact .aui-md {
+        font-size: 0.875rem;
+        line-height: 1.25rem;
+    }
+
+    .editor-chat--compact .text-base {
+        font-size: 0.875rem !important;
+        line-height: 1.25rem !important;
+    }
+}
+
 /* Shiki dual theme colors */
 .shiki,
 .shiki span {
