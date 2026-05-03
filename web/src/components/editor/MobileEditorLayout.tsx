@@ -47,6 +47,8 @@ type MobileEditorLayoutProps = {
     onCloseTerminalTab: (tabId: string) => void
     onAddTerminalToChat: (text: string) => void
     onRegisterTerminalClose: (tabId: string, close: (() => void) | null) => void
+    onSaveActiveFile: () => Promise<void>
+    saveActiveFileRef: React.MutableRefObject<(() => Promise<void>) | null>
 }
 
 function getRelativeLabel(projectPath: string | null, path: string | null | undefined): string {
@@ -377,6 +379,7 @@ function MobileSessionTabs(props: {
 }
 
 export function MobileEditorLayout(props: MobileEditorLayoutProps) {
+    const { onSaveActiveFile, saveActiveFileRef } = props
     const [view, setView] = useState<MobileEditorView>('files')
     const [hasOpenedEditorSurface, setHasOpenedEditorSurface] = useState(false)
     const [selectionNoticeVisible, setSelectionNoticeVisible] = useState(false)
@@ -492,15 +495,28 @@ export function MobileEditorLayout(props: MobileEditorLayoutProps) {
             )
         }
         if (view === 'editor') {
+            const isDirty = props.activeFileTab?.dirty === true
             return (
-                <button
-                    type="button"
-                    aria-label="New file"
-                    className="rounded-md border border-[var(--app-border)] px-2 py-1 text-xs font-semibold text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)]"
-                    onClick={openNewFileModal}
-                >
-                    +
-                </button>
+                <div className="flex items-center gap-1.5">
+                    {isDirty ? (
+                        <button
+                            type="button"
+                            aria-label="Save file"
+                            className="rounded-md bg-[#6366f1] px-2 py-1 text-xs font-semibold text-white hover:bg-[#5558e6]"
+                            onClick={() => { void onSaveActiveFile() }}
+                        >
+                            Save
+                        </button>
+                    ) : null}
+                    <button
+                        type="button"
+                        aria-label="New file"
+                        className="rounded-md border border-[var(--app-border)] px-2 py-1 text-xs font-semibold text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)]"
+                        onClick={openNewFileModal}
+                    >
+                        +
+                    </button>
+                </div>
             )
         }
         if (view === 'chat') {
@@ -575,6 +591,8 @@ export function MobileEditorLayout(props: MobileEditorLayoutProps) {
                             onNewFile={props.onNewFileFromTabs}
                             onDirtyChange={props.onDirtyChange}
                             onAddSelectionToChat={handleAddSelectionToChat}
+                            onSaveFile={onSaveActiveFile}
+                            saveRef={saveActiveFileRef}
                             mobileMode={true}
                         />
                     </div>

@@ -107,6 +107,8 @@ function baseProps() {
         onCloseTerminalTab: vi.fn(),
         onAddTerminalToChat: vi.fn(),
         onRegisterTerminalClose: vi.fn(),
+        onSaveActiveFile: vi.fn().mockResolvedValue(undefined),
+        saveActiveFileRef: { current: null },
     }
 }
 

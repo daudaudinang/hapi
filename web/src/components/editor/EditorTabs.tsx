@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { basicSetup, EditorView } from 'codemirror'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { javascript } from '@codemirror/lang-javascript'
@@ -296,6 +296,7 @@ export function EditorTabs(props: {
     onSaveFile?: (path: string, content: string) => Promise<void>
     onAddSelectionToChat?: (filePath: string, startLine: number, endLine: number, content: string) => void
     mobileMode?: boolean
+    saveRef?: React.MutableRefObject<(() => Promise<void>) | null>
 }) {
     const fileContentsRef = useRef<Map<string, string>>(new Map())
     const [savingTabId, setSavingTabId] = useState<string | null>(null)
@@ -414,6 +415,11 @@ export function EditorTabs(props: {
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
     }, [saveActiveFile])
+
+    useEffect(() => {
+        props.saveRef!.current = saveActiveFile
+        return () => { props.saveRef!.current = null }
+    }, [saveActiveFile, props.saveRef])
 
     return (
         <div data-testid="editor-tabs-root" className="flex h-full min-h-0 flex-col overflow-hidden">
