@@ -21,7 +21,7 @@ import {
     type RpcCommandResponse,
     type RpcDeleteUploadResponse,
     type RpcEditorFileMutationResponse,
-    type RpcEditorGitStatusResponse, RpcEditorGitListBranchesResponse, RpcEditorGitBranch,
+    type RpcEditorGitStatusResponse, RpcEditorGitListBranchesResponse, RpcEditorGitStashListResponse, RpcEditorGitStashEntry, RpcEditorGitBranch,
     type RpcEditorProjectsResponse,
     type RpcListDirectoryResponse,
     type RpcListCodexModelsResponse,
@@ -650,6 +650,26 @@ export class SyncEngine {
     async fetchEditorGit(machineId: string, path: string, repoRoot?: string): Promise<RpcCommandResponse> {
         return await this.rpcGateway.editorGitFetch(machineId, path, repoRoot)
     }
+    async discardEditorGitFile(machineId: string, path: string, filePath: string, repoRoot?: string): Promise<RpcCommandResponse> {
+        return await this.rpcGateway.editorGitDiscardFile(machineId, path, filePath, repoRoot)
+    }
+
+    async discardAllEditorGit(machineId: string, path: string, repoRoot?: string): Promise<RpcCommandResponse> {
+        return await this.rpcGateway.editorGitDiscardAll(machineId, path, repoRoot)
+    }
+
+    async listEditorGitStashes(machineId: string, path: string, repoRoot?: string): Promise<RpcEditorGitStashListResponse> {
+        return await this.rpcGateway.editorGitStashList(machineId, path, repoRoot)
+    }
+
+    async stashPushEditorGit(machineId: string, path: string, repoRoot?: string): Promise<RpcCommandResponse> {
+        return await this.rpcGateway.editorGitStashPush(machineId, path, repoRoot)
+    }
+
+    async stashPopEditorGit(machineId: string, path: string, repoRoot?: string): Promise<RpcCommandResponse> {
+        return await this.rpcGateway.editorGitStashPop(machineId, path, repoRoot)
+    }
+
 
 
     async writeEditorFile(machineId: string, path: string, content: string): Promise<RpcEditorFileMutationResponse> {

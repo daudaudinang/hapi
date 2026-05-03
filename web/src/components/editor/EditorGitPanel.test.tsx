@@ -16,16 +16,39 @@ function renderPanel(api: Partial<ApiClient>) {
 const defaultBranches = {
     listEditorGitBranches: vi.fn().mockResolvedValue({
         success: true,
-        branches: [{ name: 'main', isCurrent: true }, { name: 'feature-a', isCurrent: false }],
+        branches: [{ name: 'main', isCurrent: true }],
         currentBranch: 'main'
     })
 }
 
+const defaultStashes = {
+    listEditorGitStashes: vi.fn().mockResolvedValue({
+        success: true,
+        stashes: []
+    })
+}
+
+const readyStatus = {
+    success: true,
+    state: 'ready' as const,
+    repositories: [{ root: '/repo', name: 'repo', branch: 'main', state: 'ready' as const }],
+    activeRepository: { root: '/repo', name: 'repo', branch: 'main', state: 'ready' as const },
+    branch: 'main',
+    ahead: 0,
+    behind: 0,
+    stagedFiles: [{ fileName: 'Added.tsx', filePath: 'src', fullPath: 'src/Added.tsx', status: 'added' as const, isStaged: true, linesAdded: 10, linesRemoved: 0 }],
+    unstagedFiles: [{ fileName: 'App.tsx', filePath: 'src', fullPath: 'src/App.tsx', status: 'modified' as const, isStaged: false, linesAdded: 2, linesRemoved: 1 }],
+    totalStaged: 1,
+    totalUnstaged: 1
+}
+
 describe('EditorGitPanel', () => {
     afterEach(() => { cleanup() })
+
     it('shows no repository empty state', async () => {
         renderPanel({
             ...defaultBranches,
+            ...defaultStashes,
             getEditorGitStatusV2: vi.fn().mockResolvedValue({
                 success: true,
                 state: 'notRepository',
@@ -42,19 +65,8 @@ describe('EditorGitPanel', () => {
     it('renders staged and unstaged groups and stages a file', async () => {
         const api = {
             ...defaultBranches,
-            getEditorGitStatusV2: vi.fn().mockResolvedValue({
-                success: true,
-                state: 'ready',
-                repositories: [{ root: '/repo', name: 'repo', branch: 'main', state: 'ready' }],
-                activeRepository: { root: '/repo', name: 'repo', branch: 'main', state: 'ready' },
-                branch: 'main',
-                ahead: 1,
-                behind: 0,
-                stagedFiles: [{ fileName: 'Added.tsx', filePath: 'src', fullPath: 'src/Added.tsx', status: 'added', isStaged: true, linesAdded: 10, linesRemoved: 0 }],
-                unstagedFiles: [{ fileName: 'App.tsx', filePath: 'src', fullPath: 'src/App.tsx', status: 'modified', isStaged: false, linesAdded: 2, linesRemoved: 1 }],
-                totalStaged: 1,
-                totalUnstaged: 1
-            }),
+            ...defaultStashes,
+            getEditorGitStatusV2: vi.fn().mockResolvedValue({ ...readyStatus, ahead: 1 }),
             stageEditorGitFile: vi.fn().mockResolvedValue({ success: true })
         }
         renderPanel(api)
@@ -67,15 +79,9 @@ describe('EditorGitPanel', () => {
     it('requires commit message before committing', async () => {
         const api = {
             ...defaultBranches,
+            ...defaultStashes,
             getEditorGitStatusV2: vi.fn().mockResolvedValue({
-                success: true,
-                state: 'ready',
-                repositories: [{ root: '/repo', name: 'repo', branch: 'main', state: 'ready' }],
-                activeRepository: { root: '/repo', name: 'repo', branch: 'main', state: 'ready' },
-                stagedFiles: [],
-                unstagedFiles: [],
-                totalStaged: 0,
-                totalUnstaged: 0
+                ...readyStatus, stagedFiles: [], unstagedFiles: [], totalStaged: 0, totalUnstaged: 0
             }),
             commitEditorGit: vi.fn()
         }
@@ -88,90 +94,45 @@ describe('EditorGitPanel', () => {
     it('shows branch picker with current branch', async () => {
         renderPanel({
             ...defaultBranches,
+            ...defaultStashes,
             getEditorGitStatusV2: vi.fn().mockResolvedValue({
-                success: true,
-                state: 'ready',
-                repositories: [{ root: '/repo', name: 'repo', branch: 'main', state: 'ready' }],
-                activeRepository: { root: '/repo', name: 'repo', branch: 'main', state: 'ready' },
-                branch: 'main',
-                ahead: 0,
-                behind: 0,
-                stagedFiles: [],
-                unstagedFiles: [],
-                totalStaged: 0,
-                totalUnstaged: 0
+                ...readyStatus, stagedFiles: [], unstagedFiles: [], totalStaged: 0, totalUnstaged: 0
             })
         })
         expect(await screen.findByText('main')).toBeInTheDocument()
     })
 
-    it('opens branch picker and shows branches', async () => {
-        renderPanel({
-            ...defaultBranches,
-            getEditorGitStatusV2: vi.fn().mockResolvedValue({
-                success: true,
-                state: 'ready',
-                repositories: [{ root: '/repo', name: 'repo', branch: 'main', state: 'ready' }],
-                activeRepository: { root: '/repo', name: 'repo', branch: 'main', state: 'ready' },
-                branch: 'main',
-                ahead: 0,
-                behind: 0,
-                stagedFiles: [],
-                unstagedFiles: [],
-                totalStaged: 0,
-                totalUnstaged: 0
-            })
-        })
-        fireEvent.click(await screen.findByRole('button', { name: 'Select branch' }))
-        expect(await screen.findByText('feature-a')).toBeInTheDocument()
-    })
-
-    it('switches branch on click', async () => {
+    it('shows discard button and confirms discard', async () => {
         const api = {
             ...defaultBranches,
-            getEditorGitStatusV2: vi.fn().mockResolvedValue({
-                success: true,
-                state: 'ready',
-                repositories: [{ root: '/repo', name: 'repo', branch: 'main', state: 'ready' }],
-                activeRepository: { root: '/repo', name: 'repo', branch: 'main', state: 'ready' },
-                branch: 'main',
-                ahead: 0,
-                behind: 0,
-                stagedFiles: [],
-                unstagedFiles: [],
-                totalStaged: 0,
-                totalUnstaged: 0
-            }),
-            checkoutEditorGitBranch: vi.fn().mockResolvedValue({ success: true })
+            ...defaultStashes,
+            getEditorGitStatusV2: vi.fn().mockResolvedValue(readyStatus),
+            discardEditorGitFile: vi.fn().mockResolvedValue({ success: true })
         }
         renderPanel(api)
-        fireEvent.click(await screen.findByRole('button', { name: 'Select branch' }))
-        fireEvent.click(await screen.findByText('feature-a'))
-        await waitFor(() => expect(api.checkoutEditorGitBranch).toHaveBeenCalledWith('machine-1', '/repo', 'feature-a', '/repo'))
+        const discardBtn = await screen.findByRole('button', { name: 'Discard changes to src/App.tsx' })
+        expect(discardBtn).toBeInTheDocument()
+        fireEvent.click(discardBtn)
+        expect(await screen.findByText(/Discard changes to/)).toBeInTheDocument()
+        fireEvent.click(screen.getByText('Discard'))
+        await waitFor(() => expect(api.discardEditorGitFile).toHaveBeenCalledWith('machine-1', '/repo', 'src/App.tsx', '/repo'))
     })
 
-    it('creates a new branch', async () => {
+    it('shows stash section with Stash all button', async () => {
         const api = {
             ...defaultBranches,
-            getEditorGitStatusV2: vi.fn().mockResolvedValue({
+            getEditorGitStatusV2: vi.fn().mockResolvedValue(readyStatus),
+            listEditorGitStashes: vi.fn().mockResolvedValue({
                 success: true,
-                state: 'ready',
-                repositories: [{ root: '/repo', name: 'repo', branch: 'main', state: 'ready' }],
-                activeRepository: { root: '/repo', name: 'repo', branch: 'main', state: 'ready' },
-                branch: 'main',
-                ahead: 0,
-                behind: 0,
-                stagedFiles: [],
-                unstagedFiles: [],
-                totalStaged: 0,
-                totalUnstaged: 0
+                stashes: []
             }),
-            createEditorGitBranch: vi.fn().mockResolvedValue({ success: true })
+            stashPushEditorGit: vi.fn().mockResolvedValue({ success: true }),
+            stashPopEditorGit: vi.fn().mockResolvedValue({ success: true })
         }
         renderPanel(api)
-        const input = await screen.findByRole('textbox', { name: 'New branch name' })
-        fireEvent.change(input, { target: { value: 'feature-b' } })
-        fireEvent.click(screen.getByRole('button', { name: 'Create branch' }))
-        await waitFor(() => expect(api.createEditorGitBranch).toHaveBeenCalledWith('machine-1', '/repo', 'feature-b', '/repo'))
+        expect(await screen.findByText('Stashes')).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Stash all" })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Stash all' }))
+        await waitFor(() => expect(api.stashPushEditorGit).toHaveBeenCalled())
     })
 })

@@ -493,7 +493,13 @@ export function EditorLayout(props: {
         setNewFileTargetPath(targetPath)
     }, [])
 
-    const handleNewFileFromTabs = useCallback(() => {
+        const saveActiveFileRef = useRef<(() => Promise<void>) | null>(null)
+
+    const handleSaveActiveFile = useCallback(async () => {
+        await saveActiveFileRef.current?.()
+    }, [])
+
+const handleNewFileFromTabs = useCallback(() => {
         setNewFileTargetPath(activeFilePath ?? editor.projectPath)
     }, [activeFilePath, editor.projectPath])
 
@@ -624,6 +630,8 @@ export function EditorLayout(props: {
                     onCloseTerminalTab={editor.closeTab}
                     onAddTerminalToChat={handleAddTerminalToChat}
                     onRegisterTerminalClose={handleRegisterTerminalClose}
+                onSaveActiveFile={handleSaveActiveFile}
+                saveActiveFileRef={saveActiveFileRef}
                 />
                 <EditorContextMenu
                     filePath={editor.contextMenuFile}
@@ -742,6 +750,7 @@ export function EditorLayout(props: {
                                 onNewFile={handleNewFileFromTabs}
                                 onDirtyChange={editor.setTabDirty}
                                 onAddSelectionToChat={handleAddSelectionToChat}
+                            saveRef={saveActiveFileRef}
                             />
                         )}
                     </div>

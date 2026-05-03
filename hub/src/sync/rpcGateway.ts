@@ -124,6 +124,18 @@ export type RpcEditorGitListBranchesResponse = {
     currentBranch: string | null
     error?: string
 }
+export type RpcEditorGitStashEntry = {
+    index: number
+    branch: string
+    message: string
+}
+
+export type RpcEditorGitStashListResponse = {
+    success: boolean
+    stashes: RpcEditorGitStashEntry[]
+    error?: string
+}
+
 
 
 export class RpcGateway {
@@ -363,6 +375,36 @@ export class RpcGateway {
         if (!result || typeof result !== 'object') return { success: false, error: 'Unexpected editor-git-fetch result' }
         return result as RpcCommandResponse
     }
+    async editorGitDiscardFile(machineId: string, path: string, filePath: string, repoRoot?: string): Promise<RpcCommandResponse> {
+        const result = await this.machineRpc(machineId, 'editor-git-discard-file', { path, repoRoot, filePath }) as RpcCommandResponse | unknown
+        if (!result || typeof result !== 'object') return { success: false, error: 'Unexpected editor-git-discard-file result' }
+        return result as RpcCommandResponse
+    }
+
+    async editorGitDiscardAll(machineId: string, path: string, repoRoot?: string): Promise<RpcCommandResponse> {
+        const result = await this.machineRpc(machineId, 'editor-git-discard-all', { path, repoRoot }) as RpcCommandResponse | unknown
+        if (!result || typeof result !== 'object') return { success: false, error: 'Unexpected editor-git-discard-all result' }
+        return result as RpcCommandResponse
+    }
+
+    async editorGitStashList(machineId: string, path: string, repoRoot?: string): Promise<RpcEditorGitStashListResponse> {
+        const result = await this.machineRpc(machineId, 'editor-git-stash-list', { path, repoRoot }) as RpcEditorGitStashListResponse | unknown
+        if (!result || typeof result !== 'object') return { success: false, stashes: [], error: 'Unexpected editor-git-stash-list result' }
+        return result as RpcEditorGitStashListResponse
+    }
+
+    async editorGitStashPush(machineId: string, path: string, repoRoot?: string): Promise<RpcCommandResponse> {
+        const result = await this.machineRpc(machineId, 'editor-git-stash-push', { path, repoRoot }) as RpcCommandResponse | unknown
+        if (!result || typeof result !== 'object') return { success: false, error: 'Unexpected editor-git-stash-push result' }
+        return result as RpcCommandResponse
+    }
+
+    async editorGitStashPop(machineId: string, path: string, repoRoot?: string): Promise<RpcCommandResponse> {
+        const result = await this.machineRpc(machineId, 'editor-git-stash-pop', { path, repoRoot }) as RpcCommandResponse | unknown
+        if (!result || typeof result !== 'object') return { success: false, error: 'Unexpected editor-git-stash-pop result' }
+        return result as RpcCommandResponse
+    }
+
 
     async editorWriteFile(machineId: string, path: string, content: string): Promise<RpcEditorFileMutationResponse> {
         const result = await this.machineRpc(machineId, 'editor-write-file', { path, content }) as RpcEditorFileMutationResponse | unknown

@@ -72,6 +72,20 @@ type EditorGitListBranchesResponse = {
 
 type EditorGitCheckoutRequest = EditorGitPathRequest & { branch?: string }
 type EditorGitCreateBranchRequest = EditorGitPathRequest & { branch?: string }
+type EditorGitStashEntry = {
+    index: number
+    branch: string
+    message: string
+}
+
+type EditorGitStashListResponse = {
+    success: boolean
+    stashes: EditorGitStashEntry[]
+    error?: string
+}
+
+type EditorGitDiscardRequest = EditorGitPathRequest & { filePath?: string }
+
 
 
 const execGit = execFileAsync as (file: string, args: string[], options: ExecFileOptions) => Promise<{ stdout: string | Buffer; stderr: string | Buffer }>
@@ -508,6 +522,54 @@ export function registerEditorGitRpcHandlers(rpcHandlerManager: RpcHandlerManage
         const repo = await resolveCommandRepo(data ?? {}, editorRoot)
         if (!repo.repoRoot) return rpcError(repo.error ?? 'No Git repository found', { state: repo.state })
         return await runGit(['fetch', '--all', '--prune'], repo.repoRoot)
+    })
+
+    rpcHandlerManager.registerHandler<EditorGitDiscardRequest>('editor-git-discard-file', async (data) => {
+        const repo = await resolveCommandRepo(data ?? {}, editorRoot)
+        if (!repo.repoRoot) return rpcError(repo.error ?? 'No Git repository found', { state: repo.state })
+        const filePath = validateRelativeGitPath(data?.filePath)
+        if (!filePath) return rpcError('Invalid file path')
+        return await runGit(['checkout', '--', filePath], repo.repoRoot)
+    })
+
+    rpcHandlerManager.registerHandler<EditorGitDiscardRequest>('editor-git-discard-all', async (data) => {
+        const repo = await resolveCommandRepo(data ?? {}, editorRoot)
+        if (!repo.repoRoot) return rpcError(repo.error ?? 'No Git repository found', { state: repo.state })
+        return await runGit(['checkout', '--', '.'], repo.repoRoot)
+    })
+
+    rpcHandlerManager.registerHandler<EditorGitPathRequest>('editor-git-stash-list', async (data) => {
+        const repo = await resolveCommandRepo(data ?? {}, editorRoot)
+        if (!repo.repoRoot) return { success: false, stashes: [], error: repo.error ?? 'No Git repository found' }
+        
+        const result = await runGit(['stash', 'list', '--pretty=format:%gd|%gs'], repo.repoRoot)
+        if (!result.success) return { success: false, stashes: [], error: result.error ?? result.stderr ?? 'Failed to list stashes' }
+        
+        const stashes: EditorGitStashEntry[] = (result.stdout ?? '').split('\n').filter(Boolean).map((line, idx) => {
+            const [ref, ...msgParts] = line.split('|')
+            const message = msgParts.join('|')
+            // Extract branch from message like "WIP on main: abc123"
+            const branchMatch = /^WIP on (S+)/.exec(message)
+            return {
+                index: idx,
+                branch: branchMatch?.[1] ?? 'unknown',
+                message: message || ref || 'Untitled stash'
+            }
+        })
+        
+        return { success: true, stashes }
+    })
+
+    rpcHandlerManager.registerHandler<EditorGitPathRequest>('editor-git-stash-push', async (data) => {
+        const repo = await resolveCommandRepo(data ?? {}, editorRoot)
+        if (!repo.repoRoot) return rpcError(repo.error ?? 'No Git repository found', { state: repo.state })
+        return await runGit(['stash', 'push', '--include-untracked', '-m', 'HAPI editor stash'], repo.repoRoot)
+    })
+
+    rpcHandlerManager.registerHandler<EditorGitPathRequest>('editor-git-stash-pop', async (data) => {
+        const repo = await resolveCommandRepo(data ?? {}, editorRoot)
+        if (!repo.repoRoot) return rpcError(repo.error ?? 'No Git repository found', { state: repo.state })
+        return await runGit(['stash', 'pop'], repo.repoRoot)
     })
 
 }

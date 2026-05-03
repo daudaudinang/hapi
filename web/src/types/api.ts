@@ -333,4 +333,16 @@ export type EditorGitListBranchesResponse = {
     currentBranch: string | null
     error?: string
 }
+export type EditorGitStashEntry = {
+    index: number
+    branch: string
+    message: string
+}
+
+export type EditorGitStashListResponse = {
+    success: boolean
+    stashes: EditorGitStashEntry[]
+    error?: string
+}
+
 
