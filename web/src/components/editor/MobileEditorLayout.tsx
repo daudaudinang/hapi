@@ -591,7 +591,6 @@ export function MobileEditorLayout(props: MobileEditorLayoutProps) {
                             onNewFile={props.onNewFileFromTabs}
                             onDirtyChange={props.onDirtyChange}
                             onAddSelectionToChat={handleAddSelectionToChat}
-                            onSaveFile={onSaveActiveFile}
                             saveRef={saveActiveFileRef}
                             mobileMode={true}
                         />

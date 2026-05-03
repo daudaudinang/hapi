@@ -750,7 +750,6 @@ const handleNewFileFromTabs = useCallback(() => {
                                 onNewFile={handleNewFileFromTabs}
                                 onDirtyChange={editor.setTabDirty}
                                 onAddSelectionToChat={handleAddSelectionToChat}
-                            onSaveFile={handleSaveActiveFile}
                             saveRef={saveActiveFileRef}
                             />
                         )}
