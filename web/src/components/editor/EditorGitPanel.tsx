@@ -1,13 +1,15 @@
-// TODO: Inline diff viewer — useEditorGitDiff hook and /api/editor/git-diff-file endpoint are ready; add click-to-expand diff in FileRow
+// TODO: Hunk-level staging (git add -p) — future Phase 3 enhancement
 import { useCallback, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { ApiClient } from '@/api/client'
 import type { EditorGitFile, EditorGitRepository } from '@/types/api'
 import { useEditorGitStatus } from '@/hooks/queries/useEditorGitStatus'
 import { useEditorGitBranches } from '@/hooks/queries/useEditorGitBranches'
+import { useEditorGitDiff } from '@/hooks/queries/useEditorGitDiff'
+import { useEditorGitStashes } from '@/hooks/queries/useEditorGitStashes'
 import { queryKeys } from '@/lib/query-keys'
 
-type ActionName = 'commit' | 'pull' | 'push' | 'fetch' | 'stage-all' | 'unstage-all' | 'checkout' | 'create-branch' | (string & {})
+type ActionName = 'commit' | 'pull' | 'push' | 'fetch' | 'stage-all' | 'unstage-all' | 'discard-all' | 'checkout' | 'create-branch' | 'stash-push' | 'stash-pop' | (string & {})
 
 function statusLabel(status: EditorGitFile['status']): string {
     if (status === 'added') return 'A'
@@ -40,32 +42,84 @@ function LineChanges(props: { added: number; removed: number }) {
     )
 }
 
+function InlineDiff(props: {
+    api: ApiClient | null
+    machineId: string
+    projectPath: string
+    filePath: string
+    staged?: boolean
+    repoRoot?: string
+}) {
+    const query = useEditorGitDiff(props.api, props.machineId, props.projectPath, props.filePath, props.staged, props.repoRoot)
+    if (query.isLoading) {
+        return <div className="py-2 text-center text-[10px] text-[var(--app-hint)]"><Spinner /> Loading diff...</div>
+    }
+    const stdout = query.data?.stdout
+    const stderr = query.data?.stderr
+    if (stdout) {
+        return <pre className="overflow-x-auto font-mono text-[11px] leading-relaxed text-[var(--app-fg)] whitespace-pre select-text">{stdout}</pre>
+    }
+    if (stderr) {
+        return <pre className="overflow-x-auto font-mono text-[11px] leading-relaxed text-red-500 whitespace-pre select-text">{stderr}</pre>
+    }
+    return <div className="py-1 text-[10px] text-[var(--app-hint)]">No diff available</div>
+}
+
 function FileRow(props: {
     file: EditorGitFile
     actionLabel: 'Stage' | 'Unstage'
     actionLoading: boolean
+    expanded: boolean
+    showDiscard: boolean
+    discardLoading: boolean
+    diffView: React.ReactNode | null
     onAction: () => void
     onOpenFile: () => void
+    onToggleExpand: () => void
+    onDiscard: () => void
 }) {
     return (
-        <div className="group flex items-center gap-2 px-2 py-1.5 text-xs hover:bg-[var(--app-subtle-bg)]">
-            <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={props.onOpenFile}>
-                <span className="w-4 shrink-0 text-center font-semibold" style={{ color: statusColor(props.file.status) }}>{statusLabel(props.file.status)}</span>
-                <span className="min-w-0 flex-1 truncate text-[var(--app-fg)]">{props.file.fullPath}</span>
-                <LineChanges added={props.file.linesAdded} removed={props.file.linesRemoved} />
-            </button>
-            {props.actionLoading ? (
-                <span className="px-1.5 py-0.5"><Spinner /></span>
-            ) : (
-                <button
-                    type="button"
-                    aria-label={`${props.actionLabel} ${props.file.fullPath}`}
-                    className="rounded px-1.5 py-0.5 text-[10px] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
-                    onClick={props.onAction}
-                >
-                    {props.actionLabel === 'Stage' ? '+' : '−'}
+        <div>
+            <div className="group flex items-center gap-2 px-2 py-1.5 text-xs hover:bg-[var(--app-subtle-bg)]">
+                <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={props.onToggleExpand}>
+                    <span className="w-3 shrink-0 text-center text-[10px] text-[var(--app-hint)]">{props.expanded ? '▾' : '▸'}</span>
+                    <span className="w-4 shrink-0 text-center font-semibold" style={{ color: statusColor(props.file.status) }}>{statusLabel(props.file.status)}</span>
+                    <span className="min-w-0 flex-1 truncate text-[var(--app-fg)]" onClick={(e) => { e.stopPropagation(); props.onOpenFile() }}>{props.file.fullPath}</span>
+                    <LineChanges added={props.file.linesAdded} removed={props.file.linesRemoved} />
                 </button>
-            )}
+                {props.showDiscard ? (
+                    props.discardLoading ? (
+                        <span className="px-1 py-0.5"><Spinner /></span>
+                    ) : (
+                        <button
+                            type="button"
+                            aria-label={`Discard changes to ${props.file.fullPath}`}
+                            className="rounded px-1.5 py-0.5 text-[10px] text-red-500 hover:bg-red-500/10"
+                            onClick={props.onDiscard}
+                            title="Discard changes"
+                        >
+                            ✕
+                        </button>
+                    )
+                ) : null}
+                {props.actionLoading ? (
+                    <span className="px-1.5 py-0.5"><Spinner /></span>
+                ) : (
+                    <button
+                        type="button"
+                        aria-label={`${props.actionLabel} ${props.file.fullPath}`}
+                        className="rounded px-1.5 py-0.5 text-[10px] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
+                        onClick={props.onAction}
+                    >
+                        {props.actionLabel === 'Stage' ? '+' : '−'}
+                    </button>
+                )}
+            </div>
+            {props.expanded && props.diffView ? (
+                <div className="border-b border-[var(--app-divider)] bg-[var(--app-bg)] px-4 py-2">
+                    {props.diffView}
+                </div>
+            ) : null}
         </div>
     )
 }
@@ -101,6 +155,8 @@ export function EditorGitPanel(props: {
     const [actionLoading, setActionLoading] = useState<ActionName | null>(null)
     const [newBranchName, setNewBranchName] = useState('')
     const [branchPickerOpen, setBranchPickerOpen] = useState(false)
+    const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set())
+    const [discardConfirm, setDiscardConfirm] = useState<string | null>(null)
 
     const query = useEditorGitStatus(props.api, props.machineId, props.projectPath, repoRoot)
     const status = query.data?.status ?? null
@@ -109,6 +165,9 @@ export function EditorGitPanel(props: {
     const branchesQuery = useEditorGitBranches(props.api, props.machineId, props.projectPath, activeRepoRoot)
     const branches = branchesQuery.data?.branches ?? []
     const currentBranch = branchesQuery.data?.currentBranch ?? status?.branch ?? null
+
+    const stashesQuery = useEditorGitStashes(props.api, props.machineId, props.projectPath, activeRepoRoot)
+    const stashes = stashesQuery.data?.stashes ?? []
 
     const totalChanges = (status?.totalStaged ?? 0) + (status?.totalUnstaged ?? 0)
     const branchLabel = useMemo(() => {
@@ -119,11 +178,21 @@ export function EditorGitPanel(props: {
         return `${branch}${ahead}${behind}`
     }, [status])
 
+    const toggleExpand = useCallback((filePath: string) => {
+        setExpandedFiles(prev => {
+            const next = new Set(prev)
+            if (next.has(filePath)) next.delete(filePath)
+            else next.add(filePath)
+            return next
+        })
+    }, [])
+
     const invalidate = useCallback(async () => {
         if (!props.machineId || !props.projectPath) return
         await queryClient.invalidateQueries({ queryKey: queryKeys.editorGitStatusBase(props.machineId, props.projectPath) })
         await queryClient.invalidateQueries({ queryKey: queryKeys.editorDirectoryBase(props.machineId) })
         await queryClient.invalidateQueries({ queryKey: queryKeys.editorGitBranches(props.machineId, props.projectPath, activeRepoRoot) })
+        await queryClient.invalidateQueries({ queryKey: queryKeys.editorGitStashes(props.machineId, props.projectPath, activeRepoRoot) })
     }, [props.machineId, props.projectPath, queryClient, activeRepoRoot])
 
     const runAction = useCallback(async (name: ActionName, fn: () => Promise<{ success: boolean; error?: string; stderr?: string }>) => {
@@ -165,6 +234,47 @@ export function EditorGitPanel(props: {
             </div>
         )
     }
+
+    const renderedStaged = (status?.stagedFiles ?? []).map((file) => {
+        const key = `staged:${file.fullPath}`
+        return (
+            <FileRow
+                key={`staged-${file.fullPath}`}
+                file={file}
+                actionLabel="Unstage"
+                actionLoading={isLoading(`unstage:${file.fullPath}`)}
+                expanded={expandedFiles.has(key)}
+                showDiscard={false}
+                discardLoading={false}
+                diffView={expandedFiles.has(key) ? <InlineDiff api={props.api} machineId={props.machineId!} projectPath={props.projectPath!} filePath={file.fullPath} staged={true} repoRoot={activeRepoRoot} /> : null}
+                onOpenFile={() => props.onOpenFile(file.fullPath)}
+                onToggleExpand={() => toggleExpand(key)}
+                onAction={() => { void runAction(`unstage:${file.fullPath}`, async () => props.api!.unstageEditorGitFile(props.machineId!, props.projectPath!, file.fullPath, activeRepoRoot)) }}
+                onDiscard={() => {}}
+            />
+        )
+    })
+
+    const renderedUnstaged = (status?.unstagedFiles ?? []).map((file) => {
+        const key = `unstaged:${file.fullPath}`
+        const isConfirmingDiscard = discardConfirm === file.fullPath
+        return (
+            <FileRow
+                key={`unstaged-${file.fullPath}`}
+                file={file}
+                actionLabel="Stage"
+                actionLoading={isLoading(`stage:${file.fullPath}`)}
+                expanded={expandedFiles.has(key)}
+                showDiscard={!isConfirmingDiscard}
+                discardLoading={isLoading(`discard:${file.fullPath}`)}
+                diffView={expandedFiles.has(key) ? <InlineDiff api={props.api} machineId={props.machineId!} projectPath={props.projectPath!} filePath={file.fullPath} staged={false} repoRoot={activeRepoRoot} /> : null}
+                onOpenFile={() => props.onOpenFile(file.fullPath)}
+                onToggleExpand={() => toggleExpand(key)}
+                onAction={() => { void runAction(`stage:${file.fullPath}`, async () => props.api!.stageEditorGitFile(props.machineId!, props.projectPath!, file.fullPath, activeRepoRoot)) }}
+                onDiscard={() => setDiscardConfirm(file.fullPath)}
+            />
+        )
+    })
 
     return (
         <div className="flex h-full flex-col overflow-hidden" data-testid="editor-git-panel">
@@ -299,6 +409,7 @@ export function EditorGitPanel(props: {
                 {actionError ? <div className="mt-2 rounded border border-red-500/40 bg-red-500/10 px-2 py-1 text-xs text-red-500">{actionError}</div> : null}
             </div>
             <div className="min-h-0 flex-1 overflow-auto py-1">
+                {/* Staged Changes */}
                 <div className="flex items-center gap-2 border-b border-[var(--app-divider)] px-2 py-1.5 text-xs font-semibold">
                     <span>Staged Changes</span>
                     <span className="text-[var(--app-hint)]">{status?.totalStaged ?? 0}</span>
@@ -309,37 +420,79 @@ export function EditorGitPanel(props: {
                         <button type="button" className="text-[10px] text-[var(--app-hint)]" disabled={!props.api} onClick={() => { void runAction('unstage-all', async () => props.api!.unstageAllEditorGit(props.machineId!, props.projectPath!, activeRepoRoot)) }}>Unstage all</button>
                     )}
                 </div>
-                {(status?.stagedFiles ?? []).map((file) => (
-                    <FileRow
-                        key={`staged-${file.fullPath}`}
-                        file={file}
-                        actionLabel="Unstage"
-                        actionLoading={isLoading(`unstage:${file.fullPath}`)}
-                        onOpenFile={() => props.onOpenFile(file.fullPath)}
-                        onAction={() => { void runAction(`unstage:${file.fullPath}`, async () => props.api!.unstageEditorGitFile(props.machineId!, props.projectPath!, file.fullPath, activeRepoRoot)) }}
-                    />
-                ))}
+                {renderedStaged}
+
+                {/* Unstaged Changes */}
                 <div className="flex items-center gap-2 border-y border-[var(--app-divider)] px-2 py-1.5 text-xs font-semibold">
                     <span>Changes</span>
                     <span className="text-[var(--app-hint)]">{status?.totalUnstaged ?? 0}</span>
                     <span className="flex-1" />
+                    {isLoading('discard-all') ? (
+                        <Spinner />
+                    ) : discardConfirm === '__all__' ? (
+                        <span className="flex items-center gap-1">
+                            <span className="text-[10px] text-red-500">Discard all?</span>
+                            <button type="button" className="text-[10px] text-red-500 font-semibold" onClick={() => { setDiscardConfirm(null); void runAction('discard-all', async () => props.api!.discardAllEditorGit(props.machineId!, props.projectPath!, activeRepoRoot)) }}>Yes</button>
+                            <button type="button" className="text-[10px] text-[var(--app-hint)]" onClick={() => setDiscardConfirm(null)}>No</button>
+                        </span>
+                    ) : (
+                        <button type="button" className="text-[10px] text-red-500" disabled={!props.api || (status?.totalUnstaged ?? 0) === 0} onClick={() => setDiscardConfirm('__all__')}>Discard all</button>
+                    )}
+                    <span className="w-1" />
                     {isLoading('stage-all') ? (
                         <Spinner />
                     ) : (
                         <button type="button" className="text-[10px] text-[var(--app-hint)]" disabled={!props.api} onClick={() => { void runAction('stage-all', async () => props.api!.stageAllEditorGit(props.machineId!, props.projectPath!, activeRepoRoot)) }}>Stage all</button>
                     )}
                 </div>
-                {(status?.unstagedFiles ?? []).map((file) => (
-                    <FileRow
-                        key={`unstaged-${file.fullPath}`}
-                        file={file}
-                        actionLabel="Stage"
-                        actionLoading={isLoading(`stage:${file.fullPath}`)}
-                        onOpenFile={() => props.onOpenFile(file.fullPath)}
-                        onAction={() => { void runAction(`stage:${file.fullPath}`, async () => props.api!.stageEditorGitFile(props.machineId!, props.projectPath!, file.fullPath, activeRepoRoot)) }}
-                    />
-                ))}
+                {renderedUnstaged}
+
+                {/* Discard confirmation bar */}
+                {discardConfirm && discardConfirm !== '__all__' ? (
+                    <div className="flex items-center gap-2 border-b border-[var(--app-divider)] bg-red-500/5 px-2 py-1.5 text-xs">
+                        <span className="flex-1 text-red-500">Discard changes to <span className="font-semibold">{discardConfirm}</span>?</span>
+                        <button type="button" className="rounded bg-red-500 px-2 py-0.5 text-[10px] font-semibold text-white" onClick={() => { const fp = discardConfirm; setDiscardConfirm(null); void runAction(`discard:${fp}`, async () => props.api!.discardEditorGitFile(props.machineId!, props.projectPath!, fp, activeRepoRoot)) }}>Discard</button>
+                        <button type="button" className="rounded border border-[var(--app-border)] px-2 py-0.5 text-[10px] text-[var(--app-hint)]" onClick={() => setDiscardConfirm(null)}>Cancel</button>
+                    </div>
+                ) : null}
+
                 {totalChanges === 0 ? <div className="p-3 text-xs text-[var(--app-hint)]">No changes</div> : null}
+
+                {/* Stashes */}
+                <div className="flex items-center gap-2 border-y border-[var(--app-divider)] px-2 py-1.5 text-xs font-semibold">
+                    <span>Stashes</span>
+                    <span className="text-[var(--app-hint)]">{stashes.length}</span>
+                    <span className="flex-1" />
+                    {isLoading('stash-push') ? (
+                        <Spinner />
+                    ) : (
+                        <button type="button" className="text-[10px] text-[var(--app-hint)]" disabled={!props.api || totalChanges === 0} onClick={() => { void runAction('stash-push', async () => props.api!.stashPushEditorGit(props.machineId!, props.projectPath!, activeRepoRoot)) }}>Stash all</button>
+                    )}
+                </div>
+                {stashes.length === 0 ? (
+                    <div className="p-3 text-xs text-[var(--app-hint)]">No stashes</div>
+                ) : (
+                    stashes.map((stash) => (
+                        <div key={stash.index} className="flex items-center gap-2 border-b border-[var(--app-divider)] px-2 py-1.5 text-xs hover:bg-[var(--app-subtle-bg)]">
+                            <span className="min-w-0 flex-1 truncate text-[var(--app-fg)]">
+                                <span className="text-[var(--app-hint)]">{stash.branch}</span>
+                                {' '}{stash.message.replace(/^WIP on \S+: /, '')}
+                            </span>
+                            {isLoading(`stash-pop:${stash.index}`) ? (
+                                <Spinner />
+                            ) : (
+                                <button
+                                    type="button"
+                                    aria-label={`Pop stash ${stash.message}`}
+                                    className="rounded px-1.5 py-0.5 text-[10px] text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
+                                    onClick={() => { void runAction(`stash-pop:${stash.index}`, async () => props.api!.stashPopEditorGit(props.machineId!, props.projectPath!, activeRepoRoot)) }}
+                                >
+                                    Pop
+                                </button>
+                            )}
+                        </div>
+                    ))
+                )}
             </div>
         </div>
     )

@@ -288,5 +288,46 @@ export function createEditorRoutes(getSyncEngine: () => SyncEngine | null): Hono
         return c.json(await engine.fetchEditorGit(parsed.data.machineId, parsed.data.path, parsed.data.repoRoot))
     })
 
+
+    app.post('/editor/git-discard-file', async (c) => {
+        const engine = getSyncEngine()
+        if (!engine) return c.json({ success: false, error: 'Not connected' }, 503)
+        const parsed = gitFileBodySchema.safeParse(await c.req.json().catch(() => null))
+        if (!parsed.success) return c.json({ success: false, error: 'Invalid body' }, 400)
+        return c.json(await engine.discardEditorGitFile(parsed.data.machineId, parsed.data.path, parsed.data.filePath, parsed.data.repoRoot))
+    })
+
+    app.post('/editor/git-discard-all', async (c) => {
+        const engine = getSyncEngine()
+        if (!engine) return c.json({ success: false, error: 'Not connected' }, 503)
+        const parsed = gitRepoBodySchema.safeParse(await c.req.json().catch(() => null))
+        if (!parsed.success) return c.json({ success: false, error: 'Invalid body' }, 400)
+        return c.json(await engine.discardAllEditorGit(parsed.data.machineId, parsed.data.path, parsed.data.repoRoot))
+    })
+
+    app.post('/editor/git-stash-list', async (c) => {
+        const engine = getSyncEngine()
+        if (!engine) return c.json({ success: false, error: 'Not connected' }, 503)
+        const parsed = gitRepoBodySchema.safeParse(await c.req.json().catch(() => null))
+        if (!parsed.success) return c.json({ success: false, error: 'Invalid body' }, 400)
+        return c.json(await engine.listEditorGitStashes(parsed.data.machineId, parsed.data.path, parsed.data.repoRoot))
+    })
+
+    app.post('/editor/git-stash-push', async (c) => {
+        const engine = getSyncEngine()
+        if (!engine) return c.json({ success: false, error: 'Not connected' }, 503)
+        const parsed = gitRepoBodySchema.safeParse(await c.req.json().catch(() => null))
+        if (!parsed.success) return c.json({ success: false, error: 'Invalid body' }, 400)
+        return c.json(await engine.stashPushEditorGit(parsed.data.machineId, parsed.data.path, parsed.data.repoRoot))
+    })
+
+    app.post('/editor/git-stash-pop', async (c) => {
+        const engine = getSyncEngine()
+        if (!engine) return c.json({ success: false, error: 'Not connected' }, 503)
+        const parsed = gitRepoBodySchema.safeParse(await c.req.json().catch(() => null))
+        if (!parsed.success) return c.json({ success: false, error: 'Invalid body' }, 400)
+        return c.json(await engine.stashPopEditorGit(parsed.data.machineId, parsed.data.path, parsed.data.repoRoot))
+    })
+
     return app
 }

@@ -5,6 +5,7 @@ import type {
     EditorFileMutationResponse,
     EditorGitStatusV2Response,
     EditorGitListBranchesResponse,
+    EditorGitStashListResponse,
     EditorProjectsResponse,
     AuthResponse,
     CodexCollaborationMode,
@@ -648,6 +649,41 @@ export class ApiClient {
             body: JSON.stringify({ machineId, path: projectPath, repoRoot })
         })
     }
+    async discardEditorGitFile(machineId: string, projectPath: string, filePath: string, repoRoot?: string): Promise<GitCommandResponse> {
+        return await this.request<GitCommandResponse>('/api/editor/git-discard-file', {
+            method: 'POST',
+            body: JSON.stringify({ machineId, path: projectPath, repoRoot, filePath })
+        })
+    }
+
+    async discardAllEditorGit(machineId: string, projectPath: string, repoRoot?: string): Promise<GitCommandResponse> {
+        return await this.request<GitCommandResponse>('/api/editor/git-discard-all', {
+            method: 'POST',
+            body: JSON.stringify({ machineId, path: projectPath, repoRoot })
+        })
+    }
+
+    async listEditorGitStashes(machineId: string, projectPath: string, repoRoot?: string): Promise<EditorGitStashListResponse> {
+        return await this.request<EditorGitStashListResponse>('/api/editor/git-stash-list', {
+            method: 'POST',
+            body: JSON.stringify({ machineId, path: projectPath, repoRoot })
+        })
+    }
+
+    async stashPushEditorGit(machineId: string, projectPath: string, repoRoot?: string): Promise<GitCommandResponse> {
+        return await this.request<GitCommandResponse>('/api/editor/git-stash-push', {
+            method: 'POST',
+            body: JSON.stringify({ machineId, path: projectPath, repoRoot })
+        })
+    }
+
+    async stashPopEditorGit(machineId: string, projectPath: string, repoRoot?: string): Promise<GitCommandResponse> {
+        return await this.request<GitCommandResponse>('/api/editor/git-stash-pop', {
+            method: 'POST',
+            body: JSON.stringify({ machineId, path: projectPath, repoRoot })
+        })
+    }
+
 
     async renameSession(sessionId: string, name: string): Promise<void> {
         await this.request(`/api/sessions/${encodeURIComponent(sessionId)}`, {
