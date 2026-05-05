@@ -73,7 +73,7 @@ HAPI has three components:
 ## Install the CLI
 
 ```bash
-npm install -g @twsxtd/hapi --registry=https://registry.npmjs.org
+npm install -g @blackrose28/hapi --registry=https://registry.npmjs.org
 ```
 
 > Recommendation: use the official npm registry for global install. Some mirrors may not sync platform packages in time.
@@ -81,7 +81,7 @@ npm install -g @twsxtd/hapi --registry=https://registry.npmjs.org
 Or with Homebrew:
 
 ```bash
-brew install tiann/tap/hapi
+brew install blackrose28/tap/hapi
 ```
 
 ## Other install options
@@ -90,14 +90,14 @@ brew install tiann/tap/hapi
 <summary>npx (no install)</summary>
 
 ```bash
-npx @twsxtd/hapi
+npx @blackrose28/hapi
 ```
 </details>
 
 <details>
 <summary>Prebuilt binary</summary>
 
-Download the latest release from [GitHub Releases](https://github.com/tiann/hapi/releases).
+Download the latest release from [GitHub Releases](https://github.com/daudaudinang/hapi/releases).
 
 ```bash
 xattr -d com.apple.quarantine ./hapi
@@ -110,7 +110,7 @@ sudo mv ./hapi /usr/local/bin/
 <summary>Build from source</summary>
 
 ```bash
-git clone https://github.com/tiann/hapi.git
+git clone https://github.com/daudaudinang/hapi.git
 cd hapi
 bun install
 bun build:single-exe

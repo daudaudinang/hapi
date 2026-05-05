@@ -1,15 +1,15 @@
 {
-  "name": "@twsxtd/hapi",
+  "name": "@blackrose28/hapi",
   "version": "0.17.2",
   "description": "App for agentic coding - access coding agent anywhere",
-  "author": "Kirill Dubovitskiy & weishu",
+  "author": "daudaudinang",
   "license": "AGPL-3.0-only",
   "type": "module",
-  "homepage": "https://github.com/tiann/hapi",
-  "bugs": "https://github.com/tiann/hapi/issues",
+  "homepage": "https://github.com/daudaudinang/hapi",
+  "bugs": "https://github.com/daudaudinang/hapi/issues",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tiann/hapi.git",
+    "url": "git+https://github.com/daudaudinang/hapi.git",
     "directory": "cli"
   },
   "bin": {
@@ -26,11 +26,11 @@
     }
   },
   "optionalDependencies": {
-    "@twsxtd/hapi-darwin-arm64": "0.17.2",
-    "@twsxtd/hapi-darwin-x64": "0.17.2",
-    "@twsxtd/hapi-linux-arm64": "0.17.2",
-    "@twsxtd/hapi-linux-x64": "0.17.2",
-    "@twsxtd/hapi-win32-x64": "0.17.2"
+    "@blackrose28/hapi-darwin-arm64": "0.17.2",
+    "@blackrose28/hapi-darwin-x64": "0.17.2",
+    "@blackrose28/hapi-linux-arm64": "0.17.2",
+    "@blackrose28/hapi-linux-x64": "0.17.2",
+    "@blackrose28/hapi-win32-x64": "0.17.2"
   },
   "scripts": {
     "postinstall": "node -e \"try{require('fs').chmodSync(require('path').join(__dirname,'bin','hapi.cjs'),0o755)}catch(e){}\"",
