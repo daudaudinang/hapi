@@ -42,5 +42,5 @@
     "react-devtools-core": "^7.0.1",
     "vite-plugin-pwa": "^1.2.0"
   },
-  "version": "0.17.5"
+  "version": "0.17.6"
 }

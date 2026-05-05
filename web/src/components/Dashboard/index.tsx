@@ -1,8 +1,9 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import type { RootSearch } from '@/router'
 import { useSessions } from '@/hooks/queries/useSessions'
+import { useMachines } from '@/hooks/queries/useMachines'
 import { useSession } from '@/hooks/queries/useSession'
 import { useMessages } from '@/hooks/queries/useMessages'
 import { useSendMessage } from '@/hooks/mutations/useSendMessage'
@@ -14,7 +15,7 @@ import { clearDraftsAfterSend } from '@/lib/clearDraftsAfterSend'
 import { compareSessionGroupOrder } from '@/lib/session-group-order'
 import { SessionChat } from '@/components/SessionChat'
 import type { ApiClient } from '@/api/client'
-import type { SessionSummary, AttachmentMetadata } from '@/types/api'
+import type { SessionSummary, AttachmentMetadata, Machine } from '@/types/api'
 import { useTranslation } from '@/lib/use-translation'
 import './dashboard.css'
 
@@ -79,12 +80,16 @@ function getModelLabel(session: SessionSummary): string | null {
         .substring(0, 18)
 }
 
-function getProjectName(session: SessionSummary): string {
-    const path = session.metadata?.worktree?.basePath ?? session.metadata?.path ?? ''
-    if (!path) return 'Unknown Project'
-    const parts = path.split('/')
-    return parts[parts.length - 1] || parts[parts.length - 2] || path
+function getProjectPath(session: SessionSummary): string {
+    return session.metadata?.worktree?.basePath ?? session.metadata?.path ?? 'Unknown Project'
 }
+
+function getProjectNameFromPath(path: string): string {
+    if (!path || path === 'Unknown Project') return 'Unknown Project'
+    const parts = path.split(/[\\/]+/).filter(Boolean)
+    return parts[parts.length - 1] ?? path
+}
+
 
 function getSessionTitle(session: SessionSummary): string {
     // Priority: user/agent-set name > AI summary > last user request (truncated) > session ID
@@ -94,18 +99,100 @@ function getSessionTitle(session: SessionSummary): string {
     return `Session ${session.id.substring(0, 6)}`
 }
 
-function groupByProject(sessions: SessionSummary[]): { project: string; sessions: SessionSummary[]; latestUpdatedAt: number; hasActiveSession: boolean }[] {
-    const map = new Map<string, SessionSummary[]>()
+type DashboardProjectGroup = {
+    key: string
+    project: string
+    path: string
+    sessions: SessionSummary[]
+    latestUpdatedAt: number
+    hasActiveSession: boolean
+}
+
+type DashboardMachineGroup = {
+    key: string
+    machineId: string | null
+    label: string
+    sessions: SessionSummary[]
+    projectGroups: DashboardProjectGroup[]
+    latestUpdatedAt: number
+    hasActiveSession: boolean
+}
+
+const UNKNOWN_MACHINE_KEY = '__unknown__'
+
+function groupByProject(sessions: SessionSummary[], machineKey = ''): DashboardProjectGroup[] {
+    const map = new Map<string, { path: string; sessions: SessionSummary[] }>()
     for (const s of sessions) {
-        const p = getProjectName(s)
-        if (!map.has(p)) map.set(p, [])
-        map.get(p)!.push(s)
+        const path = getProjectPath(s)
+        const key = `${machineKey}::${path}`
+        if (!map.has(key)) map.set(key, { path, sessions: [] })
+        map.get(key)!.sessions.push(s)
     }
-    return [...map.entries()].map(([project, sessions]) => ({
-        project,
-        sessions,
-        latestUpdatedAt: sessions.reduce((max, session) => Math.max(max, session.updatedAt), 0),
-        hasActiveSession: sessions.some((session) => session.active)
+    return [...map.entries()].map(([key, group]) => ({
+        key,
+        project: getProjectNameFromPath(group.path),
+        path: group.path,
+        sessions: group.sessions,
+        latestUpdatedAt: group.sessions.reduce((max, session) => Math.max(max, session.updatedAt), 0),
+        hasActiveSession: group.sessions.some((session) => session.active)
+    }))
+}
+
+function machineTitle(machine: Machine): string {
+    return machine.metadata?.displayName || machine.metadata?.host || machine.id.slice(0, 8)
+}
+
+function sessionMachineKey(session: SessionSummary): string {
+    return session.metadata?.machineId ?? session.metadata?.host ?? UNKNOWN_MACHINE_KEY
+}
+
+function sessionMachineId(session: SessionSummary): string | null {
+    return session.metadata?.machineId ?? null
+}
+
+function groupByMachine(
+    sessions: SessionSummary[],
+    machineLabelsById: Map<string, string>
+): DashboardMachineGroup[] {
+    const map = new Map<string, SessionSummary[]>()
+    for (const session of sessions) {
+        const key = sessionMachineKey(session)
+        if (!map.has(key)) map.set(key, [])
+        map.get(key)!.push(session)
+    }
+
+    return [...map.entries()].map(([key, groupSessions]) => {
+        const first = groupSessions[0]
+        const machineId = first ? sessionMachineId(first) : null
+        const label = machineId
+            ? (machineLabelsById.get(machineId) ?? machineId.slice(0, 8))
+            : (first?.metadata?.host ?? 'Unknown machine')
+        const projectGroups = groupByProject(groupSessions, key).sort((a, b) => compareSessionGroupOrder({
+            label: a.project,
+            latestUpdatedAt: a.latestUpdatedAt,
+            hasActiveSession: a.hasActiveSession
+        }, {
+            label: b.project,
+            latestUpdatedAt: b.latestUpdatedAt,
+            hasActiveSession: b.hasActiveSession
+        }))
+        return {
+            key,
+            machineId,
+            label,
+            sessions: groupSessions,
+            projectGroups,
+            latestUpdatedAt: groupSessions.reduce((max, session) => Math.max(max, session.updatedAt), 0),
+            hasActiveSession: groupSessions.some((session) => session.active)
+        }
+    }).sort((a, b) => compareSessionGroupOrder({
+        label: a.label,
+        latestUpdatedAt: a.latestUpdatedAt,
+        hasActiveSession: a.hasActiveSession
+    }, {
+        label: b.label,
+        latestUpdatedAt: b.latestUpdatedAt,
+        hasActiveSession: b.hasActiveSession
     }))
 }
 
@@ -725,6 +812,7 @@ export function Dashboard({ api, initialPinnedIds }: DashboardProps) {
     const search = useSearch({ strict: false }) as RootSearch
     const modalNewSessionId = search.modalNewSessionId
     const { sessions, isLoading } = useSessions(api)
+    const { machines } = useMachines(api, true)
     const [addedArchivedIds, setAddedArchivedIds] = useState<Set<string>>(new Set())
     const [showOverviewDrawer, setShowOverviewDrawer] = useState(false)
     const [activePinIndex, setActivePinIndex] = useState(0)
@@ -733,7 +821,7 @@ export function Dashboard({ api, initialPinnedIds }: DashboardProps) {
 
     // ── Inline confirm ────────────────────────────────────────────────────────
     const [pendingConfirm, setPendingConfirm] = useState<{
-        project: string
+        key: string
         action: 'archive' | 'delete'
         targetSessions: SessionSummary[]
     } | null>(null)
@@ -832,17 +920,26 @@ export function Dashboard({ api, initialPinnedIds }: DashboardProps) {
             const pb = getStatusPriority(statuses.get(b.id) ?? 'active')
             return pa !== pb ? pa - pb : b.updatedAt - a.updatedAt
         })
-    const projectGroups = groupByProject(visibleSessions).sort((a, b) => compareSessionGroupOrder({
-        label: a.project,
-        latestUpdatedAt: a.latestUpdatedAt,
-        hasActiveSession: a.hasActiveSession,
-        hasPinnedSession: a.sessions.some(s => pinnedIds.includes(s.id))
-    }, {
-        label: b.project,
-        latestUpdatedAt: b.latestUpdatedAt,
-        hasActiveSession: b.hasActiveSession,
-        hasPinnedSession: b.sessions.some(s => pinnedIds.includes(s.id))
-    }))
+    const machineLabelsById = useMemo(() => {
+        const labels = new Map<string, string>()
+        for (const machine of machines) labels.set(machine.id, machineTitle(machine))
+        return labels
+    }, [machines])
+
+    const machineGroups = useMemo(() => groupByMachine(visibleSessions, machineLabelsById).map(machineGroup => ({
+        ...machineGroup,
+        projectGroups: [...machineGroup.projectGroups].sort((a, b) => compareSessionGroupOrder({
+            label: a.project,
+            latestUpdatedAt: a.latestUpdatedAt,
+            hasActiveSession: a.hasActiveSession,
+            hasPinnedSession: a.sessions.some(s => pinnedIds.includes(s.id))
+        }, {
+            label: b.project,
+            latestUpdatedAt: b.latestUpdatedAt,
+            hasActiveSession: b.hasActiveSession,
+            hasPinnedSession: b.sessions.some(s => pinnedIds.includes(s.id))
+        }))
+    })), [visibleSessions, machineLabelsById, pinnedIds])
 
     const pinnedSessions = pinnedIds
         .map(id => sessions.find(s => s.id === id))
@@ -926,16 +1023,16 @@ export function Dashboard({ api, initialPinnedIds }: DashboardProps) {
         setPinnedIds(prev => prev.filter(id => id !== sessionId))
     }, [])
 
-    const handleRequestArchiveAll = useCallback((project: string, groupSessions: SessionSummary[]) => {
+    const handleRequestArchiveAll = useCallback((key: string, groupSessions: SessionSummary[]) => {
         const active = groupSessions.filter(s => s.active)
         if (!api || active.length === 0) return
-        setPendingConfirm({ project, action: 'archive', targetSessions: active })
+        setPendingConfirm({ key, action: 'archive', targetSessions: active })
     }, [api])
 
-    const handleRequestDeleteAll = useCallback((project: string, groupSessions: SessionSummary[]) => {
+    const handleRequestDeleteAll = useCallback((key: string, groupSessions: SessionSummary[]) => {
         const archived = groupSessions.filter(s => !s.active)
         if (!api || archived.length === 0) return
-        setPendingConfirm({ project, action: 'delete', targetSessions: archived })
+        setPendingConfirm({ key, action: 'delete', targetSessions: archived })
     }, [api])
 
     const handleExecuteConfirm = useCallback(async () => {
@@ -961,41 +1058,132 @@ export function Dashboard({ api, initialPinnedIds }: DashboardProps) {
         void navigate({ search: (prev: any) => ({ ...prev, modal: 'new-session', modalPath: path }) })
     }, [navigate])
 
-    const renderMiniSessionList = () => (
-        <div className="db__overview-list">
-            {projectGroups.map(({ project, sessions: groupSessions }) => (
-                <div key={project} className="db__overview-group">
-                    <div className="db__overview-group-header">
+    const renderProjectGroup = (group: DashboardProjectGroup, compactList: boolean) => {
+        const { key, project, path, sessions: groupSessions } = group
+        const displaySessions = compactList ? groupSessions.slice(0, sidebarCardLimit) : groupSessions
+        return (
+            <div key={key} className="db__group">
+                {compactList ? (
+                    <div className="db__group-header db__group-header--sidebar" title={path}>
                         <span className="db__group-name">{project}</span>
                         <span className="db__group-count">{groupSessions.length}</span>
                     </div>
-                    {groupSessions.map(s => {
-                        const isHighlighted = s.id === modalNewSessionId
-                        return (
-                            <button
-                                key={s.id}
-                                type="button"
-                                className={`db__overview-item ${pinnedIds.includes(s.id) ? 'db__overview-item--pinned' : ''} ${isHighlighted ? 'ring-2 ring-[var(--app-button)]' : ''}`}
-                                onClick={(e) => { 
-                                    if (isHighlighted) clearNewSessionHighlight()
-                                    handlePin(s.id, e)
-                                }}
-                                onFocusCapture={() => {
-                                    if (isHighlighted) clearNewSessionHighlight()
-                                }}
-                            >
-                                <span className={`db-card__dot db-card__dot--${statuses.get(s.id) ?? 'active'}`} />
-                                <span className="db__overview-item-title">{getSessionTitle(s)}</span>
-                                <span className={`db-card__agent db-card__agent--${s.metadata?.flavor ?? 'claude'}`}>{getAgentLabel(s)}</span>
-                                {pinnedIds.includes(s.id) && (
-                                    <span className="db__overview-item-pin-index">
-                                        <PinIcon filled />
-                                        <span className="db__overview-item-pin-number">{pinnedIds.indexOf(s.id) + 1}</span>
-                                    </span>
-                                )}
+                ) : (
+                    <div className="db__group-header">
+                        <div className="db__group-header-left" title={path}>
+                            <div className="db__group-title-stack">
+                                <span className="db__group-name">{project}</span>
+                                <span className="db__group-path">{path}</span>
+                            </div>
+                            <span className="db__group-count">{groupSessions.length}</span>
+                        </div>
+                        <div className="db__group-actions">
+                            <button type="button" className="db__group-action" title={t('dashboard.newSessionIn', { project })} onClick={() => handleNewInGroup(groupSessions)}>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                <span className="db__label">New</span>
                             </button>
-                        )
-                    })}
+                            <button type="button" className="db__group-action" title={t('dashboard.copyPath')} onClick={() => handleCopyPath(project, groupSessions)}>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                <span className="db__label">Copy Path</span>
+                            </button>
+                            {pendingConfirm?.key === key ? (
+                                <div className={`db__inline-confirm ${pendingConfirm.action === 'delete' ? 'db__inline-confirm--danger' : ''}`}>
+                                    <span className="db__inline-confirm-text">
+                                        {pendingConfirm.action === 'archive'
+                                            ? t('dashboard.confirmArchive', { n: pendingConfirm.targetSessions.length })
+                                            : t('dashboard.confirmDelete', { n: pendingConfirm.targetSessions.length })}
+                                    </span>
+                                    <button type="button" className="db__inline-confirm-yes" onClick={() => void handleExecuteConfirm()}>{t('dashboard.confirm')}</button>
+                                    <button type="button" className="db__inline-confirm-no" onClick={() => setPendingConfirm(null)}>{t('dashboard.cancel')}</button>
+                                </div>
+                            ) : (
+                                <>
+                                    {groupSessions.some(s => s.active) && (
+                                        <button type="button" className="db__group-action db__group-action--warning" title={t('dashboard.archiveAllTitle')} onClick={() => handleRequestArchiveAll(key, groupSessions)}>
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+                                            <span className="db__label">{t('dashboard.archiveAll')}</span>
+                                        </button>
+                                    )}
+                                    {groupSessions.some(s => !s.active) && (
+                                        <button type="button" className="db__group-action db__group-action--danger" title={t('dashboard.deleteAllTitle')} onClick={() => handleRequestDeleteAll(key, groupSessions)}>
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                                            <span className="db__label">{t('dashboard.deleteArchived')}</span>
+                                        </button>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    </div>
+                )}
+                <div className={`db__grid ${compactList ? 'db__grid--compact' : ''}`}>
+                    {displaySessions.map(session => (
+                        <SessionCard
+                            key={session.id}
+                            session={session}
+                            status={statuses.get(session.id) ?? 'archived'}
+                            isPinned={pinnedIds.includes(session.id)}
+                            pinIndex={pinnedIds.includes(session.id) ? pinnedIds.indexOf(session.id) + 1 : undefined}
+                            pinDisabled={pinnedIds.length >= MAX_PINS}
+                            compact={compactList}
+                            isAddedArchived={statuses.get(session.id) === 'archived'}
+                            isHighlighted={session.id === modalNewSessionId}
+                            onSelect={() => {
+                                if (session.id === modalNewSessionId) clearNewSessionHighlight()
+                                handlePin(session.id)
+                            }}
+                            onFocusCapture={() => {
+                                if (session.id === modalNewSessionId) clearNewSessionHighlight()
+                            }}
+                        />
+                    ))}
+                </div>
+            </div>
+        )
+    }
+
+    const renderMiniSessionList = () => (
+        <div className="db__overview-list">
+            {machineGroups.map(machineGroup => (
+                <div key={machineGroup.key} className="db__overview-machine">
+                    <div className="db__machine-header db__machine-header--overview">
+                        <span className="db__machine-name">{machineGroup.label}</span>
+                        <span className="db__group-count">{machineGroup.sessions.length}</span>
+                    </div>
+                    {machineGroup.projectGroups.map(({ key, project, path, sessions: groupSessions }) => (
+                        <div key={key} className="db__overview-group">
+                            <div className="db__overview-group-header" title={path}>
+                                <span className="db__group-name">{project}</span>
+                                <span className="db__group-count">{groupSessions.length}</span>
+                            </div>
+                            {groupSessions.map(s => {
+                                const isHighlighted = s.id === modalNewSessionId
+                                return (
+                                    <button
+                                        key={s.id}
+                                        type="button"
+                                        className={`db__overview-item ${pinnedIds.includes(s.id) ? 'db__overview-item--pinned' : ''} ${isHighlighted ? 'ring-2 ring-[var(--app-button)]' : ''}`}
+                                        onClick={(e) => {
+                                            if (isHighlighted) clearNewSessionHighlight()
+                                            handlePin(s.id, e)
+                                        }}
+                                        onFocusCapture={() => {
+                                            if (isHighlighted) clearNewSessionHighlight()
+                                        }}
+                                    >
+                                        <span className={`db-card__dot db-card__dot--${statuses.get(s.id) ?? 'active'}`} />
+                                        <span className="db__overview-item-title">{getSessionTitle(s)}</span>
+                                        <span className={`db-card__agent db-card__agent--${s.metadata?.flavor ?? 'claude'}`}>{getAgentLabel(s)}</span>
+                                        {pinnedIds.includes(s.id) && (
+                                            <span className="db__overview-item-pin-index">
+                                                <PinIcon filled />
+                                                <span className="db__overview-item-pin-number">{pinnedIds.indexOf(s.id) + 1}</span>
+                                            </span>
+                                        )}
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    ))}
                 </div>
             ))}
         </div>
@@ -1156,34 +1344,13 @@ export function Dashboard({ api, initialPinnedIds }: DashboardProps) {
                                 </div>
                                 <div className="db__pinned-placeholder-content app-scroll-y">
                                     <div className="db__groups db__groups--compact">
-                                        {projectGroups.map(({ project, sessions: groupSessions }) => (
-                                            <div key={project} className="db__group">
-                                                <div className="db__group-header db__group-header--sidebar">
-                                                    <span className="db__group-name">{project}</span>
-                                                    <span className="db__group-count">{groupSessions.length}</span>
+                                        {machineGroups.map(machineGroup => (
+                                            <div key={machineGroup.key} className="db__machine-group db__machine-group--compact">
+                                                <div className="db__machine-header db__machine-header--sidebar">
+                                                    <span className="db__machine-name">{machineGroup.label}</span>
+                                                    <span className="db__group-count">{machineGroup.sessions.length}</span>
                                                 </div>
-                                                <div className="db__grid db__grid--compact">
-                                                    {groupSessions.map(session => (
-                                                        <SessionCard
-                                                            key={session.id}
-                                                            session={session}
-                                                            status={statuses.get(session.id) ?? 'archived'}
-                                                            isPinned={pinnedIds.includes(session.id)}
-                                                            pinIndex={pinnedIds.includes(session.id) ? pinnedIds.indexOf(session.id) + 1 : undefined}
-                                                            pinDisabled={pinnedIds.length >= MAX_PINS}
-                                                            compact={true}
-                                                            isAddedArchived={statuses.get(session.id) === 'archived'}
-                                                            isHighlighted={session.id === modalNewSessionId}
-                                                            onSelect={(e) => {
-                                                                if (session.id === modalNewSessionId) clearNewSessionHighlight()
-                                                                handlePin(session.id, e)
-                                                            }}
-                                                            onFocusCapture={() => {
-                                                                if (session.id === modalNewSessionId) clearNewSessionHighlight()
-                                                            }}
-                                                        />
-                                                    ))}
-                                                </div>
+                                                {machineGroup.projectGroups.map(group => renderProjectGroup(group, true))}
                                             </div>
                                         ))}
                                     </div>
@@ -1206,86 +1373,15 @@ export function Dashboard({ api, initialPinnedIds }: DashboardProps) {
                         )}
 
                         <div className={`db__groups ${hasPins ? 'db__groups--compact' : ''}`}>
-                            {projectGroups.map(({ project, sessions: groupSessions }) => {
-                                // In sidebar mode, limit cards shown
-                                const displaySessions = hasPins ? groupSessions.slice(0, sidebarCardLimit) : groupSessions
-                                return (
-                                    <div key={project} className="db__group">
-                                        {/* Always show group header — compact version in sidebar mode */}
-                                        {hasPins ? (
-                                            <div className="db__group-header db__group-header--sidebar">
-                                                <span className="db__group-name">{project}</span>
-                                                <span className="db__group-count">{groupSessions.length}</span>
-                                            </div>
-                                        ) : (
-                                            <div className="db__group-header">
-                                                <div className="db__group-header-left">
-                                                    <span className="db__group-name">{project}</span>
-                                                    <span className="db__group-count">{groupSessions.length}</span>
-                                                </div>
-                                                <div className="db__group-actions">
-                                                    <button type="button" className="db__group-action" title={t('dashboard.newSessionIn', { project })} onClick={() => handleNewInGroup(groupSessions)}>
-                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                                                        <span className="db__label">New</span>
-                                                    </button>
-                                                    <button type="button" className="db__group-action" title={t('dashboard.copyPath')} onClick={() => handleCopyPath(project, groupSessions)}>
-                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                                                        <span className="db__label">Copy Path</span>
-                                                    </button>
-                                                    {pendingConfirm?.project === project ? (
-                                                        <div className={`db__inline-confirm ${pendingConfirm.action === 'delete' ? 'db__inline-confirm--danger' : ''}`}>
-                                                            <span className="db__inline-confirm-text">
-                                                                {pendingConfirm.action === 'archive'
-                                                                    ? t('dashboard.confirmArchive', { n: pendingConfirm.targetSessions.length })
-                                                                    : t('dashboard.confirmDelete', { n: pendingConfirm.targetSessions.length })}
-                                                            </span>
-                                                            <button type="button" className="db__inline-confirm-yes" onClick={() => void handleExecuteConfirm()}>{t('dashboard.confirm')}</button>
-                                                            <button type="button" className="db__inline-confirm-no" onClick={() => setPendingConfirm(null)}>{t('dashboard.cancel')}</button>
-                                                        </div>
-                                                    ) : (
-                                                        <>
-                                                            {groupSessions.some(s => s.active) && (
-                                                                <button type="button" className="db__group-action db__group-action--warning" title={t('dashboard.archiveAllTitle')} onClick={() => handleRequestArchiveAll(project, groupSessions)}>
-                                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
-                                                                    <span className="db__label">{t('dashboard.archiveAll')}</span>
-                                                                </button>
-                                                            )}
-                                                            {groupSessions.some(s => !s.active) && (
-                                                                <button type="button" className="db__group-action db__group-action--danger" title={t('dashboard.deleteAllTitle')} onClick={() => handleRequestDeleteAll(project, groupSessions)}>
-                                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-                                                                    <span className="db__label">{t('dashboard.deleteArchived')}</span>
-                                                                </button>
-                                                            )}
-                                                        </>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        )}
-                                        <div className={`db__grid ${hasPins ? 'db__grid--compact' : ''}`}>
-                                            {displaySessions.map(session => (
-                                                <SessionCard
-                                                    key={session.id}
-                                                    session={session}
-                                                    status={statuses.get(session.id) ?? 'archived'}
-                                                    isPinned={pinnedIds.includes(session.id)}
-                                                    pinIndex={pinnedIds.includes(session.id) ? pinnedIds.indexOf(session.id) + 1 : undefined}
-                                                    pinDisabled={pinnedIds.length >= MAX_PINS}
-                                                    compact={hasPins}
-                                                    isAddedArchived={statuses.get(session.id) === 'archived'}
-                                                    isHighlighted={session.id === modalNewSessionId}
-                                                    onSelect={() => {
-                                                        if (session.id === modalNewSessionId) clearNewSessionHighlight()
-                                                        handlePin(session.id)
-                                                    }}
-                                                    onFocusCapture={() => {
-                                                        if (session.id === modalNewSessionId) clearNewSessionHighlight()
-                                                    }}
-                                                />
-                                            ))}
-                                        </div>
+                            {machineGroups.map(machineGroup => (
+                                <div key={machineGroup.key} className={`db__machine-group ${hasPins ? 'db__machine-group--compact' : ''}`}>
+                                    <div className={`db__machine-header ${hasPins ? 'db__machine-header--sidebar' : ''}`}>
+                                        <span className="db__machine-name">{machineGroup.label}</span>
+                                        <span className="db__group-count">{machineGroup.sessions.length}</span>
                                     </div>
-                                )
-                            })}
+                                    {machineGroup.projectGroups.map(group => renderProjectGroup(group, hasPins))}
+                                </div>
+                            ))}
                         </div>
                     </div>
                 )}
