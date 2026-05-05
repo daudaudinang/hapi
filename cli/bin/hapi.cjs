@@ -2,10 +2,20 @@
 
 const { execFileSync } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 
-const platform = process.platform;
-const arch = process.arch;
-const RELEASE_URL = 'https://github.com/tiann/hapi/releases';
+// Load package.json to get the current package name and repository
+const pkgPath = path.join(__dirname, '..', 'package.json');
+const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+const MAIN_PKG_NAME = pkg.name;
+const [SCOPE, BASE_NAME] = MAIN_PKG_NAME.startsWith('@')
+    ? MAIN_PKG_NAME.split('/')
+    : ['', MAIN_PKG_NAME];
+
+const RELEASE_URL = pkg.repository?.url
+    ? pkg.repository.url.replace(/^git\+/, '').replace(/\.git$/, '') + '/releases'
+    : 'https://github.com/daudaudinang/hapi/releases';
+
 const OFFICIAL_NPM_REGISTRY = 'https://registry.npmjs.org';
 const SUPPORTED_PLATFORMS = [
     {
@@ -30,16 +40,18 @@ const SUPPORTED_PLATFORMS = [
     },
 ];
 
-function getPlatformKey(platformName = platform, archName = arch) {
+function getPlatformKey(platformName = process.platform, archName = process.arch) {
     return `${platformName}-${archName}`;
 }
 
-function isSupportedPlatform(platformName = platform, archName = arch) {
+function isSupportedPlatform(platformName = process.platform, archName = process.arch) {
     return SUPPORTED_PLATFORMS.some((item) => item.key === getPlatformKey(platformName, archName));
 }
 
-function getBinaryPath(platformName = platform, archName = arch) {
-    const pkgName = `@twsxtd/hapi-${platformName}-${archName}`;
+function getBinaryPath(platformName = process.platform, archName = process.arch) {
+    const pkgName = SCOPE
+        ? `${SCOPE}/${BASE_NAME}-${platformName}-${archName}`
+        : `${BASE_NAME}-${platformName}-${archName}`;
 
     try {
         // Try to find the platform-specific package
@@ -83,7 +95,7 @@ function reportExecutionFailure(error, binPath, args, log = console.error) {
     return { status, signal };
 }
 
-function reportUnsupportedPlatform(platformName = platform, archName = arch, log = console.error) {
+function reportUnsupportedPlatform(platformName = process.platform, archName = process.arch, log = console.error) {
     log(`Unsupported platform: ${platformName}-${archName}`);
     log('');
     log('Supported platforms:');
@@ -95,15 +107,17 @@ function reportUnsupportedPlatform(platformName = platform, archName = arch, log
     log(`  ${RELEASE_URL}`);
 }
 
-function reportMissingPlatformPackage(platformName = platform, archName = arch, log = console.error) {
-    const platformPackage = `@twsxtd/hapi-${platformName}-${archName}`;
+function reportMissingPlatformPackage(platformName = process.platform, archName = process.arch, log = console.error) {
+    const platformPackage = SCOPE
+        ? `${SCOPE}/${BASE_NAME}-${platformName}-${archName}`
+        : `${BASE_NAME}-${platformName}-${archName}`;
     log(`Missing platform package: ${platformPackage}`);
     log('');
     log(`Detected platform ${platformName}-${archName} is supported, but the platform binary package was not installed.`);
     log('This may happen when using a registry mirror that has not synced all optionalDependencies.');
     log('');
     log('Try reinstalling with the official npm registry:');
-    log(`  npm install -g @twsxtd/hapi --registry=${OFFICIAL_NPM_REGISTRY}`);
+    log(`  npm install -g ${MAIN_PKG_NAME} --registry=${OFFICIAL_NPM_REGISTRY}`);
     log('');
     log('Or download the binary manually from:');
     log(`  ${RELEASE_URL}`);
