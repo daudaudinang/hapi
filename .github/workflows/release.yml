@@ -23,6 +23,15 @@ jobs:
                   registry-url: 'https://registry.npmjs.org'
             - run: bun install
             
+            - name: Update version from tag
+              run: |
+                  TAG_NAME=${GITHUB_REF#refs/tags/}
+                  VERSION=${TAG_NAME#v}
+                  if [[ "$TAG_NAME" == "v"* ]]; then
+                    cd cli
+                    npm version $VERSION --no-git-tag-version
+                  fi
+            
             # 1. Build all binaries including embedded web assets
             - run: bun run build:single-exe:all
             
@@ -51,6 +60,14 @@ jobs:
             - uses: actions/checkout@v4
             - uses: oven-sh/setup-bun@v2
             - run: bun install
+            - name: Update version from tag
+              run: |
+                  TAG_NAME=${GITHUB_REF#refs/tags/}
+                  VERSION=${TAG_NAME#v}
+                  if [[ "$TAG_NAME" == "v"* ]]; then
+                    cd cli
+                    npm version $VERSION --no-git-tag-version
+                  fi
             - run: bun run build:single-exe:all
             - name: Package release artifacts
               run: |
