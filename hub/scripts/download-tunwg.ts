@@ -21,21 +21,30 @@ const TUNWG_RELEASES: Record<string, string> = {
 
 const LICENSE_URL = 'https://raw.githubusercontent.com/tiann/tunwg/refs/heads/main/LICENSE';
 
-async function downloadFile(url: string, destPath: string): Promise<void> {
-    console.log(`Downloading ${url}...`);
+async function downloadFile(url: string, destPath: string, retries = 3): Promise<void> {
+    for (let i = 0; i < retries; i++) {
+        try {
+            console.log(`Downloading ${url}... (attempt ${i + 1}/${retries})`);
+            const response = await fetch(url, { redirect: 'follow' });
+            if (!response.ok) {
+                throw new Error(`Failed to download ${url}: ${response.status} ${response.statusText}`);
+            }
 
-    const response = await fetch(url, { redirect: 'follow' });
-    if (!response.ok) {
-        throw new Error(`Failed to download ${url}: ${response.status} ${response.statusText}`);
+            const buffer = await response.arrayBuffer();
+            const dirName = dirname(destPath);
+            mkdirSync(dirName, { recursive: true });
+            writeFileSync(destPath, Buffer.from(buffer));
+
+            console.log(`  -> ${destPath} (${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB)`);
+            return;
+        } catch (error) {
+            console.error(`Error downloading ${url}: ${error.message}`);
+            if (i === retries - 1) throw error;
+            const delay = Math.pow(2, i) * 1000;
+            console.log(`Retrying in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
     }
-
-    const buffer = await response.arrayBuffer();
-	const dirName = dirname(destPath);
-	console.log(`  ->mkdirDir ${dirName}`);
-    mkdirSync(dirName, { recursive: true });
-    writeFileSync(destPath, Buffer.from(buffer));
-
-    console.log(`  -> ${destPath} (${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB)`);
 }
 
 async function main(): Promise<void> {
