@@ -16,6 +16,10 @@ jobs:
         steps:
             - uses: actions/checkout@v4
             - uses: oven-sh/setup-bun@v2
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: '20'
+                  registry-url: 'https://registry.npmjs.org'
             - run: bun install
             
             # 1. Build all binaries including embedded web assets
@@ -26,8 +30,6 @@ jobs:
             
             # 3. Publish each package in the npm directory
             - name: Publish to npm
-              env:
-                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
               run: |
                   # Publish platform-specific packages first
                   for dir in cli/npm/darwin-* cli/npm/linux-* cli/npm/win32-*; do
@@ -39,6 +41,8 @@ jobs:
                   # Finally publish the main wrapper package
                   cd cli/npm/main
                   npm publish --access public --provenance
+              env:
+                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
     release:
         runs-on: ubuntu-latest
