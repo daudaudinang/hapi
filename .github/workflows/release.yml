@@ -29,7 +29,7 @@ jobs:
                   VERSION=${TAG_NAME#v}
                   if [[ "$TAG_NAME" == "v"* ]]; then
                     cd cli
-                    npm version $VERSION --no-git-tag-version
+                    bun -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')); pkg.version = '$VERSION'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n')"
                   fi
             
             # 1. Build all binaries including embedded web assets
@@ -66,7 +66,7 @@ jobs:
                   VERSION=${TAG_NAME#v}
                   if [[ "$TAG_NAME" == "v"* ]]; then
                     cd cli
-                    npm version $VERSION --no-git-tag-version
+                    bun -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')); pkg.version = '$VERSION'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n')"
                   fi
             - run: bun run build:single-exe:all
             - name: Package release artifacts
