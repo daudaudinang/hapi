@@ -37,16 +37,12 @@ export function ReplacePinModal(props: { onClose: () => void }) {
     const { sessions } = useSessions(api)
     const newSessionId = search.modalSessionId
 
-    // Read pins fresh — localStorage is source of truth
+    // Read pins from sessionStorage (per-tab)
     let currentPins: string[] = []
     try {
-        const saved = localStorage.getItem('mc-pinned-ids')
+        const saved = sessionStorage.getItem('mc-pinned-ids')
         if (saved) currentPins = JSON.parse(saved)
     } catch { /* ignore */ }
-    // Fallback to URL
-    if (currentPins.length === 0 && typeof (search as any).pins === 'string' && (search as any).pins) {
-        currentPins = (search as any).pins.split(',')
-    }
 
     const handleReplace = useCallback((pinIdToReplace: string) => {
         if (!newSessionId) {
@@ -54,13 +50,14 @@ export function ReplacePinModal(props: { onClose: () => void }) {
             return
         }
         const newPins = currentPins.map(id => id === pinIdToReplace ? newSessionId : id)
+        sessionStorage.setItem('mc-pinned-ids', JSON.stringify(newPins))
         void navigate({
             to: '/sessions',
             search: (prev: any) => {
                 const newSearch = { ...prev }
                 delete newSearch.modal
                 delete newSearch.modalSessionId
-                return { ...newSearch, pins: newPins.join(','), modalNewSessionId: newSessionId }
+                return { ...newSearch, modalNewSessionId: newSessionId }
             },
             replace: true
         })
