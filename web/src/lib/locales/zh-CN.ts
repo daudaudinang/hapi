@@ -368,5 +368,13 @@ export default {
   'dashboard.copyPath': '复制项目路径',
   'dashboard.focus': '聚焦',
   'dashboard.unpin': '取消固定',
+  'dashboard.archiveSession': '归档会话',
+  'dashboard.confirmArchiveSingle': '归档此会话？',
+  'dashboard.confirmDeleteSingle': '永久删除此会话？此操作不可撤销。',
+  'dashboard.copied': '已复制！',
+  'dashboard.copySessionId': '复制会话 ID',
+  'dashboard.deleteSession': '删除会话',
+  'dashboard.openInNewTab': '在新标签页打开',
+  'dashboard.rightClickForMenu': '右键打开菜单',
   'misc.scrollToBottom': '滚动到底部',
 } as const

@@ -366,5 +366,13 @@ export default {
   'dashboard.copyPath': 'Copy project path',
   'dashboard.focus': 'Focus',
   'dashboard.unpin': 'Unpin',
+  'dashboard.archiveSession': 'Archive session',
+  'dashboard.confirmArchiveSingle': 'Archive this session?',
+  'dashboard.confirmDeleteSingle': 'Permanently delete this session? This cannot be undone.',
+  'dashboard.copied': 'Copied!',
+  'dashboard.copySessionId': 'Copy session ID',
+  'dashboard.deleteSession': 'Delete session',
+  'dashboard.openInNewTab': 'Open in new tab',
+  'dashboard.rightClickForMenu': 'Right-click for menu',
   'misc.scrollToBottom': 'Scroll to bottom',
 } as const

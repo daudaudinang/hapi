@@ -368,5 +368,13 @@ export default {
   'dashboard.copyPath': 'Sao chép đường dẫn dự án',
   'dashboard.focus': 'Tập trung',
   'dashboard.unpin': 'Bỏ ghim',
+  'dashboard.archiveSession': 'Lưu trữ phiên',
+  'dashboard.confirmArchiveSingle': 'Lưu trữ phiên này?',
+  'dashboard.confirmDeleteSingle': 'Xóa vĩnh viễn phiên này? Không thể hoàn tác.',
+  'dashboard.copied': 'Đã sao chép!',
+  'dashboard.copySessionId': 'Sao chép ID phiên',
+  'dashboard.deleteSession': 'Xóa phiên',
+  'dashboard.openInNewTab': 'Mở trong tab mới',
+  'dashboard.rightClickForMenu': 'Nhấn chuột phải để mở menu',
   'misc.scrollToBottom': 'Cuộn xuống dưới cùng',
 } as const
