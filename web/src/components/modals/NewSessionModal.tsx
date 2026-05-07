@@ -39,16 +39,12 @@ export function NewSessionModal(props: { onClose: () => void }) {
             return
         }
         
-        // Always read pins from localStorage (source of truth when dashboard is not active)
+        // Read pins from sessionStorage (per-tab, source of truth)
         let currentPins: string[] = []
         try {
-            const saved = localStorage.getItem('mc-pinned-ids')
+            const saved = sessionStorage.getItem('mc-pinned-ids')
             if (saved) currentPins = JSON.parse(saved)
         } catch { /* ignore */ }
-        // Also check URL params as secondary fallback
-        if (currentPins.length === 0 && typeof (search as any).pins === 'string' && (search as any).pins) {
-            currentPins = (search as any).pins.split(',')
-        }
 
         const replaceSessionId = search.modalReplaceSessionId
 
@@ -76,6 +72,7 @@ export function NewSessionModal(props: { onClose: () => void }) {
                 } as any)
                 return
             }
+            sessionStorage.setItem('mc-pinned-ids', JSON.stringify(newPins))
             void navigate({
                 to: '/sessions',
                 search: (prev: any) => {
@@ -86,7 +83,7 @@ export function NewSessionModal(props: { onClose: () => void }) {
                     delete newSearch.modalMachineId
                     delete newSearch.modalReplaceSessionId
                     delete newSearch.modalReturnTo
-                    return { ...newSearch, pins: newPins.join(','), modalNewSessionId: sessionId }
+                    return { ...newSearch, modalNewSessionId: sessionId }
                 },
                 replace: true
             })
@@ -96,6 +93,7 @@ export function NewSessionModal(props: { onClose: () => void }) {
         if (currentPins.length < 4) {
             // Auto append
             const newPins = Array.from(new Set([...currentPins, sessionId]))
+            sessionStorage.setItem('mc-pinned-ids', JSON.stringify(newPins))
             void navigate({
                 to: '/sessions',
                 search: (prev: any) => {
@@ -106,7 +104,7 @@ export function NewSessionModal(props: { onClose: () => void }) {
                     delete newSearch.modalMachineId
                     delete newSearch.modalReplaceSessionId
                     delete newSearch.modalReturnTo
-                    return { ...newSearch, pins: newPins.join(','), modalNewSessionId: sessionId }
+                    return { ...newSearch, modalNewSessionId: sessionId }
                 },
                 replace: true
             })
