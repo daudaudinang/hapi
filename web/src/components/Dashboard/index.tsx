@@ -980,22 +980,6 @@ export function Dashboard({ api }: DashboardProps) {
         setPinnedAction({ id: sessionId, x: e.clientX, y: e.clientY })
     }, [])
 
-    // Re-sync from sessionStorage when modals complete and navigate back
-    useEffect(() => {
-        if (!modalNewSessionId) return
-        try {
-            const saved = sessionStorage.getItem(PINS_KEY)
-            if (saved) {
-                const savedIds = (JSON.parse(saved) as string[]).slice(0, MAX_PINS)
-                const current = pinnedIds.join(',')
-                if (savedIds.join(',') !== current) {
-                    setPinnedIds(savedIds)
-                }
-            }
-        } catch { /* ignore */ }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [modalNewSessionId])
-
     const handleUnpin = useCallback((sessionId: string) => {
         setPinnedIds(prev => prev.filter(id => id !== sessionId))
     }, [])
@@ -1100,6 +1084,10 @@ export function Dashboard({ api }: DashboardProps) {
                                 onClick={(e) => { 
                                     if (isHighlighted) clearNewSessionHighlight()
                                     handleContextMenu(s.id, e)
+                                }}
+                                onDoubleClick={() => {
+                                    if (isHighlighted) clearNewSessionHighlight()
+                                    handlePin(s.id)
                                 }}
                                 onFocusCapture={() => {
                                     if (isHighlighted) clearNewSessionHighlight()
@@ -1297,7 +1285,7 @@ export function Dashboard({ api }: DashboardProps) {
                                                             isHighlighted={session.id === modalNewSessionId}
                                                             onSelect={(e) => {
                                                                 if (session.id === modalNewSessionId) clearNewSessionHighlight()
-                                                                handlePin(session.id)
+                                                                if (e) handleContextMenu(session.id, e)
                                                             }}
                                                             onContextMenu={(e) => handleContextMenu(session.id, e)}
                                                             onDoubleClick={() => handlePin(session.id)}
@@ -1396,9 +1384,9 @@ export function Dashboard({ api }: DashboardProps) {
                                                     compact={hasPins}
                                                     isAddedArchived={statuses.get(session.id) === 'archived'}
                                                     isHighlighted={session.id === modalNewSessionId}
-                                                    onSelect={() => {
+                                                    onSelect={(e) => {
                                                         if (session.id === modalNewSessionId) clearNewSessionHighlight()
-                                                        handlePin(session.id)
+                                                        if (e) handleContextMenu(session.id, e)
                                                     }}
                                                     onContextMenu={(e) => handleContextMenu(session.id, e)}
                                                     onDoubleClick={() => handlePin(session.id)}
