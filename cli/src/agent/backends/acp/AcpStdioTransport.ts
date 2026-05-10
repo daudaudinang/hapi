@@ -131,6 +131,7 @@ export class AcpStdioTransport {
                 );
                 this.onHungCallback?.();
                 this.killProcessGroup('SIGKILL');
+                this.clearActivityTracker();
             }
         }, AcpStdioTransport.HUNG_CHECK_INTERVAL_MS);
         this.activityTracker.unref();
@@ -215,11 +216,7 @@ export class AcpStdioTransport {
     }
 
     async close(): Promise<void> {
-        // Clear activity watchdog (from Task 2 — add a safe no-op for now)
-        if (this.activityTracker) {
-            clearInterval(this.activityTracker);
-            this.activityTracker = null;
-        }
+        this.clearActivityTracker();
         // Graceful: SIGTERM to entire process group first
         this.killProcessGroup('SIGTERM');
         // Wait for graceful shutdown
