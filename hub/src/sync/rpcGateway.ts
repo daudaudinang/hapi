@@ -137,6 +137,17 @@ export type RpcEditorGitStashListResponse = {
 }
 
 
+export type RpcOpencodeModel = {
+    modelId: string
+    name?: string
+}
+
+export type RpcListOpencodeModelsResponse = {
+    success: boolean
+    availableModels?: RpcOpencodeModel[]
+    currentModelId?: string | null
+    error?: string
+}
 
 export class RpcGateway {
     constructor(
@@ -510,6 +521,14 @@ export class RpcGateway {
 
     async listCodexModelsForMachine(machineId: string): Promise<RpcListCodexModelsResponse> {
         return await this.machineRpc(machineId, 'listCodexModels', {}) as RpcListCodexModelsResponse
+    }
+
+    async listOpencodeModelsForSession(sessionId: string): Promise<RpcListOpencodeModelsResponse> {
+        return await this.sessionRpc(sessionId, 'listOpencodeModels', {}) as RpcListOpencodeModelsResponse
+    }
+
+    async listOpencodeModelsForCwd(machineId: string, cwd: string): Promise<RpcListOpencodeModelsResponse> {
+        return await this.machineRpc(machineId, 'listOpencodeModelsForCwd', { cwd }) as RpcListOpencodeModelsResponse
     }
 
     private async sessionRpc(sessionId: string, method: string, params: unknown): Promise<unknown> {

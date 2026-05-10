@@ -25,6 +25,8 @@ import {
     type RpcEditorProjectsResponse,
     type RpcListDirectoryResponse,
     type RpcListCodexModelsResponse,
+    type RpcListOpencodeModelsResponse,
+    type RpcOpencodeModel,
     type RpcPathExistsResponse,
     type RpcReadFileResponse,
     type RpcUploadFileResponse
@@ -43,6 +45,8 @@ export type {
     RpcEditorProjectsResponse,
     RpcListDirectoryResponse,
     RpcListCodexModelsResponse,
+    RpcListOpencodeModelsResponse,
+    RpcOpencodeModel,
     RpcPathExistsResponse,
     RpcReadFileResponse,
     RpcUploadFileResponse
@@ -800,5 +804,13 @@ export class SyncEngine {
 
     resetAutoResumeAttempts(sessionId: string): void {
         this.resumeAttempts.delete(sessionId)
+    }
+
+    async listOpencodeModelsForSession(sessionId: string): Promise<RpcListOpencodeModelsResponse> {
+        return await this.rpcGateway.listOpencodeModelsForSession(sessionId)
+    }
+
+    async listOpencodeModelsForCwd(machineId: string, cwd: string): Promise<RpcListOpencodeModelsResponse> {
+        return await this.rpcGateway.listOpencodeModelsForCwd(machineId, cwd)
     }
 }
