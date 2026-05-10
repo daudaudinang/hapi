@@ -28,7 +28,7 @@ import {
     listOpencodeModelsForCwd,
     type ListOpencodeModelsForCwdRequest,
     type ListOpencodeModelsForCwdResponse
-} from '../modules/common/opencodeModels
+} from '../modules/common/opencodeModels'
 import type { SpawnSessionOptions, SpawnSessionResult } from '../modules/common/rpcTypes'
 import { applyVersionedAck } from './versionedUpdate'
 import { buildSocketIoExtraHeaderOptions } from './hubExtraHeaders'
