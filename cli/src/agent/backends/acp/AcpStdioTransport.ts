@@ -1,6 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { logger } from '@/ui/logger';
-import { killProcessByChildProcess } from '@/utils/process';
 import { GEMINI_MODEL_PRESETS } from '@hapi/protocol';
 
 interface JsonRpcRequest {
@@ -49,6 +48,7 @@ export class AcpStdioTransport {
     private buffer = '';
     private nextId = 1;
     private protocolError: Error | null = null;
+    private activityTracker: ReturnType<typeof setInterval> | null = null;
 
     constructor(options: {
         command: string;
@@ -58,7 +58,8 @@ export class AcpStdioTransport {
         this.process = spawn(options.command, options.args ?? [], {
             env: options.env,
             stdio: ['pipe', 'pipe', 'pipe'],
-            shell: process.platform === 'win32'
+            shell: process.platform === 'win32',
+            detached: true
         });
 
         this.process.stdout.setEncoding('utf8');
@@ -74,6 +75,9 @@ export class AcpStdioTransport {
         this.process.on('exit', (code, signal) => {
             const message = `ACP process exited (code=${code ?? 'null'}, signal=${signal ?? 'null'})`;
             logger.debug(message);
+            // Kill remaining processes in the group (subagents).
+            // SIGKILL because the parent already exited — no graceful shutdown needed.
+            this.killProcessGroup('SIGKILL');
             this.rejectAllPending(new Error(message));
         });
 
@@ -85,6 +89,21 @@ export class AcpStdioTransport {
                 { cause: error }
             ));
         });
+    }
+
+    private killProcessGroup(signal: NodeJS.Signals): void {
+        if (!this.process?.pid) return;
+        if (process.platform === 'win32') {
+            try {
+                spawn('taskkill', ['/T', '/F', '/PID', String(this.process.pid)], { stdio: 'pipe' });
+            } catch {}
+            return;
+        }
+        try {
+            process.kill(-this.process.pid, signal);
+        } catch {
+            // Process group may already be gone
+        }
     }
 
     onNotification(handler: ((method: string, params: unknown) => void) | null): void {
@@ -155,8 +174,19 @@ export class AcpStdioTransport {
     }
 
     async close(): Promise<void> {
-        this.process.stdin.end();
-        await killProcessByChildProcess(this.process);
+        // Clear activity watchdog (from Task 2 — add a safe no-op for now)
+        if (this.activityTracker) {
+            clearInterval(this.activityTracker);
+            this.activityTracker = null;
+        }
+        // Graceful: SIGTERM to entire process group first
+        this.killProcessGroup('SIGTERM');
+        // Wait for graceful shutdown
+        await new Promise<void>(r => setTimeout(r, 2000));
+        // Force kill any survivors
+        this.killProcessGroup('SIGKILL');
+        // End stdin after signals (process likely dead by now)
+        try { this.process.stdin.end(); } catch {}
         this.rejectAllPending(new Error('ACP transport closed'));
     }
 
@@ -196,7 +226,7 @@ export class AcpStdioTransport {
             logger.debug('[ACP] Failed to parse JSON-RPC line', { line, error });
             this.rejectAllPending(protocolError);
             this.process.stdin.end();
-            void killProcessByChildProcess(this.process);
+            this.killProcessGroup('SIGKILL');
             return;
         }
 
