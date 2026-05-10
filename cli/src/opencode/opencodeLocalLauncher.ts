@@ -260,7 +260,18 @@ export async function opencodeLocalLauncher(
     const hookUrl = opts.hookUrl;
 
     const opencodeConfigDir = resolveOpencodeConfigDir(session);
-    ensureOpencodeHookPlugin(opencodeConfigDir, hookUrl, opts.hookServer.token);
+    try {
+        ensureOpencodeHookPlugin(opencodeConfigDir, hookUrl, opts.hookServer.token);
+    } catch (error) {
+        logger.debug('[opencode-local]: Failed to inject hook plugin', error);
+        session.sendSessionEvent({
+            type: 'message',
+            message:
+                'OpenCode hook plugin could not be installed. ' +
+                'Live session events may be delayed. ' +
+                'Check write permissions for: ' + opencodeConfigDir
+        });
+    }
 
     // Start the hapi MCP server for change_title support (optional feature)
     let happyServer: { url: string; stop: () => void } | null = null;

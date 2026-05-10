@@ -84,7 +84,12 @@ export async function startOpencodeHookServer(options: OpencodeHookServerOptions
 
                     const payload = data.payload;
                     const sessionId = typeof data.sessionId === 'string' ? data.sessionId : undefined;
-                    options.onEvent({ event: eventValue, payload, sessionId });
+
+                    // Defer event processing so the HTTP response returns immediately.
+                    // This prevents a slow event handler from bottlenecking the hook pipeline.
+                    setImmediate(() => {
+                        options.onEvent({ event: eventValue, payload, sessionId });
+                    });
 
                     if (!res.headersSent && !res.writableEnded) {
                         res.writeHead(200, { 'Content-Type': 'text/plain' }).end('ok');
