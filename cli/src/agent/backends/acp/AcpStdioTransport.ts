@@ -50,6 +50,14 @@ export class AcpStdioTransport {
     private protocolError: Error | null = null;
     private activityTracker: ReturnType<typeof setInterval> | null = null;
 
+    // === Activity watchdog: detects ACP hung-but-not-crashed ===
+    private lastActivityAt: number = Date.now();
+    private onHungCallback: (() => void) | null = null;
+
+    private static readonly HUNG_TIMEOUT_MS =
+        Number(process.env.HAPI_ACP_HUNG_TIMEOUT_MS) || 10 * 60 * 1000;
+    private static readonly HUNG_CHECK_INTERVAL_MS = 30_000;
+
     constructor(options: {
         command: string;
         args?: string[];
@@ -89,6 +97,8 @@ export class AcpStdioTransport {
                 { cause: error }
             ));
         });
+
+        this.startActivityTracker();
     }
 
     private killProcessGroup(signal: NodeJS.Signals): void {
@@ -103,6 +113,37 @@ export class AcpStdioTransport {
             process.kill(-this.process.pid, signal);
         } catch {
             // Process group may already be gone
+        }
+    }
+
+
+    onHung(callback: () => void): void {
+        this.onHungCallback = callback;
+    }
+
+    private startActivityTracker(): void {
+        this.lastActivityAt = Date.now();
+        this.activityTracker = setInterval(() => {
+            const silentMs = Date.now() - this.lastActivityAt;
+            if (silentMs > AcpStdioTransport.HUNG_TIMEOUT_MS) {
+                logger.debug(
+                    `[ACP] No activity for ${Math.round(silentMs / 1000)}s — treating as hung`
+                );
+                this.onHungCallback?.();
+                this.killProcessGroup('SIGKILL');
+            }
+        }, AcpStdioTransport.HUNG_CHECK_INTERVAL_MS);
+        this.activityTracker.unref();
+    }
+
+    private bumpActivity(): void {
+        this.lastActivityAt = Date.now();
+    }
+
+    private clearActivityTracker(): void {
+        if (this.activityTracker) {
+            clearInterval(this.activityTracker);
+            this.activityTracker = null;
         }
     }
 
@@ -191,6 +232,7 @@ export class AcpStdioTransport {
     }
 
     private handleStdout(chunk: string): void {
+        this.bumpActivity();
         this.buffer += chunk;
         let newlineIndex = this.buffer.indexOf('\n');
 
@@ -247,6 +289,7 @@ export class AcpStdioTransport {
     }
 
     private async handleIncomingRequest(request: JsonRpcRequest): Promise<void> {
+        this.bumpActivity();
         const handler = this.requestHandlers.get(request.method);
         if (!handler) {
             this.writePayload({
@@ -280,6 +323,7 @@ export class AcpStdioTransport {
     }
 
     private handleResponse(response: JsonRpcResponse): void {
+        this.bumpActivity();
         if (response.id === null || response.id === undefined) {
             logger.debug('[ACP] Received response without id');
             return;
