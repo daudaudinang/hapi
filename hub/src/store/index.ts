@@ -22,7 +22,7 @@ export { PushStore } from './pushStore'
 export { SessionStore } from './sessionStore'
 export { UserStore } from './userStore'
 
-const SCHEMA_VERSION: number = 8
+const SCHEMA_VERSION: number = 9
 const REQUIRED_TABLES = [
     'sessions',
     'machines',
@@ -97,6 +97,7 @@ export class Store {
             5: () => this.migrateFromV5ToV6(),
             6: () => this.migrateFromV6ToV7(),
             7: () => this.migrateFromV7ToV8(),
+            8: () => this.migrateFromV8ToV9(),
         })
 
         if (currentVersion === 0) {
@@ -164,7 +165,8 @@ export class Store {
                 team_state_updated_at INTEGER,
                 active INTEGER DEFAULT 0,
                 active_at INTEGER,
-                seq INTEGER DEFAULT 0
+                seq INTEGER DEFAULT 0,
+                collapse_reasoning INTEGER DEFAULT 0
             );
             CREATE INDEX IF NOT EXISTS idx_sessions_tag ON sessions(tag);
             CREATE INDEX IF NOT EXISTS idx_sessions_tag_namespace ON sessions(tag, namespace);
@@ -355,6 +357,14 @@ export class Store {
         if (columns.size === 0) return
         if (!columns.has('model_reasoning_effort')) {
             this.db.exec('ALTER TABLE sessions ADD COLUMN model_reasoning_effort TEXT')
+        }
+    }
+
+    private migrateFromV8ToV9(): void {
+        const columns = this.getSessionColumnNames()
+        if (columns.size === 0) return
+        if (!columns.has('collapse_reasoning')) {
+            this.db.exec('ALTER TABLE sessions ADD COLUMN collapse_reasoning INTEGER DEFAULT 0')
         }
     }
 
