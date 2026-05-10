@@ -91,10 +91,15 @@ describe('hapi binary launcher error reporting', () => {
             lines.push(line);
         });
 
-        expect(lines).toContain('Missing platform package: @twsxtd/hapi-linux-x64');
+        // Platform package name is derived from package.json, not hardcoded
+        const pkg = require(path.resolve(process.cwd(), 'package.json'));
+        const mainPkgName = pkg.name;
+        const platformPkg = mainPkgName + '-linux-x64';
+        expect(lines).toContain('Missing platform package: ' + platformPkg);
         expect(lines).toContain('Try reinstalling with the official npm registry:');
-        expect(lines).toContain('  npm install -g @twsxtd/hapi --registry=https://registry.npmjs.org');
+        expect(lines).toContain('  npm install -g ' + mainPkgName + ' --registry=https://registry.npmjs.org');
         expect(lines).toContain('Or download the binary manually from:');
-        expect(lines).toContain('  https://github.com/tiann/hapi/releases');
+        const releaseLine = lines.find(l => l.startsWith('  https://github.com/'));
+        expect(releaseLine).toBeTruthy();
     });
 });

@@ -167,6 +167,7 @@ export class AcpSdkBackend implements AgentBackend {
             AcpSdkBackend.PRE_PROMPT_UPDATE_QUIET_PERIOD_MS,
             AcpSdkBackend.PRE_PROMPT_UPDATE_DRAIN_TIMEOUT_MS
         );
+        this.messageHandler?.flushReasoning();
         this.messageHandler?.flushText();
         this.messageHandler = null;
         await this.waitForSessionUpdateQuiet(
@@ -192,6 +193,7 @@ export class AcpSdkBackend implements AgentBackend {
                 AcpSdkBackend.UPDATE_QUIET_PERIOD_MS,
                 AcpSdkBackend.UPDATE_DRAIN_TIMEOUT_MS
             );
+            this.messageHandler?.flushReasoning();
             this.messageHandler?.flushText();
             try {
                 if (stopReason) {
@@ -275,6 +277,7 @@ export class AcpSdkBackend implements AgentBackend {
 
     async disconnect(): Promise<void> {
         if (!this.transport) return;
+        this.messageHandler?.flushReasoning();
         this.messageHandler?.flushText();
         this.messageHandler = null;
         this.activeSessionId = null;

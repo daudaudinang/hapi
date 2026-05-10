@@ -174,6 +174,7 @@ function getSuffixPrefixOverlap(base: string, next: string): number {
 export class AcpMessageHandler {
     private readonly toolCalls = new Map<string, { name: string; input: unknown }>();
     private bufferedText = '';
+    private bufferedReasoning = '';
 
     constructor(private readonly onMessage: (message: AgentMessage) => void) {}
 
@@ -190,6 +191,19 @@ export class AcpMessageHandler {
         const text = this.bufferedText;
         this.bufferedText = '';
         this.onMessage({ type: 'text', text });
+    }
+
+    /**
+     * Emit the buffered reasoning as a single coalesced message and
+     * clear the buffer. Called before tool_call / plan events and at
+     * turn boundaries by AcpSdkBackend.
+     */
+    flushReasoning(): void {
+        if (this.bufferedReasoning === '') {
+            return;
+        }
+        this.onMessage({ type: 'reasoning', text: this.bufferedReasoning });
+        this.bufferedReasoning = '';
     }
 
     private appendTextChunk(text: string): void {
@@ -284,16 +298,15 @@ export class AcpMessageHandler {
             // should not cause the reasoning to be silently dropped.
             const content = update.content;
             if (isObject(content) && content.type === 'text' && typeof content.text === 'string' && content.text.length > 0) {
-                this.onMessage({ type: 'reasoning', text: content.text });
+                this.bufferedReasoning += content.text;
             }
             return;
         }
 
         if (updateType === ACP_SESSION_UPDATE_TYPES.toolCall) {
-            // A new tool invocation closes the preceding text segment.
-            // Flushing here preserves the arrival order between text and
-            // tool lifecycle events without disturbing cumulative dedup
-            // within a segment.
+            // A new tool invocation closes the preceding text segment
+            // and reasoning buffer.
+            this.flushReasoning();
             this.flushText();
             this.handleToolCall(update);
             return;
@@ -310,6 +323,7 @@ export class AcpMessageHandler {
         }
 
         if (updateType === ACP_SESSION_UPDATE_TYPES.plan) {
+            this.flushReasoning();
             this.flushText();
             const items = normalizePlanEntries(update.entries);
             if (items.length > 0) {

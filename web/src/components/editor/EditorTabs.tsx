@@ -296,7 +296,7 @@ export function EditorTabs(props: {
     onSaveFile?: (path: string, content: string) => Promise<void>
     onAddSelectionToChat?: (filePath: string, startLine: number, endLine: number, content: string) => void
     mobileMode?: boolean
-    saveRef?: React.MutableRefObject<(() => Promise<void>) | null>
+    saveRef: React.MutableRefObject<(() => Promise<void>) | null>
 }) {
     const fileContentsRef = useRef<Map<string, string>>(new Map())
     const [savingTabId, setSavingTabId] = useState<string | null>(null)
@@ -417,8 +417,8 @@ export function EditorTabs(props: {
     }, [saveActiveFile])
 
     useEffect(() => {
-        props.saveRef!.current = saveActiveFile
-        return () => { props.saveRef!.current = null }
+        props.saveRef.current = saveActiveFile
+        return () => { props.saveRef.current = null }
     }, [saveActiveFile, props.saveRef])
 
     return (

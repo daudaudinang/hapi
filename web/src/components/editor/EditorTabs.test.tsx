@@ -133,6 +133,7 @@ describe('EditorTabs', () => {
                 onSelectTab={vi.fn()}
                 onCloseTab={vi.fn()}
                 onNewFile={vi.fn()}
+            saveRef={{ current: null }}
             />
         )
 
@@ -153,6 +154,7 @@ describe('EditorTabs', () => {
                 onSelectTab={onSelectTab}
                 onCloseTab={onCloseTab}
                 onNewFile={onNewFile}
+            saveRef={{ current: null }}
             />
         )
 
@@ -177,6 +179,7 @@ describe('EditorTabs', () => {
                 onCloseTab={vi.fn()}
                 onNewFile={vi.fn()}
                 mobileMode
+            saveRef={{ current: null }}
             />
         )
 
@@ -195,6 +198,7 @@ describe('EditorTabs', () => {
                 onSelectTab={vi.fn()}
                 onCloseTab={vi.fn()}
                 onNewFile={vi.fn()}
+            saveRef={{ current: null }}
             />
         )
 
@@ -222,6 +226,7 @@ describe('EditorTabs', () => {
                 onCloseTab={vi.fn()}
                 onNewFile={vi.fn()}
                 onDirtyChange={onDirtyChange}
+            saveRef={{ current: null }}
             />
         )
 
@@ -247,6 +252,7 @@ describe('EditorTabs', () => {
                 onCloseTab={vi.fn()}
                 onNewFile={vi.fn()}
                 onDirtyChange={onDirtyChange}
+            saveRef={{ current: null }}
             />
         )
 
@@ -265,6 +271,7 @@ describe('EditorTabs', () => {
                 onCloseTab={vi.fn()}
                 onNewFile={vi.fn()}
                 onDirtyChange={onDirtyChange}
+            saveRef={{ current: null }}
             />
         )
 
@@ -285,6 +292,7 @@ describe('EditorTabs', () => {
                 onSelectTab={vi.fn()}
                 onCloseTab={vi.fn()}
                 onNewFile={vi.fn()}
+            saveRef={{ current: null }}
             />
         )
 
@@ -307,6 +315,7 @@ describe('EditorTabs', () => {
                 onCloseTab={vi.fn()}
                 onNewFile={vi.fn()}
                 onDirtyChange={onDirtyChange}
+                saveRef={{ current: null }}
                 onSaveFile={onSaveFile}
             />
         )
@@ -337,6 +346,7 @@ describe('EditorTabs', () => {
                 onCloseTab={vi.fn()}
                 onNewFile={vi.fn()}
                 onSaveFile={onSaveFile}
+            saveRef={{ current: null }}
             />
         )
 
@@ -359,6 +369,7 @@ describe('EditorTabs', () => {
                 onCloseTab={onCloseTab}
                 onNewFile={vi.fn()}
                 mobileMode
+            saveRef={{ current: null }}
             />
         )
 
@@ -393,6 +404,7 @@ describe('EditorTabs', () => {
                 onCloseTab={onCloseTab}
                 onNewFile={vi.fn()}
                 mobileMode
+            saveRef={{ current: null }}
             />
         )
 
@@ -422,6 +434,7 @@ describe('EditorTabs', () => {
                 onDirtyChange={onDirtyChange}
                 onSaveFile={onSaveFile}
                 mobileMode
+            saveRef={{ current: null }}
             />
         )
 
@@ -458,6 +471,7 @@ describe('EditorTabs', () => {
                 onSelectTab={vi.fn()}
                 onCloseTab={vi.fn()}
                 onNewFile={vi.fn()}
+            saveRef={{ current: null }}
             />
         )
 
@@ -482,6 +496,7 @@ describe('EditorTabs', () => {
                 onSelectTab={vi.fn()}
                 onCloseTab={vi.fn()}
                 onNewFile={vi.fn()}
+            saveRef={{ current: null }}
             />
         )
 
@@ -497,6 +512,7 @@ describe('EditorTabs', () => {
                 onSelectTab={vi.fn()}
                 onCloseTab={vi.fn()}
                 onNewFile={vi.fn()}
+            saveRef={{ current: null }}
             />
         )
 
@@ -518,6 +534,7 @@ describe('EditorTabs', () => {
                 onSelectTab={vi.fn()}
                 onCloseTab={vi.fn()}
                 onNewFile={vi.fn()}
+            saveRef={{ current: null }}
             />
         )
 
@@ -533,6 +550,7 @@ describe('EditorTabs', () => {
                 onSelectTab={vi.fn()}
                 onCloseTab={vi.fn()}
                 onNewFile={vi.fn()}
+            saveRef={{ current: null }}
             />
         )
 
@@ -549,6 +567,7 @@ describe('EditorTabs', () => {
                 onSelectTab={vi.fn()}
                 onCloseTab={vi.fn()}
                 onNewFile={vi.fn()}
+            saveRef={{ current: null }}
             />
         )
 
