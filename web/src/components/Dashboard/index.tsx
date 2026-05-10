@@ -358,9 +358,11 @@ interface SessionCardProps {
     onSelect: (e?: React.MouseEvent) => void
     onDetach?: () => void
     onFocusCapture?: () => void
+    onContextMenu?: (e: React.MouseEvent) => void
+    onTogglePin?: () => void
 }
 
-function SessionCard({ session, status, isPinned, pinIndex, pinDisabled, compact, isAddedArchived, isHighlighted, onSelect, onDetach, onFocusCapture }: SessionCardProps) {
+function SessionCard({ session, status, isPinned, pinIndex, pinDisabled, compact, isAddedArchived, isHighlighted, onSelect, onDetach, onFocusCapture, onContextMenu, onTogglePin }: SessionCardProps) {
     const { t } = useTranslation()
     const agent = getAgentLabel(session)
     const elapsed = formatElapsed(session.updatedAt)
@@ -392,11 +394,12 @@ function SessionCard({ session, status, isPinned, pinIndex, pinDisabled, compact
                 isHighlighted ? 'ring-2 ring-[var(--app-button)]' : ''
             ].filter(Boolean).join(' ')}
             onClick={(e) => onSelect(e)}
+            onContextMenu={onContextMenu}
             role="button"
             tabIndex={0}
             onFocusCapture={onFocusCapture}
             onKeyDown={(e) => { if (e.key === 'Enter') onSelect() }}
-            title={isPinned ? t('dashboard.clickToUnpin') : t('dashboard.clickToPin')}
+            title={isPinned ? t('dashboard.clickToFocus') : t('dashboard.clickToPin')}
         >
             <div className={`db-card__glow-bar db-card__glow-bar--${status}`} />
 
@@ -423,10 +426,19 @@ function SessionCard({ session, status, isPinned, pinIndex, pinDisabled, compact
                     <button
                         type="button"
                         className={`db-card__pin-btn ${isPinned ? 'db-card__pin-btn--active' : ''}`}
-                        onClick={e => { e.stopPropagation(); onSelect(e) }}
+                        onClick={e => { e.stopPropagation(); onTogglePin?.() }}
                         title={isPinned ? t('dashboard.unpinSession') : t('dashboard.pinSession')}
                     >
                         <PinIcon filled={isPinned} />
+                    </button>
+                    <button
+                        type="button"
+                        className="db-card__menu-btn"
+                        onClick={e => { e.stopPropagation(); onContextMenu?.(e) }}
+                        title={t('dashboard.openSessionMenu')}
+                        aria-label={t('dashboard.openSessionMenu')}
+                    >
+                        ⋯
                     </button>
                     <span className="db-card__elapsed">{elapsed}</span>
                 </div>
@@ -483,23 +495,31 @@ function SessionCard({ session, status, isPinned, pinIndex, pinDisabled, compact
     )
 }
 
-// ─── Pinned Session Context Menu ──────────────────────────────────────────────
+// ─── Session Context Menu ─────────────────────────────────────────────────────
 
-interface PinnedSessionContextMenuProps {
+interface SessionContextMenuProps {
+    sessionId: string
     sessionTitle: string
     x: number
     y: number
+    isPinned: boolean
     onFocus: () => void
+    onPin: () => void
     onUnpin: () => void
+    onArchive: () => void
+    onDelete: () => void
     onCancel: () => void
 }
 
-function PinnedSessionContextMenu({ sessionTitle, x, y, onFocus, onUnpin, onCancel }: PinnedSessionContextMenuProps) {
+function SessionContextMenu({ sessionId, sessionTitle, x, y, isPinned, onFocus, onPin, onUnpin, onArchive, onDelete, onCancel }: SessionContextMenuProps) {
     const { t } = useTranslation()
     const menuRef = useRef<HTMLDivElement>(null)
     const [pos, setPos] = useState({ left: x, top: y })
+    const isMobile = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
 
+    // Adjust position for desktop floating menu
     useEffect(() => {
+        if (isMobile) return
         if (menuRef.current) {
             const rect = menuRef.current.getBoundingClientRect()
             let newX = x
@@ -508,62 +528,140 @@ function PinnedSessionContextMenu({ sessionTitle, x, y, onFocus, onUnpin, onCanc
             if (y + rect.height > window.innerHeight) newY = window.innerHeight - rect.height - 10
             setPos({ left: newX, top: newY })
         }
-    }, [x, y])
+    }, [x, y, isMobile])
 
+    // Close on outside click — skip on mobile (overlay onClick handles dismissal)
     useEffect(() => {
-        const handleClickOutside = () => onCancel()
+        if (isMobile) return
+        const handleClickOutside = (e: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+                onCancel()
+            }
+        }
         const timer = setTimeout(() => document.addEventListener('mousedown', handleClickOutside), 10)
         return () => {
             clearTimeout(timer)
             document.removeEventListener('mousedown', handleClickOutside)
         }
+    }, [isMobile, onCancel])
+
+    // Close on Escape key
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') onCancel()
+        }
+        document.addEventListener('keydown', handleKeyDown)
+        return () => document.removeEventListener('keydown', handleKeyDown)
     }, [onCancel])
 
-    return (
-        <div 
-            ref={menuRef}
-            className="db__context-menu" 
-            style={{ 
-                position: 'fixed', 
-                left: pos.left, 
-                top: pos.top, 
-                zIndex: 9999, 
-                background: 'var(--app-bg)', 
-                border: '1px solid var(--app-border)', 
-                borderRadius: 6, 
-                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                display: 'flex',
-                flexDirection: 'column',
-                minWidth: 160,
-                padding: '4px 0'
-            }}
-            onMouseDown={e => e.stopPropagation()} 
-        >
-            <div style={{ padding: '8px 12px', fontSize: 12, opacity: 0.5, borderBottom: '1px solid var(--app-border)', marginBottom: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+    const [copied, setCopied] = useState(false)
+    const handleCopyId = useCallback(() => {
+        void navigator.clipboard.writeText(sessionId).then(() => {
+            setCopied(true)
+            setTimeout(() => setCopied(false), 1500)
+        })
+    }, [sessionId])
+
+    const menuItems = (
+        <>
+            {/* Header */}
+            <div className="db__context-menu-header">
                 {sessionTitle}
             </div>
-            <button 
-                type="button"
-                style={{ textAlign: 'left', padding: '8px 12px', background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: 13 }}
-                onMouseEnter={e => e.currentTarget.style.background = 'var(--app-hover)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                onClick={onFocus}
-            >
-                {t('dashboard.focus')}
+
+            {/* Pin / Unpin toggle */}
+            <button type="button" className="db__context-menu-item" onClick={() => { isPinned ? onUnpin() : onPin(); onCancel() }}>
+                <PinIcon filled={isPinned} />
+                <span>{isPinned ? t('dashboard.unpinSession') : t('dashboard.pinSession')}</span>
             </button>
-            <button 
-                type="button"
-                style={{ textAlign: 'left', padding: '8px 12px', background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 13 }}
-                onMouseEnter={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                onClick={onUnpin}
-            >
-                {t('dashboard.unpinSession')}
+
+            {/* Focus (only when pinned) */}
+            {isPinned && (
+                <button type="button" className="db__context-menu-item" onClick={() => { onFocus(); onCancel() }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+                    </svg>
+                    <span>{t('dashboard.focus')}</span>
+                </button>
+            )}
+
+            <div className="db__context-menu-divider" />
+
+            {/* Archive */}
+            <button type="button" className="db__context-menu-item" onClick={() => { onArchive(); onCancel() }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="21 8 21 21 3 21 3 8"/>
+                    <rect x="1" y="3" width="22" height="5"/>
+                    <line x1="10" y1="12" x2="14" y2="12"/>
+                </svg>
+                <span>{t('dashboard.archiveSession')}</span>
             </button>
+
+            {/* Delete */}
+            <button type="button" className="db__context-menu-item db__context-menu-item--danger" onClick={() => { onDelete(); onCancel() }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                </svg>
+                <span>{t('dashboard.deleteSession')}</span>
+            </button>
+
+            <div className="db__context-menu-divider" />
+
+            {/* Open in new tab */}
+            {!isMobile && (
+                <button type="button" className="db__context-menu-item" onClick={() => { window.open(`/sessions/${sessionId}`, '_blank'); onCancel() }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                        <polyline points="15 3 21 3 21 9"/>
+                        <line x1="10" y1="14" x2="21" y2="3"/>
+                    </svg>
+                    <span>{t('dashboard.openInNewTab')}</span>
+                </button>
+            )}
+
+            {/* Copy session ID */}
+            <button type="button" className="db__context-menu-item" onClick={handleCopyId}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
+                <span>{copied ? t('dashboard.copied') : t('dashboard.copySessionId')}</span>
+            </button>
+        </>
+    )
+
+    // Mobile: bottom sheet overlay
+    if (isMobile) {
+        return (
+            <div className="db__bottom-sheet-overlay" onClick={onCancel}>
+                <div className="db__bottom-sheet" onClick={e => e.stopPropagation()}>
+                    {menuItems}
+                    <button type="button" className="db__context-menu-item db__context-menu-item--cancel" onClick={onCancel}>
+                        {t('dashboard.cancel')}
+                    </button>
+                </div>
+            </div>
+        )
+    }
+
+    // Desktop: floating menu
+    return (
+        <div
+            ref={menuRef}
+            className="db__context-menu"
+            style={{
+                position: 'fixed',
+                left: pos.left,
+                top: pos.top,
+                zIndex: 9999,
+            }}
+            onMouseDown={e => e.stopPropagation()}
+        >
+            {menuItems}
         </div>
     )
 }
-
 // ─── Replace Pin Modal ────────────────────────────────────────────────────────
 
 interface ReplacePinModalProps {
@@ -798,14 +896,13 @@ function AddArchivedCard({ archivedCount, addedCount, onClick }: { archivedCount
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 const MAX_PINS = 4
-const LS_PINS_KEY = 'mc-pinned-ids'
+const PINS_KEY = 'mc-pinned-ids'  // sessionStorage — per-tab, survives refresh, auto-clears on tab close
 
 interface DashboardProps {
     api: ApiClient | null
-    initialPinnedIds: string[]
 }
 
-export function Dashboard({ api, initialPinnedIds }: DashboardProps) {
+export function Dashboard({ api }: DashboardProps) {
     const { t } = useTranslation()
     const queryClient = useQueryClient()
     const navigate = useNavigate()
@@ -826,36 +923,35 @@ export function Dashboard({ api, initialPinnedIds }: DashboardProps) {
         targetSessions: SessionSummary[]
     } | null>(null)
 
-    // ── Pinned IDs — URL is source of truth, localStorage is secondary ────────
+    // ── Pinned IDs — sessionStorage, per-tab ──────────────────────────────────
     const [pinnedIds, setPinnedIds] = useState<string[]>(() => {
-        // URL takes priority
-        if (initialPinnedIds.length > 0) return initialPinnedIds.slice(0, MAX_PINS)
-        // Fallback to localStorage
         try {
-            const saved = localStorage.getItem(LS_PINS_KEY)
+            const saved = sessionStorage.getItem(PINS_KEY)
             if (saved) return (JSON.parse(saved) as string[]).slice(0, MAX_PINS)
         } catch { /* ignore */ }
         return []
     })
 
-    // Sync initialPinnedIds → pinnedIds when URL changes (e.g. after modal navigation)
-    // This is needed because useState only reads initialPinnedIds once on mount.
-    // When the modal navigates to /sessions?pins=..., the prop changes but state doesn't.
+    // Sync pinnedIds → sessionStorage
     useEffect(() => {
-        const incoming = initialPinnedIds.join(',')
-        const current = pinnedIds.join(',')
-        if (incoming !== current && incoming !== '') {
-            setPinnedIds(initialPinnedIds.slice(0, MAX_PINS))
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [initialPinnedIds.join(',')])
+        sessionStorage.setItem(PINS_KEY, JSON.stringify(pinnedIds))
+    }, [pinnedIds])
 
-    // Sync pinnedIds → URL + localStorage
+    // Re-sync from sessionStorage when modals complete and navigate back
     useEffect(() => {
-        localStorage.setItem(LS_PINS_KEY, JSON.stringify(pinnedIds))
-        const pinsParam = pinnedIds.length > 0 ? pinnedIds.join(',') : undefined
-        void navigate({ to: '/sessions', search: (prev) => ({ ...prev, pins: pinsParam }), replace: true })
-    }, [pinnedIds, navigate])
+        if (!modalNewSessionId) return
+        try {
+            const saved = sessionStorage.getItem(PINS_KEY)
+            if (saved) {
+                const savedIds = (JSON.parse(saved) as string[]).slice(0, MAX_PINS)
+                const current = pinnedIds.join(',')
+                if (savedIds.join(',') !== current) {
+                    setPinnedIds(savedIds)
+                }
+            }
+        } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [modalNewSessionId])
 
     // Clamp activePinIndex when pins shrink
     useEffect(() => {
@@ -975,13 +1071,11 @@ export function Dashboard({ api, initialPinnedIds }: DashboardProps) {
         } as any)
     }, [navigate, modalNewSessionId])
 
-    const handlePin = useCallback((sessionId: string, e?: React.MouseEvent) => {
-        if (pinnedIds.includes(sessionId)) {
-            if (e) {
-                setPinnedAction({ id: sessionId, x: e.clientX, y: e.clientY })
-            } else {
-                setPinnedAction({ id: sessionId, x: window.innerWidth / 2, y: window.innerHeight / 2 })
-            }
+    const handleSelectSession = useCallback((sessionId: string) => {
+        const existingIndex = pinnedIds.indexOf(sessionId)
+        if (existingIndex !== -1) {
+            setActivePinIndex(existingIndex)
+            setShowOverviewDrawer(false)
             return
         }
         if (pinnedIds.length >= MAX_PINS) {
@@ -990,9 +1084,22 @@ export function Dashboard({ api, initialPinnedIds }: DashboardProps) {
         }
         setPinnedIds(prev => [...prev, sessionId])
         setActivePinIndex(pinnedIds.length)
-        // If they pin a new session, we can optionally close the overview drawer here:
         setShowOverviewDrawer(false)
     }, [pinnedIds])
+
+    const handleTogglePin = useCallback((sessionId: string) => {
+        if (pinnedIds.includes(sessionId)) {
+            setPinnedIds(prev => prev.filter(id => id !== sessionId))
+            return
+        }
+        handleSelectSession(sessionId)
+    }, [handleSelectSession, pinnedIds])
+
+    const handleContextMenu = useCallback((sessionId: string, e: React.MouseEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setPinnedAction({ id: sessionId, x: e.clientX, y: e.clientY })
+    }, [])
 
     const handleUnpin = useCallback((sessionId: string) => {
         setPinnedIds(prev => prev.filter(id => id !== sessionId))
@@ -1013,6 +1120,32 @@ export function Dashboard({ api, initialPinnedIds }: DashboardProps) {
     }, [pendingReplacePin])
 
     const handleUnpinAll = useCallback(() => setPinnedIds([]), [])
+
+    const handleArchiveSession = useCallback(async (sessionId: string): Promise<boolean> => {
+        if (!api) return false
+        if (!window.confirm(t('dashboard.confirmArchiveSingle'))) return false
+        try {
+            await api.archiveSession(sessionId)
+            void queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
+            return true
+        } catch (err) {
+            console.error('Archive failed:', err)
+            return false
+        }
+    }, [api, queryClient, t])
+
+    const handleDeleteSession = useCallback(async (sessionId: string): Promise<boolean> => {
+        if (!api) return false
+        if (!window.confirm(t('dashboard.confirmDeleteSingle'))) return false
+        try {
+            await api.deleteSession(sessionId)
+            void queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
+            return true
+        } catch (err) {
+            console.error('Delete failed:', err)
+            return false
+        }
+    }, [api, queryClient, t])
 
     const handleAddArchived = useCallback((ids: string[]) => {
         setAddedArchivedIds(prev => new Set([...prev, ...ids]))
@@ -1129,8 +1262,10 @@ export function Dashboard({ api, initialPinnedIds }: DashboardProps) {
                             isHighlighted={session.id === modalNewSessionId}
                             onSelect={() => {
                                 if (session.id === modalNewSessionId) clearNewSessionHighlight()
-                                handlePin(session.id)
+                                handleSelectSession(session.id)
                             }}
+                            onContextMenu={(e) => handleContextMenu(session.id, e)}
+                            onTogglePin={() => handleTogglePin(session.id)}
                             onFocusCapture={() => {
                                 if (session.id === modalNewSessionId) clearNewSessionHighlight()
                             }}
@@ -1162,10 +1297,11 @@ export function Dashboard({ api, initialPinnedIds }: DashboardProps) {
                                         key={s.id}
                                         type="button"
                                         className={`db__overview-item ${pinnedIds.includes(s.id) ? 'db__overview-item--pinned' : ''} ${isHighlighted ? 'ring-2 ring-[var(--app-button)]' : ''}`}
-                                        onClick={(e) => {
+                                        onClick={() => {
                                             if (isHighlighted) clearNewSessionHighlight()
-                                            handlePin(s.id, e)
+                                            handleSelectSession(s.id)
                                         }}
+                                        onContextMenu={(e) => handleContextMenu(s.id, e)}
                                         onFocusCapture={() => {
                                             if (isHighlighted) clearNewSessionHighlight()
                                         }}
@@ -1410,24 +1546,52 @@ export function Dashboard({ api, initialPinnedIds }: DashboardProps) {
                 />
             )}
 
-            {pinnedAction && (
-                <PinnedSessionContextMenu
-                    sessionTitle={getSessionTitle(sessions.find(s => s.id === pinnedAction.id) || { id: pinnedAction.id } as any)}
-                    x={pinnedAction.x}
-                    y={pinnedAction.y}
-                    onFocus={() => {
-                        const idx = pinnedIds.indexOf(pinnedAction.id)
-                        if (idx !== -1) setActivePinIndex(idx)
-                        setPinnedAction(null)
-                        setShowOverviewDrawer(false)
-                    }}
-                    onUnpin={() => {
-                        setPinnedIds(prev => prev.filter(id => id !== pinnedAction.id))
-                        setPinnedAction(null)
-                    }}
-                    onCancel={() => setPinnedAction(null)}
-                />
-            )}
+            {pinnedAction && (() => {
+                const ctxSession = sessions.find(s => s.id === pinnedAction.id)
+                const ctxTitle = ctxSession ? getSessionTitle(ctxSession) : pinnedAction.id.slice(0, 8)
+                const ctxIsPinned = pinnedIds.includes(pinnedAction.id)
+                return (
+                    <SessionContextMenu
+                        sessionId={pinnedAction.id}
+                        sessionTitle={ctxTitle}
+                        x={pinnedAction.x}
+                        y={pinnedAction.y}
+                        isPinned={ctxIsPinned}
+                        onFocus={() => {
+                            const idx = pinnedIds.indexOf(pinnedAction.id)
+                            if (idx !== -1) setActivePinIndex(idx)
+                            setPinnedAction(null)
+                            setShowOverviewDrawer(false)
+                        }}
+                        onPin={() => {
+                            if (pinnedIds.length >= MAX_PINS) {
+                                setPendingReplacePin(pinnedAction.id)
+                            } else {
+                                setPinnedIds(prev => [...prev, pinnedAction.id])
+                                setActivePinIndex(pinnedIds.length)
+                            }
+                            setPinnedAction(null)
+                        }}
+                        onUnpin={() => {
+                            setPinnedIds(prev => prev.filter(id => id !== pinnedAction.id))
+                            setPinnedAction(null)
+                        }}
+                        onArchive={() => {
+                            void handleArchiveSession(pinnedAction.id).then(confirmed => {
+                                if (confirmed) setPinnedIds(prev => prev.filter(id => id !== pinnedAction.id))
+                            })
+                            setPinnedAction(null)
+                        }}
+                        onDelete={() => {
+                            void handleDeleteSession(pinnedAction.id).then(confirmed => {
+                                if (confirmed) setPinnedIds(prev => prev.filter(id => id !== pinnedAction.id))
+                            })
+                            setPinnedAction(null)
+                        }}
+                        onCancel={() => setPinnedAction(null)}
+                    />
+                )
+            })()}
         </div>
     )
 }

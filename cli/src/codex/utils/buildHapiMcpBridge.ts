@@ -52,7 +52,7 @@ export async function buildHapiMcpBridge(client: ApiSessionClient): Promise<Hapi
             stop: happyServer.stop
         },
         mcpServers: {
-            hapi: {
+            hapi_session: {
                 command: bridgeCommand.command,
                 args: bridgeCommand.args
             }

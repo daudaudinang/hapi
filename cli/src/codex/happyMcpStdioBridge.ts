@@ -60,7 +60,7 @@ export async function runHappyMcpStdioBridge(argv: string[]): Promise<void> {
 
     // Create STDIO MCP server
     const server = new McpServer({
-      name: 'HAPI MCP Bridge',
+      name: 'HAPI Session Tools',
       version: '1.0.0',
     });
 

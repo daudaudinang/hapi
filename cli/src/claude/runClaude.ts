@@ -115,10 +115,9 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
     });
     logger.debug(`[START] Generated hook settings file: ${hookSettingsPath}`);
 
-    // Print log file path
-    const logPath = logger.logFilePath;
+    // Local file logging is intentionally disabled to avoid unbounded disk growth.
     logger.infoDeveloper(`Session: ${sessionInfo.id}`);
-    logger.infoDeveloper(`Logs: ${logPath}`);
+    logger.infoDeveloper('Local file logs: disabled');
 
     const lifecycle = createRunnerLifecycle({
         session,
@@ -362,14 +361,14 @@ export async function runClaude(options: StartOptions = {}): Promise<void> {
             startingMode,
             messageQueue,
             api,
-            allowedTools: happyServer.toolNames.map(toolName => `mcp__hapi__${toolName}`),
+            allowedTools: happyServer.toolNames.map(toolName => `mcp__hapi_session__${toolName}`),
             onModeChange: createModeChangeHandler(session),
             onSessionReady: (sessionInstance) => {
                 currentSessionRef.current = sessionInstance;
                 syncSessionModes();
             },
             mcpServers: {
-                'hapi': {
+                'hapi_session': {
                     type: 'http' as const,
                     url: happyServer.url,
                 }

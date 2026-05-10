@@ -35,7 +35,7 @@ export async function startHappyServer(client: ApiSessionClient) {
     //
 
     const mcp = new McpServer({
-        name: "HAPI MCP",
+        name: "HAPI Session Tools",
         version: "1.0.0",
     });
 

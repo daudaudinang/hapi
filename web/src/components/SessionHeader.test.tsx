@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Session } from '@/types/api'
@@ -11,6 +12,10 @@ vi.mock('@tanstack/react-router', () => ({
 
 vi.mock('@/hooks/useTelegram', () => ({
     isTelegramApp: () => false
+}))
+
+vi.mock('@/hooks/queries/useMachines', () => ({
+    useMachines: () => ({ machines: [], isLoading: false })
 }))
 
 vi.mock('@/hooks/mutations/useSessionActions', () => ({
@@ -75,7 +80,8 @@ describe('SessionHeader editor entry point', () => {
     })
 
     it('opens the session project in editor mode', () => {
-        render(<SessionHeader session={makeSession()} onBack={vi.fn()} api={null} />)
+        const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        render(<QueryClientProvider client={qc}><SessionHeader session={makeSession()} onBack={vi.fn()} api={null} /></QueryClientProvider>)
 
         fireEvent.click(screen.getByRole('button', { name: 'Open in Editor' }))
 
@@ -86,7 +92,8 @@ describe('SessionHeader editor entry point', () => {
     })
 
     it('hides the editor action when machine or path is missing', () => {
-        render(<SessionHeader session={makeSession({ metadata: { path: '/repo', host: 'host' } })} onBack={vi.fn()} api={null} />)
+        const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        render(<QueryClientProvider client={qc}><SessionHeader session={makeSession({ metadata: { path: '/repo', host: 'host' } })} onBack={vi.fn()} api={null} /></QueryClientProvider>)
 
         expect(screen.queryByRole('button', { name: 'Open in Editor' })).not.toBeInTheDocument()
     })

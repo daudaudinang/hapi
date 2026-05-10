@@ -177,7 +177,7 @@ export const GeminiDisplay: React.FC<GeminiDisplayProps> = ({
                     )}
                     {process.env.DEBUG && logPath && (
                         <Text color="gray" dimColor>
-                            Debug logs: {logPath}
+                            Debug file logs disabled
                         </Text>
                     )}
                 </Box>

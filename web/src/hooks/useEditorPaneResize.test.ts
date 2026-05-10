@@ -41,7 +41,7 @@ describe('useEditorPaneResize', () => {
         const { result } = renderHook(() => useEditorPaneResize())
 
         expect(result.current.leftWidth).toBe(260)
-        expect(result.current.rightWidth).toBe(380)
+        expect(result.current.rightWidth).toBe(360)
         expect(result.current.terminalHeight).toBe(160)
         expect(result.current.isDragging).toBe(false)
     })
@@ -55,9 +55,9 @@ describe('useEditorPaneResize', () => {
 
         const { result } = renderHook(() => useEditorPaneResize())
 
-        expect(result.current.leftWidth).toBe(200)
-        expect(result.current.rightWidth).toBe(640)
-        expect(result.current.terminalHeight).toBe(100)
+        expect(result.current.leftWidth).toBe(120)
+        expect(result.current.rightWidth).toBe(800)
+        expect(result.current.terminalHeight).toBe(60)
     })
 
     it('changes left width using positive deltaX and clamps to bounds', () => {
@@ -70,13 +70,13 @@ describe('useEditorPaneResize', () => {
             dispatchPointer('pointermove', { clientX: 500 })
         })
 
-        expect(result.current.leftWidth).toBe(500)
+        expect(result.current.leftWidth).toBe(660)
 
         act(() => {
             dispatchPointer('pointermove', { clientX: 900 })
         })
 
-        expect(result.current.leftWidth).toBe(500)
+        expect(result.current.leftWidth).toBe(800)
     })
 
     it('changes right width using inverse deltaX', () => {
@@ -89,7 +89,7 @@ describe('useEditorPaneResize', () => {
             dispatchPointer('pointermove', { clientX: 400 })
         })
 
-        expect(result.current.rightWidth).toBe(480)
+        expect(result.current.rightWidth).toBe(460)
     })
 
     it('changes terminal height using inverse deltaY', () => {
@@ -120,7 +120,7 @@ describe('useEditorPaneResize', () => {
 
         expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? '{}')).toEqual({
             leftWidth: 300,
-            rightWidth: 380,
+            rightWidth: 360,
             terminalHeight: 160,
         })
     })

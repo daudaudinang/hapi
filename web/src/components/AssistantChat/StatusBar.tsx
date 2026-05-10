@@ -214,6 +214,7 @@ export function StatusBar(props: {
                         {connectionStatus.text}
                     </span>
                 </div>
+
                 {contextUsageLabel ? (
                     <span className={`text-[10px] ${contextWarning?.color ?? 'text-[var(--app-hint)]'}`}>
                         {contextUsageLabel}{contextWarning ? ` · ${contextWarning.text}` : ''}

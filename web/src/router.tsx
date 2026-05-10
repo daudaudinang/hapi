@@ -243,7 +243,8 @@ function NewSessionPage() {
     const handleSuccess = useCallback((sessionId: string) => {
         void queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
         // Always return to dashboard with new session pinned
-        navigate({ to: '/sessions', search: { pins: sessionId }, replace: true })
+        sessionStorage.setItem('mc-pinned-ids', JSON.stringify([sessionId]))
+        navigate({ to: '/sessions', replace: true })
     }, [navigate, queryClient])
 
     const handleChooseFolder = useCallback((args: { machineId: string | null; directory: string }) => {
@@ -392,12 +393,9 @@ const sessionsRoute = createRoute({
 })
 
 const sessionsIndexRoute = createRoute({
-    getParentRoute: () => sessionsRoute,
     path: '/',
-    validateSearch: (search: Record<string, unknown>): { pins?: string } => {
-        if (typeof search.pins === 'string' && search.pins) {
-            return { pins: search.pins }
-        }
+    getParentRoute: () => sessionsRoute,
+    validateSearch: (search: Record<string, unknown>) => {
         return {}
     },
     component: SessionsIndexPage,

@@ -1,12 +1,10 @@
 /**
  * Design decisions:
- * - Logging should be done only through file for debugging, otherwise we might disturb the claude session when in interactive mode
+ * - Local file logging is disabled to avoid unbounded disk growth.
  * - Use info for logs that are useful to the user - this is our UI
- * - File output location: ~/.handy/logs/<date time in local timezone>.log
  */
 
 import chalk from 'chalk'
-import { appendFileSync } from 'fs'
 import { configuration } from '@/configuration'
 import { existsSync, readdirSync, statSync } from 'node:fs'
 import { join, basename } from 'node:path'
@@ -217,16 +215,11 @@ class Logger {
       })
     }
     
-    // Handle async file path
-    try {
-      appendFileSync(this.logFilePath, logLine)
-    } catch (appendError) {
-      if (process.env.DEBUG) {
-        console.error('[DEV MODE ONLY THROWING] Failed to append to log file:', appendError)
-        throw appendError
-      }
-      // In production, fail silently to avoid disturbing Claude session
-    }
+    // Intentionally do not write local log files. HAPI can run many long-lived
+    // agent/runner processes, and per-process debug logs have caused unbounded
+    // growth under ~/.hapi/logs. Keep this method as the single sink for debug
+    // calls so callers do not need to know whether local file logs exist.
+    void logLine
   }
 }
 

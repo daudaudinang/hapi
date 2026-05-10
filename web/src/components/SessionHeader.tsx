@@ -1,8 +1,9 @@
-import { useId, useMemo, useRef, useState } from 'react'
+import { useCallback, useId, useMemo, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import type { Session } from '@/types/api'
+import type { Machine, Session } from '@/types/api'
 import type { ApiClient } from '@/api/client'
 import { isTelegramApp } from '@/hooks/useTelegram'
+import { useMachines } from '@/hooks/queries/useMachines'
 import { useSessionActions } from '@/hooks/mutations/useSessionActions'
 import { SessionActionMenu } from '@/components/SessionActionMenu'
 import { RenameSessionDialog } from '@/components/RenameSessionDialog'
@@ -66,6 +67,10 @@ function OutlineIcon(props: { className?: string }) {
             <path d="M3 18h.01" />
         </svg>
     )
+}
+
+function getMachineLabel(machine: Machine): string {
+    return machine.metadata?.displayName ?? machine.metadata?.host ?? machine.id.slice(0, 8)
 }
 
 function MoreVerticalIcon(props: { className?: string }) {
@@ -182,6 +187,8 @@ export function SessionHeader(props: {
         session.metadata?.flavor ?? null
     )
 
+    const { machines } = useMachines(api, true)
+
     const handleDelete = async () => {
         await deleteSession()
         onSessionDeleted?.()
@@ -194,6 +201,12 @@ export function SessionHeader(props: {
         }
         setMenuOpen((open) => !open)
     }
+
+    const handleMachineChange = useCallback((event: React.ChangeEvent<HTMLSelectElement>) => {
+        const newMachineId = event.target.value
+        if (!newMachineId) return
+        navigate({ to: '/editor', search: { machine: newMachineId } })
+    }, [navigate])
 
     // In Telegram, don't render header (Telegram provides its own)
     if (isTelegramApp()) {
@@ -327,6 +340,20 @@ export function SessionHeader(props: {
                         </div>
                     </div>
 
+
+                    <select
+                        aria-label="Machine"
+                        value={session.metadata?.machineId ?? ''}
+                        onChange={handleMachineChange}
+                        className="h-7 rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-1.5 text-[11px] text-[var(--app-hint)] max-w-[140px] truncate cursor-pointer hover:border-[var(--app-link)] transition-colors"
+                    >
+                        <option value="">Device</option>
+                        {machines.map((machine) => (
+                            <option key={machine.id} value={machine.id}>
+                                {machine.id === session.metadata?.machineId ? '● ' : ''}{getMachineLabel(machine)}
+                            </option>
+                        ))}
+                    </select>
 
                     {editorSearch ? (
                         <button

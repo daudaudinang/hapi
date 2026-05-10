@@ -938,6 +938,36 @@
     opacity: 1;
 }
 
+.db-card__menu-btn {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--app-hint);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s, background 0.15s;
+    z-index: 1;
+    font-size: 16px;
+    line-height: 1;
+    padding-bottom: 2px;
+}
+
+.db-card:hover .db-card__menu-btn,
+.db-card__menu-btn:focus-visible {
+    opacity: 1;
+}
+
+.db-card__menu-btn:hover {
+    color: var(--app-fg);
+    background: var(--app-secondary-bg);
+    border-color: var(--app-border);
+}
+
 .db-card__pin-btn--active {
     opacity: 1 !important;
     color: #818cf8;
@@ -2309,4 +2339,122 @@
 
 .db__overview-machine:last-child {
     margin-bottom: 0;
+}
+
+/* ─── Session Context Menu ──────────────────────────────────────────────────── */
+
+.db__context-menu {
+    background: var(--app-bg);
+    border: 1px solid var(--app-border);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    display: flex;
+    flex-direction: column;
+    min-width: 200px;
+    max-width: 280px;
+    padding: 4px 0;
+    overflow: hidden;
+}
+
+.db__context-menu-header {
+    padding: 10px 14px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    opacity: 0.6;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border-bottom: 1px solid var(--app-border);
+    margin-bottom: 4px;
+}
+
+.db__context-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    text-align: left;
+    padding: 9px 14px;
+    background: transparent;
+    border: none;
+    color: var(--app-fg);
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    transition: background 0.1s;
+}
+
+.db__context-menu-item:hover {
+    background: var(--app-secondary-bg);
+}
+
+.db__context-menu-item svg {
+    flex-shrink: 0;
+    opacity: 0.7;
+}
+
+.db__context-menu-item--danger {
+    color: #ef4444;
+}
+
+.db__context-menu-item--danger:hover {
+    background: rgba(239, 68, 68, 0.08);
+}
+
+.db__context-menu-item--danger svg {
+    color: #ef4444;
+}
+
+.db__context-menu-item--cancel {
+    justify-content: center;
+    font-weight: 600;
+    border-top: 1px solid var(--app-border);
+    margin-top: 4px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+}
+
+.db__context-menu-divider {
+    height: 1px;
+    background: var(--app-border);
+    margin: 4px 0;
+}
+
+/* ─── Bottom Sheet (mobile) ────────────────────────────────────────────────── */
+
+.db__bottom-sheet-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 9998;
+    display: flex;
+    align-items: flex-end;
+    animation: dbFadeIn 0.15s ease;
+}
+
+.db__bottom-sheet {
+    width: 100%;
+    max-height: 70vh;
+    background: var(--app-bg);
+    border-radius: 16px 16px 0 0;
+    padding: 8px 0 calc(env(safe-area-inset-bottom) + 8px);
+    display: flex;
+    flex-direction: column;
+    animation: dbSlideUp 0.2s ease;
+    overflow-y: auto;
+}
+
+@keyframes dbFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes dbSlideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+}
+
+/* Double-click hint cursor for session cards */
+.db-card {
+    cursor: context-menu;
 }

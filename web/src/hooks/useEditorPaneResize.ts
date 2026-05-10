@@ -3,16 +3,16 @@ import { useCallback, useEffect, useState, type PointerEvent } from 'react'
 const STORAGE_KEY = 'hapi-editor-pane-sizes'
 
 const LEFT_DEFAULT = 260
-const LEFT_MIN = 200
-const LEFT_MAX = 500
+const LEFT_MIN = 120
+const LEFT_MAX = 800
 
-const RIGHT_DEFAULT = 380
-const RIGHT_MIN = 300
-const RIGHT_MAX = 640
+const RIGHT_DEFAULT = 360
+const RIGHT_MIN = 200
+const RIGHT_MAX = 800
 
 const TERMINAL_DEFAULT = 160
-const TERMINAL_MIN = 100
-const TERMINAL_MAX = 360
+const TERMINAL_MIN = 60
+const TERMINAL_MAX = 600
 
 type PaneSizes = {
     leftWidth: number

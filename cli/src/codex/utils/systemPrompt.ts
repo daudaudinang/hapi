@@ -10,13 +10,14 @@ import { trimIdent } from '@/utils/trimIdent';
 /**
  * Title instruction for Codex to call the hapi MCP tool.
  * Note: Codex exposes MCP tools under the `functions.` namespace,
- * so the tool is called as `functions.hapi__change_title`.
+ * so the tool is called as `functions.hapi_session__change_title`.
  */
 export const TITLE_INSTRUCTION = trimIdent(`
     ALWAYS when you start a new chat, call the title tool to set a concise task title.
-    Prefer calling functions.hapi__change_title.
-    If that exact tool name is unavailable, call an equivalent alias such as hapi__change_title, mcp__hapi__change_title, or hapi_change_title.
+    Prefer calling functions.hapi_session__change_title.
+    If that exact tool name is unavailable, call an equivalent alias such as hapi_session__change_title, mcp__hapi_session__change_title, or hapi_session_change_title.
     If the task focus changes significantly later, call the title tool again with a better title.
+    The "hapi_session" MCP server provides exactly ONE tool: change_title. It has no resources, no prompts, no skills, and no other capabilities. Do NOT query it for anything else.
 `);
 
 /**

@@ -49,7 +49,7 @@ export function ensureOpencodeConfig(
     const config: OpencodeConfig = {
         $schema: 'https://opencode.ai/config.json',
         mcp: {
-            hapi: {
+            hapi_session: {
                 type: 'local',
                 command: [mcpServer.command, ...mcpServer.args],
                 enabled: true
