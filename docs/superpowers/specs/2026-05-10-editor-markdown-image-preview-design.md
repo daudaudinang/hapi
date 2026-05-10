@@ -79,7 +79,7 @@ When an image file is open:
 └──────────────────────────┘
 ```
 
-- Image uses `<img>` with `max-width: 100%`, `object-fit: contain`, centered in the editor area.
+- Image uses `<img>` with `max-width: 100%`, `max-height: 100%`, `object-fit: contain`, centered in the editor area.
 - Background: dark/neutral background to handle transparent images.
 - Scrollable if image exceeds viewport height.
 - Metadata bar shows: icon + filename + dimensions + file size.
@@ -94,6 +94,14 @@ When an image file is open:
 - Code blocks in markdown preview: reuse `shiki` for syntax highlighting (already in deps).
 - Image background: `--app-subtle-bg` or a dark neutral for transparency support.
 - Preserve light, dark, and Telegram theme support through CSS variables.
+
+### View mode persistence
+
+The `viewMode` state is part of the tab state in `useEditorState`, which persists to `sessionStorage`. When a user reopens the editor or restores a tab, the last-used view mode (Source or Preview) is restored.
+
+### Mobile
+
+In `MobileEditorLayout`, when the "Editor" view is active and the file supports preview, show the same Source/Preview toggle. The preview renders full-width in the single-column mobile layout.
 
 ### Loading and error states
 
@@ -145,7 +153,7 @@ Response:
 - `Cache-Control: private, max-age=300` (5-minute browser cache)
 - `Content-Length` header set
 
-Auth: Reuse existing editor endpoint session authentication middleware.
+Auth: Reuse existing editor endpoint session authentication middleware. The `getEditorFileRawBlob` method in the API client POSTs to the endpoint with the same auth, then creates an object URL for `<img>` display.
 
 Error responses:
 - 400: Invalid path or unsupported file type
@@ -166,20 +174,10 @@ New method: `readEditorFileRaw(machineId: string, path: string)`
 New method:
 
 ```typescript
-getEditorFileRawUrl(machine: string, path: string): string
+async getEditorFileRawBlob(machine: string, path: string): Promise<Blob>
 ```
 
-Returns the URL for the raw endpoint with query parameters, used as `<img src={url}>`.
-
-```typescript
-async getEditorFileInfo(machine: string, path: string): Promise<{
-  size: number
-  mimeType: string
-  dimensions?: { width: number; height: number }
-}>
-```
-
-For image metadata (dimensions). The dimensions are resolved client-side after the image loads from the raw URL (read `naturalWidth` / `naturalHeight` from the loaded `<img>` element).
+Posts to `/api/editor/file/raw`, receives raw bytes with `Content-Type` set, returns a `Blob` object. The calling component creates an object URL via `URL.createObjectURL(blob)` for `<img>` tag use. File metadata (size, mimeType) comes from response headers. Dimensions are resolved client-side after the image loads (read `naturalWidth` / `naturalHeight` from the loaded `<img>` element).
 
 ## Data flow
 
@@ -190,6 +188,7 @@ User opens .md file
   → EditorTabs reads file via existing readEditorFile (text, base64-decoded)
   → Source mode: CodeMirror (existing)
   → Preview mode: react-markdown renders the text content
+  → When file is saved in Source mode, useEditorFile refetch triggers preview re-render
 ```
 
 No backend changes needed for markdown rendering.
@@ -198,14 +197,17 @@ No backend changes needed for markdown rendering.
 
 ```
 User opens image file
-  → EditorTabs calls getEditorFileInfo + getEditorFileRawUrl
-  → <img src={url}> fetches from /api/editor/file/raw
-  → Hub → syncEngine.readEditorFileRaw → rpcGateway → CLI editor-read-file-raw
-  → CLI reads file, returns base64 + mimeType
-  → Hub decodes base64, serves raw bytes with Content-Type
-  → Browser renders image
+  → EditorTabs calls api.getEditorFileRawBlob(machine, path)
+  → POST /api/editor/file/raw → Hub → syncEngine → rpcGateway → CLI
+  → CLI reads file, returns base64 + mimeType + size
+  → Hub decodes base64, returns raw bytes as Blob with Content-Type + Content-Length
+  → EditorTabs creates blob: URL with URL.createObjectURL(blob)
+  → <img src={blobUrl}> renders the image
   → Image onLoad → read naturalWidth/naturalHeight → show metadata
+  → Cleanup: URL.revokeObjectURL(blobUrl) on unmount or path change
 ```
+
+Metadata (size, mimeType) is read from Blob properties (`blob.size`, `blob.type`). Dimensions are read from the loaded `<img>` element (`naturalWidth`, `naturalHeight`). Object URL is revoked on tab close or path change to prevent memory leaks.
 
 ## Component changes
 
