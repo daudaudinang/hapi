@@ -10,7 +10,22 @@ const execFileAsync = promisify(execFile)
 const GIT_STATUS_TTL = 5_000
 const MAX_TEXT_SAMPLE_BYTES = 512
 const MAX_FILE_BYTES = 5 * 1024 * 1024
+const MAX_RAW_FILE_BYTES = 10 * 1024 * 1024
 const PROJECT_SCAN_DEPTH = 3
+
+const SUPPORTED_IMAGE_MIME: Record<string, string> = {
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    gif: 'image/gif',
+    svg: 'image/svg+xml',
+    webp: 'image/webp'
+}
+
+function getMimeType(filePath: string): string | null {
+    const ext = filePath.split('.').pop()?.toLowerCase()
+    return ext ? SUPPORTED_IMAGE_MIME[ext] ?? null : null
+}
 
 type EditorGitStatus = 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked'
 
@@ -453,6 +468,42 @@ export function registerEditorRpcHandlers(rpcHandlerManager: RpcHandlerManager, 
             return { success: true, projects: sortedProjects }
         } catch (error) {
             return rpcError(getErrorMessage(error, 'Failed to list projects'))
+        }
+    })
+
+    rpcHandlerManager.registerHandler<EditorReadFileRequest>('editor-read-file-raw', async (data) => {
+        const resolved = await resolveExistingInsideRoot(data?.path, editorRoot)
+        if (resolved.error) {
+            return rpcError(resolved.error)
+        }
+
+        const mimeType = getMimeType(resolved.path)
+        if (!mimeType) {
+            return rpcError('Unsupported file type')
+        }
+
+        try {
+            const fileStat = await stat(resolved.path)
+            if (!fileStat.isFile()) {
+                return rpcError('Path is not a file')
+            }
+            if (fileStat.size > MAX_RAW_FILE_BYTES) {
+                return rpcError('File is too large')
+            }
+
+            const content = await readFile(resolved.path)
+            return {
+                success: true,
+                data: content.toString('base64'),
+                mimeType,
+                size: content.length
+            }
+        } catch (error) {
+            const code = (error as NodeJS.ErrnoException).code
+            if (code === 'ENOENT') {
+                return rpcError('File does not exist')
+            }
+            return rpcError(getErrorMessage(error, 'Failed to read file'))
         }
     })
 

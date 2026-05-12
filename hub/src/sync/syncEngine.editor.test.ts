@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'bun:test'
-import { SyncEngine } from './syncEngine'
+import { SyncEngine, type ReadEditorFileRawResult } from './syncEngine'
 
 type EditorRpcGatewayStub = {
     editorListDirectory: (machineId: string, path: string) => Promise<unknown>
     editorReadFile: (machineId: string, path: string) => Promise<unknown>
+    editorReadFileRaw: (machineId: string, path: string) => Promise<unknown>
     editorListProjects: (machineId: string) => Promise<unknown>
     editorWriteFile: (machineId: string, path: string, content: string) => Promise<unknown>
     editorCreateFile: (machineId: string, path: string, content: string) => Promise<unknown>
@@ -14,6 +15,7 @@ type SyncEngineWithEditorRpc = {
     rpcGateway: EditorRpcGatewayStub
     listEditorDirectory(machineId: string, path: string): Promise<unknown>
     readEditorFile(machineId: string, path: string): Promise<unknown>
+    readEditorFileRaw(machineId: string, path: string): Promise<ReadEditorFileRawResult>
     listEditorProjects(machineId: string): Promise<unknown>
     writeEditorFile(machineId: string, path: string, content: string): Promise<unknown>
     createEditorFile(machineId: string, path: string, content: string): Promise<unknown>
@@ -47,6 +49,10 @@ describe('SyncEngine editor RPC methods', () => {
             editorDeleteFile: async (...args) => {
                 calls.push({ method: 'editorDeleteFile', args })
                 return { success: true, path: '/repo/old.ts' }
+            },
+            editorReadFileRaw: async (...args) => {
+                calls.push({ method: 'editorReadFileRaw', args })
+                return { success: true, data: '', mimeType: 'image/png', size: 0 }
             }
         }
         const engine = Object.create(SyncEngine.prototype) as SyncEngineWithEditorRpc
@@ -67,5 +73,111 @@ describe('SyncEngine editor RPC methods', () => {
             { method: 'editorCreateFile', args: ['machine-1', '/repo/new.ts', ''] },
             { method: 'editorDeleteFile', args: ['machine-1', '/repo/old.ts'] }
         ])
+    })
+})
+
+describe('SyncEngine readEditorFileRaw', () => {
+    it('returns buffer with correct contentType for valid image', async () => {
+        const pngBase64 = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).toString('base64')
+        const gateway: EditorRpcGatewayStub = {
+            editorListDirectory: async () => ({ success: true, entries: [] }),
+            editorReadFile: async () => ({ success: true, content: '', size: 0 }),
+            editorReadFileRaw: async () => ({ success: true, data: pngBase64, mimeType: 'image/png', size: 8 }),
+            editorListProjects: async () => ({ success: true, projects: [] }),
+            editorWriteFile: async () => ({ success: true }),
+            editorCreateFile: async () => ({ success: true }),
+            editorDeleteFile: async () => ({ success: true })
+        }
+        const engine = Object.create(SyncEngine.prototype) as SyncEngineWithEditorRpc
+        engine.rpcGateway = gateway
+
+        const result = await engine.readEditorFileRaw('machine-1', '/img/test.png')
+        expect(result.ok).toBe(true)
+        if (result.ok) {
+            expect(result.buffer).toBeInstanceOf(Buffer)
+            expect(result.contentType).toBe('image/png')
+            expect(result.size).toBe(8)
+        }
+    })
+
+    it('returns error with 404 for file not found', async () => {
+        const gateway: EditorRpcGatewayStub = {
+            editorListDirectory: async () => ({ success: true, entries: [] }),
+            editorReadFile: async () => ({ success: true, content: '', size: 0 }),
+            editorReadFileRaw: async () => ({ success: false, error: 'File does not exist' }),
+            editorListProjects: async () => ({ success: true, projects: [] }),
+            editorWriteFile: async () => ({ success: true }),
+            editorCreateFile: async () => ({ success: true }),
+            editorDeleteFile: async () => ({ success: true })
+        }
+        const engine = Object.create(SyncEngine.prototype) as SyncEngineWithEditorRpc
+        engine.rpcGateway = gateway
+
+        const result = await engine.readEditorFileRaw('machine-1', '/img/missing.png')
+        expect(result.ok).toBe(false)
+        if (!result.ok) {
+            expect(result.error).toContain('does not exist')
+            expect(result.status).toBe(404)
+        }
+    })
+
+    it('returns error with 415 for unsupported type', async () => {
+        const gateway: EditorRpcGatewayStub = {
+            editorListDirectory: async () => ({ success: true, entries: [] }),
+            editorReadFile: async () => ({ success: true, content: '', size: 0 }),
+            editorReadFileRaw: async () => ({ success: false, error: 'Unsupported file type' }),
+            editorListProjects: async () => ({ success: true, projects: [] }),
+            editorWriteFile: async () => ({ success: true }),
+            editorCreateFile: async () => ({ success: true }),
+            editorDeleteFile: async () => ({ success: true })
+        }
+        const engine = Object.create(SyncEngine.prototype) as SyncEngineWithEditorRpc
+        engine.rpcGateway = gateway
+
+        const result = await engine.readEditorFileRaw('machine-1', '/test.txt')
+        expect(result.ok).toBe(false)
+        if (!result.ok) {
+            expect(result.status).toBe(415)
+        }
+    })
+
+    it('returns error with 413 for oversized file', async () => {
+        const gateway: EditorRpcGatewayStub = {
+            editorListDirectory: async () => ({ success: true, entries: [] }),
+            editorReadFile: async () => ({ success: true, content: '', size: 0 }),
+            editorReadFileRaw: async () => ({ success: false, error: 'File is too large' }),
+            editorListProjects: async () => ({ success: true, projects: [] }),
+            editorWriteFile: async () => ({ success: true }),
+            editorCreateFile: async () => ({ success: true }),
+            editorDeleteFile: async () => ({ success: true })
+        }
+        const engine = Object.create(SyncEngine.prototype) as SyncEngineWithEditorRpc
+        engine.rpcGateway = gateway
+
+        const result = await engine.readEditorFileRaw('machine-1', '/big.png')
+        expect(result.ok).toBe(false)
+        if (!result.ok) {
+            expect(result.status).toBe(413)
+        }
+    })
+
+    it('returns error with 400 for path outside root', async () => {
+        const gateway: EditorRpcGatewayStub = {
+            editorListDirectory: async () => ({ success: true, entries: [] }),
+            editorReadFile: async () => ({ success: true, content: '', size: 0 }),
+            editorReadFileRaw: async () => ({ success: false, error: 'Path outside editor root' }),
+            editorListProjects: async () => ({ success: true, projects: [] }),
+            editorWriteFile: async () => ({ success: true }),
+            editorCreateFile: async () => ({ success: true }),
+            editorDeleteFile: async () => ({ success: true })
+        }
+        const engine = Object.create(SyncEngine.prototype) as SyncEngineWithEditorRpc
+        engine.rpcGateway = gateway
+
+        const result = await engine.readEditorFileRaw('machine-1', '../outside.png')
+        expect(result.ok).toBe(false)
+        if (!result.ok) {
+            expect(result.status).toBe(400)
+        }
     })
 })

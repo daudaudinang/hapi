@@ -16,9 +16,16 @@ export type AcpModelDescriptor = {
     name?: string;
 };
 
+export type AcpEffortDescriptor = {
+    effortId: string;
+    name?: string;
+};
+
 export type AcpSessionModelsMetadata = {
     availableModels: AcpModelDescriptor[];
     currentModelId: string | null;
+    availableEfforts?: AcpEffortDescriptor[];
+    currentEffortId?: string | null;
 };
 
 export class AcpSdkBackend implements AgentBackend {
@@ -175,16 +182,36 @@ export class AcpSdkBackend implements AgentBackend {
         });
 
         if (opts?.flavor === 'opencode') {
-            // OpenCode's set_model response only carries an opaque `_meta` block,
-            // not `availableModels`/`currentModelId`. Optimistically update the
-            // cached currentModelId (the call succeeded, so the agent has switched)
-            // while preserving the availableModels list captured from session/new.
+            // Some OpenCode builds return only an opaque `_meta`; newer builds may
+            // also return configOptions. Capture what is present, then preserve an
+            // optimistic current model when the response omits normalized models.
+            this.captureSessionModelsMetadata(sessionId, response);
             this.updateCurrentModelOptimistic(sessionId, modelId);
         } else {
             // For other flavors (e.g. Gemini), if the response carries metadata,
             // capture it. Missing fields are silently ignored.
             this.captureSessionModelsMetadata(sessionId, response);
         }
+    }
+
+    async setConfigOption(
+        sessionId: string,
+        configId: string,
+        value: string,
+        _opts?: { flavor?: AgentFlavor }
+    ): Promise<void> {
+        if (!this.transport) {
+            throw new Error('ACP transport not initialized');
+        }
+
+        await this.waitForResponseComplete();
+
+        const response = await this.transport.sendRequest('session/set_config_option', {
+            sessionId,
+            configId,
+            value
+        });
+        this.captureSessionModelsMetadata(sessionId, response);
     }
 
     /**
@@ -433,7 +460,9 @@ export class AcpSdkBackend implements AgentBackend {
         const existing = this.sessionModelsMetadata.get(sessionId);
         this.sessionModelsMetadata.set(sessionId, {
             availableModels: existing?.availableModels ?? [],
-            currentModelId: modelId
+            currentModelId: modelId,
+            availableEfforts: existing?.availableEfforts,
+            currentEffortId: existing?.currentEffortId
         });
     }
 
@@ -466,6 +495,16 @@ export class AcpSdkBackend implements AgentBackend {
                 : null;
 
         if (rawModels === null && rawCurrent === null) {
+            const configMetadata = this.extractConfigOptionsMetadata(response);
+            const metaMetadata = this.extractOpencodeMetaMetadata(response);
+            if (!configMetadata && !metaMetadata) return;
+            const existing = this.sessionModelsMetadata.get(sessionId);
+            this.sessionModelsMetadata.set(sessionId, {
+                availableModels: configMetadata?.availableModels ?? existing?.availableModels ?? [],
+                currentModelId: configMetadata?.currentModelId ?? metaMetadata?.currentModelId ?? existing?.currentModelId ?? null,
+                availableEfforts: configMetadata?.availableEfforts ?? metaMetadata?.availableEfforts ?? existing?.availableEfforts,
+                currentEffortId: configMetadata?.currentEffortId ?? metaMetadata?.currentEffortId ?? existing?.currentEffortId
+            });
             return;
         }
 
@@ -487,9 +526,97 @@ export class AcpSdkBackend implements AgentBackend {
             }
         }
 
+        const existing = this.sessionModelsMetadata.get(sessionId);
+        const configMetadata = this.extractConfigOptionsMetadata(response);
+        const metaMetadata = this.extractOpencodeMetaMetadata(response);
         this.sessionModelsMetadata.set(sessionId, {
             availableModels,
-            currentModelId: rawCurrent
+            currentModelId: rawCurrent,
+            availableEfforts: configMetadata?.availableEfforts ?? metaMetadata?.availableEfforts ?? existing?.availableEfforts,
+            currentEffortId: configMetadata?.currentEffortId ?? metaMetadata?.currentEffortId ?? existing?.currentEffortId
         });
     }
+
+    private extractConfigOptionsMetadata(response: unknown): Partial<AcpSessionModelsMetadata> | null {
+        if (!isObject(response) || !Array.isArray(response.configOptions)) return null;
+
+        let availableModels: AcpModelDescriptor[] | undefined;
+        let currentModelId: string | null | undefined;
+        let availableEfforts: AcpEffortDescriptor[] | undefined;
+        let currentEffortId: string | null | undefined;
+
+        for (const option of response.configOptions) {
+            if (!isObject(option)) continue;
+            const id = asString(option.id);
+            const currentValue = asString(option.currentValue);
+            const rawOptions = Array.isArray(option.options) ? option.options : [];
+
+            if (id === 'model') {
+                currentModelId = currentValue ?? null;
+                availableModels = [];
+                for (const entry of rawOptions) {
+                    if (!isObject(entry)) continue;
+                    const value = asString(entry.value);
+                    if (!value) continue;
+                    const name = asString(entry.name) ?? undefined;
+                    availableModels.push(name ? { modelId: value, name } : { modelId: value });
+                }
+            }
+
+            if (id === 'effort') {
+                currentEffortId = currentValue ?? null;
+                availableEfforts = [];
+                for (const entry of rawOptions) {
+                    if (!isObject(entry)) continue;
+                    const value = asString(entry.value);
+                    if (!value) continue;
+                    const name = asString(entry.name) ?? undefined;
+                    availableEfforts.push(name ? { effortId: value, name } : { effortId: value });
+                }
+            }
+        }
+
+        if (
+            availableModels === undefined
+            && currentModelId === undefined
+            && availableEfforts === undefined
+            && currentEffortId === undefined
+        ) {
+            return null;
+        }
+
+        return { availableModels, currentModelId, availableEfforts, currentEffortId };
+    }
+
+    private extractOpencodeMetaMetadata(response: unknown): Partial<AcpSessionModelsMetadata> | null {
+        if (!isObject(response) || !isObject(response._meta)) return null;
+        const opencode = isObject(response._meta.opencode) ? response._meta.opencode : null;
+        if (!opencode) return null;
+
+        const modelId = asString(opencode.modelId);
+        const variant = asString(opencode.variant);
+        const rawVariants = Array.isArray(opencode.availableVariants) ? opencode.availableVariants : [];
+        const availableEfforts: AcpEffortDescriptor[] = rawVariants.flatMap((entry): AcpEffortDescriptor[] => {
+            const effortId = asString(entry);
+            if (!effortId) return [];
+            return [{ effortId, name: formatEffortName(effortId) }];
+        });
+
+        if (!modelId && !variant && availableEfforts.length === 0) {
+            return null;
+        }
+
+        return {
+            currentModelId: modelId ?? undefined,
+            currentEffortId: variant ?? null,
+            availableEfforts: availableEfforts.length > 0 ? availableEfforts : undefined
+        };
+    }
+}
+
+function formatEffortName(effortId: string): string {
+    return effortId
+        .split(/[_-]/)
+        .map((part) => part ? part.charAt(0).toUpperCase() + part.slice(1) : part)
+        .join(' ');
 }

@@ -4,6 +4,7 @@ import type { OpencodeMode, PermissionMode } from './types';
 
 const harness = vi.hoisted(() => ({
     setModelArgs: [] as Array<{ sessionId: string; modelId: string; flavor?: string }>,
+    setConfigOptionArgs: [] as Array<{ sessionId: string; configId: string; value: string; flavor?: string }>,
     promptCount: 0,
     events: [] as string[],
     setModelImpl: null as null | ((sessionId: string, modelId: string) => Promise<void>)
@@ -20,6 +21,10 @@ vi.mock('./utils/opencodeBackend', () => ({
             if (harness.setModelImpl) {
                 await harness.setModelImpl(sessionId, modelId);
             }
+        }),
+        setConfigOption: vi.fn(async (sessionId: string, configId: string, value: string, opts?: { flavor?: string }) => {
+            harness.events.push(`setConfigOption:${configId}:${value}`);
+            harness.setConfigOptionArgs.push({ sessionId, configId, value, flavor: opts?.flavor });
         }),
         prompt: vi.fn(async () => {
             harness.events.push('prompt:start');
@@ -67,6 +72,14 @@ function createMode(model?: string): OpencodeMode {
     return {
         permissionMode: 'default' as PermissionMode,
         model
+    };
+}
+
+function createModeWithEffort(model: string | undefined, modelReasoningEffort: string | null): OpencodeMode {
+    return {
+        permissionMode: 'default' as PermissionMode,
+        model,
+        modelReasoningEffort
     };
 }
 
@@ -127,6 +140,7 @@ function createSessionStub(items: Array<{ message: string; mode: OpencodeMode }>
 describe('opencodeRemoteLauncher inline model switch', () => {
     afterEach(() => {
         harness.setModelArgs = [];
+        harness.setConfigOptionArgs = [];
         harness.promptCount = 0;
         harness.events = [];
         harness.setModelImpl = null;
@@ -141,6 +155,7 @@ describe('opencodeRemoteLauncher inline model switch', () => {
         await opencodeRemoteLauncher(session as never);
 
         expect(harness.setModelArgs).toEqual([
+            { sessionId: 'acp-session-1', modelId: 'ollama/exaone:4.5-33b-q8', flavor: 'opencode' },
             { sessionId: 'acp-session-1', modelId: 'mlx/qwen3:0.6b', flavor: 'opencode' }
         ]);
         expect(harness.promptCount).toBe(2);
@@ -154,7 +169,24 @@ describe('opencodeRemoteLauncher inline model switch', () => {
 
         await opencodeRemoteLauncher(session as never);
 
-        expect(harness.setModelArgs).toEqual([]);
+        expect(harness.setModelArgs).toEqual([
+            { sessionId: 'acp-session-1', modelId: 'ollama/exaone:4.5-33b-q8', flavor: 'opencode' }
+        ]);
+        expect(harness.promptCount).toBe(2);
+    });
+
+    it('calls setConfigOption with OpenCode effort between turns when reasoning effort differs', async () => {
+        const { session } = createSessionStub([
+            { message: 'first', mode: createModeWithEffort('openai/o3', 'low') },
+            { message: 'second', mode: createModeWithEffort('openai/o3', 'high') }
+        ]);
+
+        await opencodeRemoteLauncher(session as never);
+
+        expect(harness.setConfigOptionArgs).toEqual([
+            { sessionId: 'acp-session-1', configId: 'effort', value: 'low', flavor: 'opencode' },
+            { sessionId: 'acp-session-1', configId: 'effort', value: 'high', flavor: 'opencode' }
+        ]);
         expect(harness.promptCount).toBe(2);
     });
 
@@ -172,7 +204,7 @@ describe('opencodeRemoteLauncher inline model switch', () => {
 
         // Only one setModel attempt — latched off after the first method-not-found
         expect(harness.setModelArgs).toEqual([
-            { sessionId: 'acp-session-1', modelId: 'ollama/b', flavor: 'opencode' }
+            { sessionId: 'acp-session-1', modelId: 'ollama/a', flavor: 'opencode' }
         ]);
         const unsupportedMessages = sessionEvents.filter(
             (event) =>
@@ -197,15 +229,16 @@ describe('opencodeRemoteLauncher inline model switch', () => {
 
         await opencodeRemoteLauncher(session as never);
 
-        expect(attempts).toBe(1);
+        expect(attempts).toBe(2);
         const failureMessages = sessionEvents.filter(
             (event) =>
                 event.type === 'message' &&
                 typeof event.message === 'string' &&
                 event.message.includes('Failed to switch model')
         );
-        expect(failureMessages.length).toBe(1);
-        expect(failureMessages[0]?.message).toContain('ollama/b');
+        expect(failureMessages.length).toBe(2);
+        expect(failureMessages[0]?.message).toContain('ollama/a');
+        expect(failureMessages[1]?.message).toContain('ollama/b');
         expect(harness.promptCount).toBe(2);
     });
 
@@ -222,6 +255,7 @@ describe('opencodeRemoteLauncher inline model switch', () => {
             newSession: vi.fn(async () => 'acp-session-1'),
             loadSession: vi.fn(async () => 'acp-session-1'),
             setModel: vi.fn(async () => {}),
+            setConfigOption: vi.fn(async () => {}),
             prompt: vi.fn(async () => {}),
             cancelPrompt: vi.fn(async () => {}),
             respondToPermission: vi.fn(async () => {}),
@@ -230,7 +264,12 @@ describe('opencodeRemoteLauncher inline model switch', () => {
             disconnect: vi.fn(async () => {}),
             getSessionModelsMetadata: vi.fn((sessionId: string) => {
                 if (sessionId === 'acp-session-1') {
-                    return { availableModels: fixtureModels, currentModelId: 'ollama/exaone:4.5-33b-q8' };
+                    return {
+                        availableModels: fixtureModels,
+                        currentModelId: 'ollama/exaone:4.5-33b-q8',
+                        availableEfforts: [{ effortId: 'low', name: 'Low' }, { effortId: 'high', name: 'High' }],
+                        currentEffortId: 'low'
+                    };
                 }
                 return undefined;
             })
@@ -247,7 +286,9 @@ describe('opencodeRemoteLauncher inline model switch', () => {
         expect(result).toEqual({
             success: true,
             availableModels: fixtureModels,
-            currentModelId: 'ollama/exaone:4.5-33b-q8'
+            currentModelId: 'ollama/exaone:4.5-33b-q8',
+            availableEfforts: [{ effortId: 'low', name: 'Low' }, { effortId: 'high', name: 'High' }],
+            currentEffortId: 'low'
         });
     });
 
@@ -263,7 +304,9 @@ describe('opencodeRemoteLauncher inline model switch', () => {
         expect(result).toEqual({
             success: true,
             availableModels: [],
-            currentModelId: null
+            currentModelId: null,
+            availableEfforts: [],
+            currentEffortId: null
         });
     });
 
@@ -277,6 +320,7 @@ describe('opencodeRemoteLauncher inline model switch', () => {
 
         // Order must be: prompt(1) start/end → setModel → prompt(2) start/end
         expect(harness.events).toEqual([
+            'setModel:ollama/a',
             'prompt:start',
             'prompt:end',
             'setModel:ollama/b',

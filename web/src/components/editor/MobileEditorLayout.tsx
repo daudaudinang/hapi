@@ -48,6 +48,7 @@ type MobileEditorLayoutProps = {
     onAddTerminalToChat: (text: string) => void
     onRegisterTerminalClose: (tabId: string, close: (() => void) | null) => void
     onSaveActiveFile: () => Promise<void>
+    setTabViewMode: (tabId: string, mode: 'source' | 'preview') => void
     saveActiveFileRef: React.MutableRefObject<(() => Promise<void>) | null>
 }
 
@@ -591,6 +592,7 @@ export function MobileEditorLayout(props: MobileEditorLayoutProps) {
                             onNewFile={props.onNewFileFromTabs}
                             onDirtyChange={props.onDirtyChange}
                             onAddSelectionToChat={handleAddSelectionToChat}
+                            setTabViewMode={props.setTabViewMode}
                             saveRef={saveActiveFileRef}
                             mobileMode={true}
                         />

@@ -213,6 +213,110 @@ describe('AcpSdkBackend', () => {
         });
     });
 
+    it('captures OpenCode efforts from set_model _meta variants', async () => {
+        const backend = new AcpSdkBackend({ command: 'opencode' });
+        const backendInternal = backend as unknown as {
+            transport: { sendRequest: (method: string, params: unknown) => Promise<unknown>; close: () => Promise<void> } | null;
+        };
+        backendInternal.transport = {
+            sendRequest: async (method) => {
+                if (method === 'session/new') {
+                    return {
+                        sessionId: 's1',
+                        models: {
+                            availableModels: [{ modelId: 'openai/o3', name: 'OpenAI/o3' }],
+                            currentModelId: 'openai/o3'
+                        }
+                    };
+                }
+                if (method === 'session/set_model') {
+                    return {
+                        _meta: {
+                            opencode: {
+                                modelId: 'openai/o3',
+                                variant: 'high',
+                                availableVariants: ['low', 'medium', 'high']
+                            }
+                        }
+                    };
+                }
+                return null;
+            },
+            close: async () => {}
+        };
+
+        await backend.newSession({ cwd: '/tmp/x', mcpServers: [] });
+        await backend.setModel('s1', 'openai/o3/high', { flavor: 'opencode' });
+
+        expect(backend.getSessionModelsMetadata('s1')).toEqual({
+            availableModels: [{ modelId: 'openai/o3', name: 'OpenAI/o3' }],
+            currentModelId: 'openai/o3/high',
+            availableEfforts: [
+                { effortId: 'low', name: 'Low' },
+                { effortId: 'medium', name: 'Medium' },
+                { effortId: 'high', name: 'High' }
+            ],
+            currentEffortId: 'high'
+        });
+    });
+
+    it('sets OpenCode effort via session/set_config_option and captures returned config options', async () => {
+        const backend = new AcpSdkBackend({ command: 'opencode' });
+        const calls: Array<{ method: string; params: unknown }> = [];
+        const backendInternal = backend as unknown as {
+            transport: { sendRequest: (method: string, params: unknown) => Promise<unknown>; close: () => Promise<void> } | null;
+        };
+        backendInternal.transport = {
+            sendRequest: async (method, params) => {
+                calls.push({ method, params });
+                return {
+                    configOptions: [
+                        {
+                            id: 'model',
+                            currentValue: 'openai/o3',
+                            options: [{ value: 'openai/o3', name: 'OpenAI/o3' }]
+                        },
+                        {
+                            id: 'effort',
+                            currentValue: 'high',
+                            options: [
+                                { value: 'low', name: 'Low' },
+                                { value: 'high', name: 'High' }
+                            ]
+                        }
+                    ],
+                    _meta: {
+                        opencode: {
+                            modelId: 'openai/o3',
+                            variant: 'high',
+                            availableVariants: ['low', 'high']
+                        }
+                    }
+                };
+            },
+            close: async () => {}
+        };
+
+        await backend.setConfigOption('s1', 'effort', 'high', { flavor: 'opencode' });
+
+        expect(calls).toEqual([
+            {
+                method: 'session/set_config_option',
+                params: {
+                    sessionId: 's1',
+                    configId: 'effort',
+                    value: 'high'
+                }
+            }
+        ]);
+        expect(backend.getSessionModelsMetadata('s1')).toEqual({
+            availableModels: [{ modelId: 'openai/o3', name: 'OpenAI/o3' }],
+            currentModelId: 'openai/o3',
+            currentEffortId: 'high',
+            availableEfforts: [{ effortId: 'low', name: 'Low' }, { effortId: 'high', name: 'High' }]
+        });
+    });
+
     it('emits turn_complete after trailing tool updates from the same turn', async () => {
         backendStatics.UPDATE_QUIET_PERIOD_MS = 8;
         backendStatics.UPDATE_DRAIN_TIMEOUT_MS = 200;

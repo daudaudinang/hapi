@@ -272,4 +272,67 @@ describe('editor RPC handlers', () => {
             error: 'Invalid file path'
         })
     })
+
+    it('reads a raw image file as base64', async () => {
+        const pngBytes = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
+        await writeFile(join(rootDir, 'test.png'), pngBytes)
+
+        const parsed = await request(rpc, 'editor-read-file-raw', { path: join(rootDir, 'test.png') }) as {
+            success: boolean
+            data?: string
+            mimeType?: string
+            size?: number
+            error?: string
+        }
+
+        expect(parsed.success).toBe(true)
+        expect(parsed.data).toBe(pngBytes.toString('base64'))
+        expect(parsed.mimeType).toBe('image/png')
+        expect(parsed.size).toBe(pngBytes.length)
+    })
+
+    it('rejects raw file outside editor root', async () => {
+        await expect(request(rpc, 'editor-read-file-raw', { path: resolve(rootDir, '..', 'outside.png') })).resolves.toMatchObject({
+            success: false,
+            error: 'Path outside editor root'
+        })
+    })
+
+    it('rejects raw file with unsupported extension', async () => {
+        await writeFile(join(rootDir, 'doc.txt'), 'hello')
+        await expect(request(rpc, 'editor-read-file-raw', { path: join(rootDir, 'doc.txt') })).resolves.toMatchObject({
+            success: false,
+            error: 'Unsupported file type'
+        })
+    })
+
+    it('rejects raw file that is a directory', async () => {
+        await mkdir(join(rootDir, 'images.png'), { recursive: true })
+        await expect(request(rpc, 'editor-read-file-raw', { path: join(rootDir, 'images.png') })).resolves.toMatchObject({
+            success: false,
+            error: 'Path is not a file'
+        })
+    })
+
+    it('detects MIME type for all supported image extensions', async () => {
+        const testBytes = Buffer.from('fake-image-data')
+        const cases: Array<[string, string]> = [
+            ['image.png', 'image/png'],
+            ['photo.jpg', 'image/jpeg'],
+            ['photo.jpeg', 'image/jpeg'],
+            ['anim.gif', 'image/gif'],
+            ['logo.svg', 'image/svg+xml'],
+            ['img.webp', 'image/webp'],
+        ]
+
+        for (const [filename, expectedMime] of cases) {
+            await writeFile(join(rootDir, filename), testBytes)
+            const parsed = await request(rpc, 'editor-read-file-raw', { path: join(rootDir, filename) }) as {
+                success: boolean
+                mimeType?: string
+            }
+            expect(parsed.success).toBe(true)
+            expect(parsed.mimeType).toBe(expectedMime)
+        }
+    })
 })

@@ -105,6 +105,35 @@ vi.mock('@/hooks/queries/useEditorFile', () => ({
     useEditorFile: (...args: unknown[]) => useEditorFileMock(...args)
 }))
 
+vi.mock('@/components/assistant-ui/markdown-text', () => ({
+    MARKDOWN_PLUGINS: [],
+    MARKDOWN_REHYPE_PLUGINS: [],
+    defaultComponents: {}
+}))
+
+vi.mock('@/components/assistant-ui/shiki-highlighter', () => ({
+    SyntaxHighlighter: () => null
+}))
+
+vi.mock('@assistant-ui/react-markdown', () => ({
+    MarkdownTextPrimitive: ({ children }: { children?: string }) => (
+        <div data-testid="markdown-preview">{children}</div>
+    )
+}))
+
+vi.mock('@assistant-ui/react', () => ({
+    TextMessagePartProvider: ({ children, text }: { children: React.ReactNode; text: string }) => (
+        <div data-testid="text-message-part-provider" data-text={text}>
+            {children}
+        </div>
+    )
+}))
+
+const createObjectURLMock = vi.fn()
+const revokeObjectURLMock = vi.fn()
+Object.defineProperty(URL, 'createObjectURL', { value: createObjectURLMock, writable: true })
+Object.defineProperty(URL, 'revokeObjectURL', { value: revokeObjectURLMock, writable: true })
+
 const tabs: EditorTab[] = [
     { id: 'tab-file', type: 'file', path: '/repo/src/App.tsx', label: 'App.tsx' },
     { id: 'tab-terminal', type: 'terminal', label: 'Terminal: bash', shell: 'bash' }
@@ -576,5 +605,237 @@ describe('EditorTabs', () => {
         })
         expect(screen.queryByText('Terminal panel below')).not.toBeInTheDocument()
         expect(useEditorFileMock).toHaveBeenCalledWith(null, 'machine-1', '/repo/src/App.tsx', { refetchInterval: 2_000 })
+    })
+})
+
+describe('EditorTabs preview', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+        cmMocks.editorViews.length = 0
+        useEditorFileMock.mockReturnValue({ content: '# Hello\n\nWorld', error: null, isLoading: false, refetch: vi.fn() })
+        createObjectURLMock.mockReturnValue('blob:test-url')
+    })
+
+    afterEach(() => {
+        cleanup()
+    })
+
+    it('shows Source/Preview toggle for .md files', () => {
+        const mdTabs: EditorTab[] = [
+            { id: 'tab-md', type: 'file', path: '/repo/README.md', label: 'README.md' }
+        ]
+        const setTabViewMode = vi.fn()
+
+        render(
+            <EditorTabs
+                api={{} as ApiClient}
+                machineId="machine-1"
+                tabs={mdTabs}
+                activeTabId="tab-md"
+                onSelectTab={vi.fn()}
+                onCloseTab={vi.fn()}
+                onNewFile={vi.fn()}
+                setTabViewMode={setTabViewMode}
+                saveRef={{ current: null }}
+            />
+        )
+
+        expect(screen.getByRole('button', { name: 'Source' })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Preview' })).toBeInTheDocument()
+    })
+
+    it('shows toggle for .markdown files', () => {
+        const markdownTabs: EditorTab[] = [
+            { id: 'tab-mkd', type: 'file', path: '/repo/DOCS.markdown', label: 'DOCS.markdown' }
+        ]
+
+        render(
+            <EditorTabs
+                api={{} as ApiClient}
+                machineId="machine-1"
+                tabs={markdownTabs}
+                activeTabId="tab-mkd"
+                onSelectTab={vi.fn()}
+                onCloseTab={vi.fn()}
+                onNewFile={vi.fn()}
+                setTabViewMode={vi.fn()}
+                saveRef={{ current: null }}
+            />
+        )
+
+        expect(screen.getByRole('button', { name: 'Source' })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Preview' })).toBeInTheDocument()
+    })
+
+    it('does NOT show toggle for .ts files', () => {
+        const tsTabs: EditorTab[] = [
+            { id: 'tab-ts', type: 'file', path: '/repo/src/index.ts', label: 'index.ts' }
+        ]
+
+        render(
+            <EditorTabs
+                api={{} as ApiClient}
+                machineId="machine-1"
+                tabs={tsTabs}
+                activeTabId="tab-ts"
+                onSelectTab={vi.fn()}
+                onCloseTab={vi.fn()}
+                onNewFile={vi.fn()}
+                setTabViewMode={vi.fn()}
+                saveRef={{ current: null }}
+            />
+        )
+
+        expect(screen.queryByRole('button', { name: 'Source' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Preview' })).not.toBeInTheDocument()
+    })
+
+    it('calls setTabViewMode when clicking Preview toggle', () => {
+        const mdTabs: EditorTab[] = [
+            { id: 'tab-md', type: 'file', path: '/repo/README.md', label: 'README.md' }
+        ]
+        const setTabViewMode = vi.fn()
+
+        render(
+            <EditorTabs
+                api={{} as ApiClient}
+                machineId="machine-1"
+                tabs={mdTabs}
+                activeTabId="tab-md"
+                onSelectTab={vi.fn()}
+                onCloseTab={vi.fn()}
+                onNewFile={vi.fn()}
+                setTabViewMode={setTabViewMode}
+                saveRef={{ current: null }}
+            />
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: 'Preview' }))
+        expect(setTabViewMode).toHaveBeenCalledWith('tab-md', 'preview')
+    })
+
+    it('renders markdown preview in preview mode', async () => {
+        const mdTabs: EditorTab[] = [
+            { id: 'tab-md', type: 'file', path: '/repo/README.md', label: 'README.md', viewMode: 'preview' }
+        ]
+
+        render(
+            <EditorTabs
+                api={{} as ApiClient}
+                machineId="machine-1"
+                tabs={mdTabs}
+                activeTabId="tab-md"
+                onSelectTab={vi.fn()}
+                onCloseTab={vi.fn()}
+                onNewFile={vi.fn()}
+                setTabViewMode={vi.fn()}
+                saveRef={{ current: null }}
+            />
+        )
+
+        await waitFor(() => {
+            expect(screen.getByTestId('markdown-preview')).toBeInTheDocument()
+        })
+        expect(screen.getByTestId('text-message-part-provider')).toBeInTheDocument()
+    })
+
+    it('renders image preview for .png files', async () => {
+        const getEditorFileRawBlob = vi.fn()
+        getEditorFileRawBlob.mockResolvedValue(new Blob(['fake-image'], { type: 'image/png' }))
+
+        const imgTabs: EditorTab[] = [
+            { id: 'tab-img', type: 'file', path: '/repo/logo.png', label: 'logo.png' }
+        ]
+
+        render(
+            <EditorTabs
+                api={{ getEditorFileRawBlob } as unknown as ApiClient}
+                machineId="machine-1"
+                tabs={imgTabs}
+                activeTabId="tab-img"
+                onSelectTab={vi.fn()}
+                onCloseTab={vi.fn()}
+                onNewFile={vi.fn()}
+                saveRef={{ current: null }}
+            />
+        )
+
+        await waitFor(() => {
+            expect(getEditorFileRawBlob).toHaveBeenCalledWith('machine-1', '/repo/logo.png')
+        })
+        expect(createObjectURLMock).toHaveBeenCalled()
+    })
+
+    it('shows error state for failed image load', async () => {
+        const getEditorFileRawBlob = vi.fn()
+        getEditorFileRawBlob.mockRejectedValue({ status: 500 })
+
+        const imgTabs: EditorTab[] = [
+            { id: 'tab-img', type: 'file', path: '/repo/broken.jpg', label: 'broken.jpg' }
+        ]
+
+        render(
+            <EditorTabs
+                api={{ getEditorFileRawBlob } as unknown as ApiClient}
+                machineId="machine-1"
+                tabs={imgTabs}
+                activeTabId="tab-img"
+                onSelectTab={vi.fn()}
+                onCloseTab={vi.fn()}
+                onNewFile={vi.fn()}
+                saveRef={{ current: null }}
+            />
+        )
+
+        await waitFor(() => {
+            expect(screen.getByText('Could not load image')).toBeInTheDocument()
+        })
+    })
+
+    it('toggles between source and preview per markdown tab', async () => {
+        const mdTabs: EditorTab[] = [
+            { id: 'tab-a', type: 'file', path: '/repo/A.md', label: 'A.md', viewMode: 'preview' },
+            { id: 'tab-b', type: 'file', path: '/repo/B.md', label: 'B.md' }
+        ]
+        const setTabViewMode = vi.fn()
+
+        const { rerender } = render(
+            <EditorTabs
+                api={{} as ApiClient}
+                machineId="machine-1"
+                tabs={mdTabs}
+                activeTabId="tab-a"
+                onSelectTab={vi.fn()}
+                onCloseTab={vi.fn()}
+                onNewFile={vi.fn()}
+                setTabViewMode={setTabViewMode}
+                saveRef={{ current: null }}
+            />
+        )
+
+        // tab-a is in preview mode → markdown preview visible
+        await waitFor(() => {
+            expect(screen.getByTestId('markdown-preview')).toBeInTheDocument()
+        })
+
+        // Switch active tab to tab-b (source mode) → preview hidden
+        rerender(
+            <EditorTabs
+                api={{} as ApiClient}
+                machineId="machine-1"
+                tabs={mdTabs}
+                activeTabId="tab-b"
+                onSelectTab={vi.fn()}
+                onCloseTab={vi.fn()}
+                onNewFile={vi.fn()}
+                setTabViewMode={setTabViewMode}
+                saveRef={{ current: null }}
+            />
+        )
+
+        await waitFor(() => {
+            expect(screen.queryByTestId('markdown-preview')).not.toBeInTheDocument()
+        })
+        expect(screen.getByTestId('codemirror-host')).toBeInTheDocument()
     })
 })

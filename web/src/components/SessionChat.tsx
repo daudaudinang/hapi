@@ -121,6 +121,16 @@ export function SessionChat(props: {
             label: opencodeModel.name ?? opencodeModel.modelId
         }))
     }, [agentFlavor, opencodeModelsState.availableModels])
+    const opencodeReasoningEffortOptions = useMemo(() => {
+        if (agentFlavor !== 'opencode' || opencodeModelsState.availableEfforts.length === 0) {
+            return undefined
+        }
+
+        return opencodeModelsState.availableEfforts.map((effort) => ({
+            value: effort.effortId === 'default' ? null : effort.effortId,
+            label: effort.name ?? effort.effortId
+        }))
+    }, [agentFlavor, opencodeModelsState.availableEfforts])
     const {
         abortSession,
         switchSession,
@@ -531,7 +541,11 @@ export function SessionChat(props: {
                         permissionMode={props.session.permissionMode}
                         collaborationMode={codexCollaborationModeSupported ? props.session.collaborationMode : undefined}
                         model={props.session.model}
-                        modelReasoningEffort={agentFlavor === 'codex' ? props.session.modelReasoningEffort : undefined}
+                        modelReasoningEffort={
+                            agentFlavor === 'codex' || agentFlavor === 'opencode'
+                                ? props.session.modelReasoningEffort
+                                : undefined
+                        }
                         effort={props.session.effort}
                         agentFlavor={agentFlavor}
                         availableModelOptions={
@@ -541,6 +555,7 @@ export function SessionChat(props: {
                                     ? opencodeModelOptions
                                     : undefined
                         }
+                        availableModelReasoningEffortOptions={opencodeReasoningEffortOptions}
                         active={props.session.active}
                         allowSendWhenInactive
                         thinking={props.session.thinking}
@@ -562,7 +577,7 @@ export function SessionChat(props: {
                                 : handleModelChange
                         }
                         onModelReasoningEffortChange={
-                            agentFlavor === 'codex' && props.session.active && !controlledByUser
+                            (agentFlavor === 'codex' || agentFlavor === 'opencode') && props.session.active && !controlledByUser
                                 ? handleModelReasoningEffortChange
                                 : undefined
                         }

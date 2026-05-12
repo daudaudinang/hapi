@@ -29,6 +29,7 @@ import {
     type RpcOpencodeModel,
     type RpcPathExistsResponse,
     type RpcReadFileResponse,
+    type RpcReadFileRawResponse,
     type RpcUploadFileResponse
 } from './rpcGateway'
 import { SessionCache } from './sessionCache'
@@ -49,8 +50,13 @@ export type {
     RpcOpencodeModel,
     RpcPathExistsResponse,
     RpcReadFileResponse,
+    RpcReadFileRawResponse,
     RpcUploadFileResponse
 } from './rpcGateway'
+
+export type ReadEditorFileRawResult =
+    | { ok: true; buffer: Buffer; contentType: string; size: number }
+    | { ok: false; error: string; status: 400 | 404 | 413 | 415 }
 
 export type ResumeSessionResult =
     | { type: 'success'; sessionId: string }
@@ -598,6 +604,30 @@ export class SyncEngine {
 
     async readEditorFile(machineId: string, path: string): Promise<RpcReadFileResponse> {
         return await this.rpcGateway.editorReadFile(machineId, path)
+    }
+
+    async readEditorFileRaw(machineId: string, path: string): Promise<ReadEditorFileRawResult> {
+        const result = await this.rpcGateway.editorReadFileRaw(machineId, path)
+        if (!result.success) {
+            const error = result.error ?? 'Failed to read file'
+            const status: 400 | 404 | 413 | 415 =
+                error.includes('outside') ? 400
+                : error.includes('not a file') || error.includes('does not exist') || error.includes('ENOENT') ? 404
+                : error.includes('too large') ? 413
+                : error.includes('Unsupported') ? 415
+                : 400
+            return { ok: false, error, status }
+        }
+        if (!result.data) {
+            return { ok: false, error: 'No data returned', status: 404 }
+        }
+        const buffer = Buffer.from(result.data, 'base64')
+        return {
+            ok: true,
+            buffer,
+            contentType: result.mimeType ?? 'application/octet-stream',
+            size: result.size ?? buffer.length
+        }
     }
 
     async listEditorProjects(machineId: string): Promise<RpcEditorProjectsResponse> {

@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
-import type { SyncEngine } from '../../sync/syncEngine'
+import type { SyncEngine, ReadEditorFileRawResult } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
 
 const directoryBodySchema = z.object({
@@ -83,6 +83,36 @@ export function createEditorRoutes(getSyncEngine: () => SyncEngine | null): Hono
         try {
             const result = await engine.readEditorFile(parsed.data.machineId, parsed.data.path)
             return c.json(result)
+        } catch (error) {
+            return c.json({
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to read file'
+            }, 500)
+        }
+    })
+
+    app.post('/editor/file/raw', async (c) => {
+        const engine = getSyncEngine()
+        if (!engine) {
+            return c.json({ success: false, error: 'Not connected' }, 503)
+        }
+
+        const body = await c.req.json().catch(() => null)
+        const parsed = fileBodySchema.safeParse(body)
+        if (!parsed.success) {
+            return c.json({ success: false, error: 'Invalid body' }, 400)
+        }
+
+        try {
+            const result = await engine.readEditorFileRaw(parsed.data.machineId, parsed.data.path)
+            if (!result.ok) {
+                return c.json({ error: result.error }, result.status as 400 | 404 | 413 | 415)
+            }
+            return c.body(new Uint8Array(result.buffer), 200, {
+                'Content-Type': result.contentType,
+                'Content-Length': `${result.size}`,
+                'Cache-Control': 'private, max-age=300'
+            })
         } catch (error) {
             return c.json({
                 success: false,

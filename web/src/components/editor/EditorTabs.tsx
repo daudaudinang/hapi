@@ -9,11 +9,15 @@ import { markdown } from '@codemirror/lang-markdown'
 import { python } from '@codemirror/lang-python'
 import { rust } from '@codemirror/lang-rust'
 import { go } from '@codemirror/lang-go'
+import { MarkdownTextPrimitive, type MarkdownTextPrimitiveProps } from '@assistant-ui/react-markdown'
+import { TextMessagePartProvider } from '@assistant-ui/react'
 import type { EditorTab } from '@/hooks/useEditorState'
-import type { ApiClient } from '@/api/client'
+import type { ApiClient, ApiError } from '@/api/client'
 import { FileIcon } from '@/components/FileIcon'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useEditorFile } from '@/hooks/queries/useEditorFile'
+import { MARKDOWN_PLUGINS, MARKDOWN_REHYPE_PLUGINS } from '@/components/assistant-ui/markdown-text'
+import { SyntaxHighlighter } from '@/components/assistant-ui/shiki-highlighter'
 
 const editorScrollTheme = EditorView.theme({
     '&': {
@@ -59,6 +63,7 @@ function getLanguageExtension(filePath: string): LanguageExtension | null {
             return html()
         case 'md':
         case 'mdx':
+        case 'markdown':
             return markdown()
         case 'py':
             return python()
@@ -74,6 +79,27 @@ function getLanguageExtension(filePath: string): LanguageExtension | null {
 function getFileExtensionLabel(filePath: string): string {
     const ext = filePath.split('.').pop()
     return ext ? ext.toUpperCase() : 'TEXT'
+}
+
+type FilePreviewType = 'markdown' | 'image' | 'code'
+
+function getFilePreviewType(filePath: string): FilePreviewType {
+    const ext = filePath.split('.').pop()?.toLowerCase()
+    switch (ext) {
+        case 'md':
+        case 'mdx':
+        case 'markdown':
+            return 'markdown'
+        case 'png':
+        case 'jpg':
+        case 'jpeg':
+        case 'gif':
+        case 'svg':
+        case 'webp':
+            return 'image'
+        default:
+            return 'code'
+    }
 }
 
 export interface EditorSelectionInfo {
@@ -200,12 +226,13 @@ function useCodeMirror(
     return { selection, clearSelection }
 }
 
-function FileTabContent(props: {
+function TextFileContent(props: {
     api: ApiClient | null
     machineId: string | null
     tabId: string
     isDirty: boolean
     filePath: string
+    viewMode?: 'source' | 'preview'
     onContentLoaded: (tabId: string, content: string) => void
     onContentChanged: (tabId: string, content: string) => void
     onAddSelectionToChat?: (filePath: string, startLine: number, endLine: number, content: string) => void
@@ -223,6 +250,7 @@ function FileTabContent(props: {
     }, [props.onContentChanged, tab])
     const { selection, clearSelection } = useCodeMirror(containerRef, content, props.filePath, handleChange)
     const [mouseUpPos, setMouseUpPos] = useState<{ x: number; y: number } | null>(null)
+    const [markdownError, setMarkdownError] = useState(false)
 
     const handleAddSelection = useCallback(() => {
         if (selection && props.onAddSelectionToChat) {
@@ -259,28 +287,288 @@ function FileTabContent(props: {
         )
     }
 
+    const showPreview = props.viewMode === 'preview'
+    const showSource = !showPreview
+
     return (
-        <div
-            data-testid="codemirror-host"
-            className="h-full min-h-0 w-full overflow-hidden relative"
-            onMouseUp={handleMouseUp}
-        >
-            <div ref={containerRef} className="h-full min-h-0 w-full" />
-            {selection && mouseUpPos && props.onAddSelectionToChat && (
-                <button
-                    type="button"
-                    aria-label="Add selection to chat"
-                    className="absolute z-20 rounded border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[11px] text-violet-300 shadow-md hover:bg-violet-500 hover:text-white hover:border-violet-400 transition-colors"
-                    style={{
-                        top: Math.max(0, mouseUpPos.y - 28) + 'px',
-                        left: Math.max(0, mouseUpPos.x - 45) + 'px',
-                    }}
-                    onClick={handleAddSelection}
-                >
-                    Add to chat
-                </button>
+        <div className="h-full min-h-0 w-full overflow-hidden relative">
+            {/* CodeMirror: hidden when in preview mode, kept mounted to preserve state */}
+            <div
+                data-testid="codemirror-host"
+                className="h-full min-h-0 w-full overflow-hidden relative"
+                style={{ display: showSource ? '' : 'none' }}
+                onMouseUp={handleMouseUp}
+            >
+                <div ref={containerRef} className="h-full min-h-0 w-full" />
+                {selection && mouseUpPos && props.onAddSelectionToChat && (
+                    <button
+                        type="button"
+                        aria-label="Add selection to chat"
+                        className="absolute z-20 rounded border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[11px] text-violet-300 shadow-md hover:bg-violet-500 hover:text-white hover:border-violet-400 transition-colors"
+                        style={{
+                            top: Math.max(0, mouseUpPos.y - 28) + 'px',
+                            left: Math.max(0, mouseUpPos.x - 45) + 'px',
+                        }}
+                        onClick={handleAddSelection}
+                    >
+                        Add to chat
+                    </button>
+                )}
+            </div>
+
+            {/* Markdown preview */}
+            {showPreview && content !== null && !markdownError && (
+                <MarkdownPreview
+                    content={content}
+                    onError={() => setMarkdownError(true)}
+                />
+            )}
+
+            {showPreview && markdownError && (
+                <div className="h-full min-h-0 overflow-auto p-4">
+                    <div className="rounded border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-400 mb-3">
+                        Markdown render failed — showing raw text
+                    </div>
+                    <pre className="text-xs whitespace-pre-wrap break-words text-[var(--app-fg)]">{content}</pre>
+                </div>
             )}
         </div>
+    )
+}
+
+class MarkdownErrorBoundary extends React.Component<
+    { children: React.ReactNode; onError: () => void },
+    { hasError: boolean }
+> {
+    constructor(props: { children: React.ReactNode; onError: () => void }) {
+        super(props)
+        this.state = { hasError: false }
+    }
+
+    static getDerivedStateFromError() {
+        return { hasError: true }
+    }
+
+    componentDidCatch() {
+        this.props.onError()
+    }
+
+    render() {
+        if (this.state.hasError) return null
+        return this.props.children
+    }
+}
+
+function MarkdownPreview(props: { content: string; onError: () => void }) {
+    return (
+        <MarkdownErrorBoundary onError={props.onError}>
+            <div className="h-full min-h-0 overflow-auto">
+                <div className="max-w-3xl mx-auto p-4">
+                    <TextMessagePartProvider text={props.content}>
+                        <MarkdownTextPrimitive
+                            remarkPlugins={MARKDOWN_PLUGINS}
+                            rehypePlugins={MARKDOWN_REHYPE_PLUGINS}
+                            components={{
+                                SyntaxHighlighter,
+                                h1: ({ ...rest }: React.ComponentPropsWithoutRef<'h1'>) => <h1 className="text-lg font-bold mt-5 mb-2 text-[var(--app-fg)]" {...rest} />,
+                                h2: ({ ...rest }: React.ComponentPropsWithoutRef<'h2'>) => <h2 className="text-base font-bold mt-4 mb-2 text-[var(--app-fg)]" {...rest} />,
+                                h3: ({ ...rest }: React.ComponentPropsWithoutRef<'h3'>) => <h3 className="text-sm font-semibold mt-3 mb-1.5 text-[var(--app-fg)]" {...rest} />,
+                                h4: ({ ...rest }: React.ComponentPropsWithoutRef<'h4'>) => <h4 className="text-sm font-semibold mt-3 mb-1 text-[var(--app-fg)]" {...rest} />,
+                                h5: ({ ...rest }: React.ComponentPropsWithoutRef<'h5'>) => <h5 className="text-sm font-semibold mt-2 mb-1 text-[var(--app-fg)]" {...rest} />,
+                                h6: ({ ...rest }: React.ComponentPropsWithoutRef<'h6'>) => <h6 className="text-sm font-semibold mt-2 mb-1 text-[var(--app-fg)]" {...rest} />,
+                                p: ({ ...rest }: React.ComponentPropsWithoutRef<'p'>) => <p className="leading-relaxed mb-3 text-[var(--app-fg)]" {...rest} />,
+                                strong: ({ ...rest }: React.ComponentPropsWithoutRef<'strong'>) => <strong className="font-semibold" {...rest} />,
+                                em: ({ ...rest }: React.ComponentPropsWithoutRef<'em'>) => <em className="italic" {...rest} />,
+                                a: ({ ...rest }: React.ComponentPropsWithoutRef<'a'>) => <a className="text-[var(--app-link)] underline" target={rest.href?.startsWith('http') ? '_blank' : undefined} rel="noreferrer" {...rest} />,
+                                blockquote: ({ ...rest }: React.ComponentPropsWithoutRef<'blockquote'>) => <blockquote className="border-l-4 border-[var(--app-border)] pl-4 opacity-85 my-3" {...rest} />,
+                                ul: ({ ...rest }: React.ComponentPropsWithoutRef<'ul'>) => <ul className="list-disc pl-6 mb-3" {...rest} />,
+                                ol: ({ ...rest }: React.ComponentPropsWithoutRef<'ol'>) => <ol className="list-decimal pl-6 mb-3" {...rest} />,
+                                li: ({ ...rest }: React.ComponentPropsWithoutRef<'li'>) => <li className="mb-1" {...rest} />,
+                                hr: ({ ...rest }: React.ComponentPropsWithoutRef<'hr'>) => <hr className="border-[var(--app-divider)] my-4" {...rest} />,
+                                table: ({ ...rest }: React.ComponentPropsWithoutRef<'table'>) => <div className="max-w-full overflow-x-auto mb-3"><table className="w-full border-collapse" {...rest} /></div>,
+                                thead: ({ ...rest }: React.ComponentPropsWithoutRef<'thead'>) => <thead {...rest} />,
+                                tbody: ({ ...rest }: React.ComponentPropsWithoutRef<'tbody'>) => <tbody {...rest} />,
+                                tr: ({ ...rest }: React.ComponentPropsWithoutRef<'tr'>) => <tr {...rest} />,
+                                th: ({ ...rest }: React.ComponentPropsWithoutRef<'th'>) => <th className="border border-[var(--app-border)] bg-[var(--app-subtle-bg)] px-2 py-1 text-left font-semibold" {...rest} />,
+                                td: ({ ...rest }: React.ComponentPropsWithoutRef<'td'>) => <td className="border border-[var(--app-border)] px-2 py-1" {...rest} />,
+                                img: ({ ...rest }: React.ComponentPropsWithoutRef<'img'>) => <img className="max-w-full rounded" {...rest} />,
+                            } satisfies MarkdownTextPrimitiveProps['components']}
+                        />
+                    </TextMessagePartProvider>
+                </div>
+            </div>
+        </MarkdownErrorBoundary>
+    )
+}
+
+function ImageFileContent(props: {
+    api: ApiClient | null
+    machineId: string | null
+    filePath: string
+    tabId: string
+}) {
+    const [state, setState] = useState<'loading' | 'loaded' | 'oversize' | 'error'>('loading')
+    const [blobUrl, setBlobUrl] = useState<string | null>(null)
+    const [metadata, setMetadata] = useState<{ size: number; type: string } | null>(null)
+    const [width, setWidth] = useState<number | null>(null)
+    const [height, setHeight] = useState<number | null>(null)
+
+    useEffect(() => {
+        const abort = new AbortController()
+        let url: string | null = null
+
+        const load = async () => {
+            setState('loading')
+            setBlobUrl(null)
+            setMetadata(null)
+            setWidth(null)
+            setHeight(null)
+
+            if (!props.api || !props.machineId) {
+                setState('error')
+                return
+            }
+
+            try {
+                const blob = await props.api.getEditorFileRawBlob(props.machineId, props.filePath)
+                if (abort.signal.aborted) return
+
+                url = URL.createObjectURL(blob)
+                setBlobUrl(url)
+                setMetadata({ size: blob.size, type: blob.type })
+                setState('loaded')
+            } catch (err) {
+                if (abort.signal.aborted) return
+                const status = (err as ApiError).status
+                if (status === 413) {
+                    setState('oversize')
+                } else {
+                    setState('error')
+                }
+            }
+        }
+
+        load()
+
+        return () => {
+            abort.abort()
+            if (url) URL.revokeObjectURL(url)
+        }
+    }, [props.api, props.machineId, props.filePath])
+
+    const handleImageError = useCallback(() => {
+        setState('error')
+    }, [])
+
+    const handleImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+        const img = e.currentTarget
+        setWidth(img.naturalWidth)
+        setHeight(img.naturalHeight)
+    }, [])
+
+    function formatSize(bytes: number): string {
+        if (bytes < 1024) return `${bytes} B`
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+    }
+
+    const fileName = props.filePath.split('/').filter(Boolean).pop() || props.filePath
+
+    if (state === 'loading') {
+        return (
+            <div className="flex items-center justify-center h-full text-xs text-[var(--app-hint)]">
+                Loading...
+            </div>
+        )
+    }
+
+    if (state === 'oversize') {
+        return (
+            <div className="flex flex-col items-center justify-center h-full gap-2 text-xs text-[var(--app-hint)] p-4">
+                <span className="text-2xl opacity-50">⚠️</span>
+                <span>File too large to preview</span>
+                {metadata && <span className="text-[10px] opacity-60">{formatSize(metadata.size)}</span>}
+            </div>
+        )
+    }
+
+    if (state === 'error') {
+        return (
+            <div className="flex flex-col items-center justify-center h-full gap-2 text-xs text-red-400 p-4">
+                <span className="text-2xl opacity-50">🖼</span>
+                <span>{fileName}</span>
+                <span>Could not load image</span>
+            </div>
+        )
+    }
+
+    return (
+        <div className="h-full min-h-0 flex flex-col overflow-hidden bg-[var(--app-subtle-bg)]">
+            <div className="flex items-center gap-2 shrink-0 border-b border-[var(--app-border)] bg-[var(--app-bg)] px-3 py-1.5 text-xs text-[var(--app-hint)]">
+                <span className="text-[var(--app-fg)] font-medium">{fileName}</span>
+                {metadata && (
+                    <>
+                        <span className="text-[var(--app-hint)]">·</span>
+                        <span>{formatSize(metadata.size)}</span>
+                    </>
+                )}
+                {width !== null && height !== null && (
+                    <>
+                        <span className="text-[var(--app-hint)]">·</span>
+                        <span>{width} × {height}</span>
+                    </>
+                )}
+            </div>
+            <div className="min-h-0 flex-1 flex items-center justify-center overflow-auto">
+                {blobUrl && (
+                    <img
+                        src={blobUrl}
+                        alt={fileName}
+                        className="max-w-full max-h-full object-contain"
+                        onLoad={handleImageLoad}
+                        onError={handleImageError}
+                    />
+                )}
+            </div>
+        </div>
+    )
+}
+
+function FileTabContent(props: {
+    api: ApiClient | null
+    machineId: string | null
+    tabId: string
+    isDirty: boolean
+    filePath: string
+    viewMode?: 'source' | 'preview'
+    previewType?: FilePreviewType
+    onContentLoaded: (tabId: string, content: string) => void
+    onContentChanged: (tabId: string, content: string) => void
+    onAddSelectionToChat?: (filePath: string, startLine: number, endLine: number, content: string) => void
+}) {
+    if (props.previewType === 'image') {
+        return (
+            <ImageFileContent
+                api={props.api}
+                machineId={props.machineId}
+                filePath={props.filePath}
+                tabId={props.tabId}
+            />
+        )
+    }
+
+    return (
+        <TextFileContent
+            api={props.api}
+            machineId={props.machineId}
+            tabId={props.tabId}
+            isDirty={props.isDirty}
+            filePath={props.filePath}
+            viewMode={props.viewMode}
+            onContentLoaded={props.onContentLoaded}
+            onContentChanged={props.onContentChanged}
+            onAddSelectionToChat={props.onAddSelectionToChat}
+        />
     )
 }
 
@@ -295,6 +583,7 @@ export function EditorTabs(props: {
     onDirtyChange?: (tabId: string, dirty: boolean) => void
     onSaveFile?: (path: string, content: string) => Promise<void>
     onAddSelectionToChat?: (filePath: string, startLine: number, endLine: number, content: string) => void
+    setTabViewMode?: (tabId: string, mode: 'source' | 'preview') => void
     mobileMode?: boolean
     saveRef: React.MutableRefObject<(() => Promise<void>) | null>
 }) {
@@ -508,18 +797,50 @@ export function EditorTabs(props: {
             </div>
 
             <div data-testid="editor-tabs-content" className="min-h-0 flex-1 overflow-hidden">
-                {activeTab?.path && props.machineId && (
-                    <FileTabContent
-                        api={props.api}
-                        machineId={props.machineId}
-                        tabId={activeTab.id}
-                        isDirty={activeTab.dirty === true}
-                        filePath={activeTab.path}
-                        onContentLoaded={handleContentLoaded}
-                        onContentChanged={handleContentChanged}
-                        onAddSelectionToChat={props.onAddSelectionToChat}
-                    />
-                )}
+                {activeTab?.path && props.machineId && (() => {
+                    const previewType = getFilePreviewType(activeTab.path!)
+                    const viewMode = activeTab.viewMode ?? (previewType === 'markdown' ? 'source' : undefined)
+
+                    return (
+                        <div className="h-full min-h-0 flex flex-col overflow-hidden">
+                            {/* Pill toggle for markdown files */}
+                            {previewType === 'markdown' && (
+                                <div className="flex items-center justify-end shrink-0 border-b border-[var(--app-border)] bg-[var(--app-bg)] px-2 py-1">
+                                    <div className="inline-flex rounded border border-[var(--app-border)] overflow-hidden text-[11px]">
+                                        <button
+                                            type="button"
+                                            className={`px-2.5 py-0.5 transition-colors ${viewMode !== 'preview' ? 'bg-[#6366f1] text-white' : 'text-[var(--app-hint)] hover:bg-[var(--app-subtle-bg)]'}`}
+                                            onClick={() => props.setTabViewMode?.(activeTab.id, 'source')}
+                                        >
+                                            Source
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={`px-2.5 py-0.5 border-l border-[var(--app-border)] transition-colors ${viewMode === 'preview' ? 'bg-[#6366f1] text-white' : 'text-[var(--app-hint)] hover:bg-[var(--app-subtle-bg)]'}`}
+                                            onClick={() => props.setTabViewMode?.(activeTab.id, 'preview')}
+                                        >
+                                            Preview
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                            <div className="min-h-0 flex-1 overflow-hidden">
+                                <FileTabContent
+                                    api={props.api}
+                                    machineId={props.machineId}
+                                    tabId={activeTab.id}
+                                    isDirty={activeTab.dirty === true}
+                                    filePath={activeTab.path}
+                                    viewMode={viewMode}
+                                    previewType={previewType}
+                                    onContentLoaded={handleContentLoaded}
+                                    onContentChanged={handleContentChanged}
+                                    onAddSelectionToChat={props.onAddSelectionToChat}
+                                />
+                            </div>
+                        </div>
+                    )
+                })()}
                 {activeTab?.path && !props.machineId && (
                     <div className="flex items-center justify-center h-full text-xs text-[var(--app-hint)]">
                         Select a machine to read files

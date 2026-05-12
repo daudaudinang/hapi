@@ -8,6 +8,11 @@ export interface OpencodeModelSummary {
     name?: string;
 }
 
+export interface OpencodeEffortSummary {
+    effortId: string;
+    name?: string;
+}
+
 export interface ListOpencodeModelsForCwdRequest {
     cwd?: string;
 }
@@ -16,6 +21,8 @@ export interface ListOpencodeModelsForCwdResponse {
     success: boolean;
     availableModels?: OpencodeModelSummary[];
     currentModelId?: string | null;
+    availableEfforts?: OpencodeEffortSummary[];
+    currentEffortId?: string | null;
     error?: string;
 }
 
@@ -45,9 +52,11 @@ function normalizeAvailableModels(rawModels: unknown): OpencodeModelSummary[] {
 function extractModelsFromResponse(response: unknown): {
     availableModels: OpencodeModelSummary[];
     currentModelId: string | null;
+    availableEfforts: OpencodeEffortSummary[];
+    currentEffortId: string | null;
 } {
     if (!isObject(response)) {
-        return { availableModels: [], currentModelId: null };
+        return { availableModels: [], currentModelId: null, availableEfforts: [], currentEffortId: null };
     }
 
     const directList = response.availableModels;
@@ -55,6 +64,55 @@ function extractModelsFromResponse(response: unknown): {
     const nested = isObject(response.models) ? response.models : null;
     const nestedList = nested?.availableModels;
     const nestedCurrent = nested?.currentModelId;
+
+    let configModels: OpencodeModelSummary[] = [];
+    let configCurrentModelId: string | null = null;
+    let availableEfforts: OpencodeEffortSummary[] = [];
+    let currentEffortId: string | null = null;
+    if (Array.isArray(response.configOptions)) {
+        for (const option of response.configOptions) {
+            if (!isObject(option)) continue;
+            const id = asString(option.id);
+            const currentValue = asString(option.currentValue);
+            const rawOptions = Array.isArray(option.options) ? option.options : [];
+            if (id === 'model') {
+                configCurrentModelId = currentValue ?? null;
+                configModels = normalizeAvailableModels(rawOptions.map((entry) => {
+                    if (!isObject(entry)) return null;
+                    return {
+                        modelId: asString(entry.value),
+                        name: asString(entry.name) ?? undefined
+                    };
+                }));
+            }
+            if (id === 'effort') {
+                currentEffortId = currentValue ?? null;
+                availableEfforts = rawOptions.flatMap((entry): OpencodeEffortSummary[] => {
+                    if (!isObject(entry)) return [];
+                    const effortId = asString(entry.value);
+                    if (!effortId) return [];
+                    const name = asString(entry.name) ?? undefined;
+                    return [name ? { effortId, name } : { effortId }];
+                });
+            }
+        }
+    }
+    const meta = isObject(response._meta) && isObject(response._meta.opencode)
+        ? response._meta.opencode
+        : null;
+    if (meta) {
+        const variant = asString(meta.variant);
+        if (variant !== null) {
+            currentEffortId = variant;
+        }
+        if (Array.isArray(meta.availableVariants)) {
+            availableEfforts = meta.availableVariants.flatMap((entry): OpencodeEffortSummary[] => {
+                const effortId = asString(entry);
+                if (!effortId) return [];
+                return [{ effortId, name: formatEffortName(effortId) }];
+            });
+        }
+    }
 
     const rawModels = Array.isArray(directList)
         ? directList
@@ -68,9 +126,18 @@ function extractModelsFromResponse(response: unknown): {
             : null;
 
     return {
-        availableModels: normalizeAvailableModels(rawModels),
-        currentModelId: rawCurrent
+        availableModels: rawModels ? normalizeAvailableModels(rawModels) : configModels,
+        currentModelId: rawCurrent ?? configCurrentModelId,
+        availableEfforts,
+        currentEffortId
     };
+}
+
+function formatEffortName(effortId: string): string {
+    return effortId
+        .split(/[_-]/)
+        .map((part) => part ? part.charAt(0).toUpperCase() + part.slice(1) : part)
+        .join(' ');
 }
 
 async function runOpencodeProbe(cwd: string): Promise<ListOpencodeModelsForCwdResponse> {
@@ -101,12 +168,14 @@ async function runOpencodeProbe(cwd: string): Promise<ListOpencodeModelsForCwdRe
             mcpServers: []
         }, { timeoutMs: PROBE_TIMEOUT_MS });
 
-        const { availableModels, currentModelId } = extractModelsFromResponse(newResponse);
+        const { availableModels, currentModelId, availableEfforts, currentEffortId } = extractModelsFromResponse(newResponse);
 
         return {
             success: true,
             availableModels,
-            currentModelId
+            currentModelId,
+            availableEfforts,
+            currentEffortId
         };
     } finally {
         await transport.close().catch(() => undefined);

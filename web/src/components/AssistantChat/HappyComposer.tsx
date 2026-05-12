@@ -77,6 +77,7 @@ export function HappyComposer(props: {
     controlledByUser?: boolean
     agentFlavor?: string | null
     availableModelOptions?: Array<{ value: string | null; label: string }>
+    availableModelReasoningEffortOptions?: Array<{ value: string | null; label: string }>
     onCollaborationModeChange?: (mode: CodexCollaborationMode) => void
     onPermissionModeChange?: (mode: PermissionMode) => void
     onModelChange?: (model: string | null) => void
@@ -115,6 +116,7 @@ export function HappyComposer(props: {
         controlledByUser = false,
         agentFlavor,
         availableModelOptions,
+        availableModelReasoningEffortOptions,
         onCollaborationModeChange,
         onPermissionModeChange,
         onModelChange,
@@ -331,9 +333,11 @@ export function HappyComposer(props: {
         () => getModelOptionsForFlavor(agentFlavor, model, availableModelOptions),
         [agentFlavor, model, availableModelOptions]
     )
-    const codexReasoningEffortOptions = useMemo(
-        () => agentFlavor === 'codex' ? getCodexComposerReasoningEffortOptions(modelReasoningEffort) : [],
-        [agentFlavor, modelReasoningEffort]
+    const modelReasoningEffortOptions = useMemo(
+        () => agentFlavor === 'codex'
+            ? getCodexComposerReasoningEffortOptions(modelReasoningEffort)
+            : availableModelReasoningEffortOptions ?? [],
+        [agentFlavor, modelReasoningEffort, availableModelReasoningEffortOptions]
     )
     const claudeEffortOptions = useMemo(
         () => getClaudeComposerEffortOptions(effort),
@@ -527,7 +531,7 @@ export function HappyComposer(props: {
     const showCollaborationSettings = Boolean(onCollaborationModeChange && collaborationModeOptions.length > 0)
     const showPermissionSettings = Boolean(onPermissionModeChange && permissionModeOptions.length > 0)
     const showModelSettings = Boolean(onModelChange && supportsModelChange(agentFlavor) && modelOptions.length > 0)
-    const showModelReasoningEffortSettings = Boolean(onModelReasoningEffortChange && codexReasoningEffortOptions.length > 0)
+    const showModelReasoningEffortSettings = Boolean(onModelReasoningEffortChange && modelReasoningEffortOptions.length > 0)
     const showEffortSettings = Boolean(onEffortChange && supportsEffort(agentFlavor))
     const showSettingsButton = Boolean(
         showCollaborationSettings
@@ -676,7 +680,7 @@ export function HappyComposer(props: {
                                 <div className="px-3 pb-1 text-xs font-semibold text-[var(--app-hint)]">
                                     {t('misc.reasoningEffort')}
                                 </div>
-                                {codexReasoningEffortOptions.map((option) => (
+                                {modelReasoningEffortOptions.map((option) => (
                                     <button
                                         key={option.value ?? 'default'}
                                         type="button"
@@ -776,7 +780,7 @@ export function HappyComposer(props: {
         showModelReasoningEffortSettings,
         showEffortSettings,
         modelOptions,
-        codexReasoningEffortOptions,
+        modelReasoningEffortOptions,
         claudeEffortOptions,
         suggestions,
         selectedIndex,

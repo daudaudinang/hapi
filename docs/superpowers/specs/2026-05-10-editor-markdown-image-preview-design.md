@@ -42,17 +42,17 @@ Based on file extension, determined in EditorTabs:
 | `.png`, `.jpg`, `.jpeg`, `.gif`, `.svg`, `.webp` | Preview | Preview only |
 | All others | Source | Source only (no change) |
 
-File type detection uses the existing `activeTab.path` from `useEditorState`. Match against lowercase extension using `path.extname()` or string matching.
+File type detection uses the existing `activeTab.path` from `useEditorState`. Match against lowercase extension using `filePath.split('.').pop()?.toLowerCase()` (same pattern as existing `getLanguageExtension` and `getFileExtensionLabel`).
 
 ## UI design
 
 ### Markdown: Source/Preview tabs
 
-When a markdown file is open, two tab buttons appear above the editor area:
+When a markdown file is open, pill toggle [Source] / [Preview] appears at top-right inside the editor area:
 
 ```
-[Source]  [Preview]          ← toggle buttons (pill/segmented style)
 ┌──────────────────────────┐
+│           [Source] [Preview] │  ← toggle at top-right inside editor
 │                          │
 │  CodeMirror (Source)     │  ← Source mode: existing CodeMirror editor
 │  or                      │
@@ -142,7 +142,7 @@ New route: `POST /api/editor/file/raw`
 Request body:
 ```json
 {
-  "machine": "string",
+  "machineId": "string",
   "path": "string"
 }
 ```
@@ -174,7 +174,7 @@ New method: `readEditorFileRaw(machineId: string, path: string)`
 New method:
 
 ```typescript
-async getEditorFileRawBlob(machine: string, path: string): Promise<Blob>
+async getEditorFileRawBlob(machineId: string, path: string): Promise<Blob>
 ```
 
 Posts to `/api/editor/file/raw`, receives raw bytes with `Content-Type` set, returns a `Blob` object. The calling component creates an object URL via `URL.createObjectURL(blob)` for `<img>` tag use. File metadata (size, mimeType) comes from response headers. Dimensions are resolved client-side after the image loads (read `naturalWidth` / `naturalHeight` from the loaded `<img>` element).
@@ -197,7 +197,7 @@ No backend changes needed for markdown rendering.
 
 ```
 User opens image file
-  → EditorTabs calls api.getEditorFileRawBlob(machine, path)
+  → EditorTabs calls api.getEditorFileRawBlob(machineId, path)
   → POST /api/editor/file/raw → Hub → syncEngine → rpcGateway → CLI
   → CLI reads file, returns base64 + mimeType + size
   → Hub decodes base64, returns raw bytes as Blob with Content-Type + Content-Length
@@ -216,7 +216,7 @@ Metadata (size, mimeType) is read from Blob properties (`blob.size`, `blob.type`
 Modifications:
 1. Detect file type from `activeTab.path` extension.
 2. Add `viewMode` state per tab (tracked in `useEditorState`).
-3. For markdown files: render Source/Preview toggle buttons above editor area.
+3. For markdown files: render Source/Preview toggle at top-right inside the editor area.
 4. For image files: render `ImagePreview` component instead of CodeMirror.
 5. For Source mode (and non-markdown files): render CodeMirror (unchanged).
 

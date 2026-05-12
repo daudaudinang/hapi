@@ -11,6 +11,7 @@ export type EditorTab = {
     machineId?: string
     cwd?: string
     dirty?: boolean
+    viewMode?: 'source' | 'preview'
 }
 
 export type OpenTerminalOptions = {
@@ -39,6 +40,7 @@ export type UseEditorStateResult = EditorState & {
     openTerminal: (options?: string | OpenTerminalOptions) => void
     closeTab: (tabId: string) => void
     setTabDirty: (tabId: string, dirty: boolean) => void
+    setTabViewMode: (tabId: string, mode: 'source' | 'preview') => void
     setActiveTabId: (tabId: string | null) => void
     showContextMenu: (filePath: string, x: number, y: number, items?: EditorTreeItem[]) => void
     hideContextMenu: () => void
@@ -165,6 +167,12 @@ export function useEditorState(initialMachine?: string, initialProject?: string,
         setContextMenuPosition(null)
     }, [])
 
+    const setTabViewMode = useCallback((tabId: string, mode: 'source' | 'preview') => {
+        setTabs(tabsRef.current.map((tab) => (
+            tab.id === tabId ? { ...tab, viewMode: mode } : tab
+        )))
+    }, [setTabs])
+
     const selectMachine = useCallback((id: string) => {
         setMachineId(id)
         setProjectPath(null)
@@ -197,6 +205,7 @@ export function useEditorState(initialMachine?: string, initialProject?: string,
         openTerminal,
         closeTab,
         setTabDirty,
+        setTabViewMode,
         setActiveTabId,
         showContextMenu,
         hideContextMenu

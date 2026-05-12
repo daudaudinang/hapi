@@ -18,6 +18,7 @@ interface OpencodeLoopOptions {
     api: ApiClient;
     permissionMode?: PermissionMode;
     model?: string;
+    modelReasoningEffort?: string;
     resumeSessionId?: string;
     hookServer: OpencodeHookServer;
     hookUrl: string;
@@ -40,7 +41,8 @@ export async function opencodeLoop(opts: OpencodeLoopOptions): Promise<void> {
         mode: startingMode,
         startedBy,
         startingMode,
-        permissionMode: opts.permissionMode ?? 'default'
+        permissionMode: opts.permissionMode ?? 'default',
+        modelReasoningEffort: opts.modelReasoningEffort ?? null
     });
 
     if (opts.resumeSessionId) {

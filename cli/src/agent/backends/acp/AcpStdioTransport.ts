@@ -48,6 +48,7 @@ export class AcpStdioTransport {
     private buffer = '';
     private nextId = 1;
     private protocolError: Error | null = null;
+    private terminalError: Error | null = null;
     private activityTracker: ReturnType<typeof setInterval> | null = null;
 
     // === Activity watchdog: detects ACP hung-but-not-crashed ===
@@ -55,7 +56,7 @@ export class AcpStdioTransport {
     private onHungCallback: (() => void) | null = null;
 
     private static readonly HUNG_TIMEOUT_MS =
-        Number(process.env.HAPI_ACP_HUNG_TIMEOUT_MS) || 10 * 60 * 1000;
+        Number(process.env.HAPI_ACP_HUNG_TIMEOUT_MS) || 14 * 24 * 60 * 60 * 1000;
     private static readonly HUNG_CHECK_INTERVAL_MS = 30_000;
 
     constructor(options: {
@@ -80,22 +81,32 @@ export class AcpStdioTransport {
             this.parseStderrError(text);
         });
 
+        this.process.stdin.on('error', (error) => {
+            const terminalError = new Error(`ACP stdin error: ${error.message}`, { cause: error });
+            this.terminalError = terminalError;
+            this.rejectAllPending(terminalError);
+        });
+
         this.process.on('exit', (code, signal) => {
             const message = `ACP process exited (code=${code ?? 'null'}, signal=${signal ?? 'null'})`;
             logger.debug(message);
+            const terminalError = new Error(message);
+            this.terminalError = terminalError;
             // Kill remaining processes in the group (subagents).
             // SIGKILL because the parent already exited — no graceful shutdown needed.
             this.killProcessGroup('SIGKILL');
-            this.rejectAllPending(new Error(message));
+            this.rejectAllPending(terminalError);
         });
 
         this.process.on('error', (error) => {
             logger.debug('[ACP] Process error', error);
             const message = error instanceof Error ? error.message : String(error);
-            this.rejectAllPending(new Error(
+            const terminalError = new Error(
                 `Failed to spawn ${options.command}: ${message}. Is it installed and on PATH?`,
                 { cause: error }
-            ));
+            );
+            this.terminalError = terminalError;
+            this.rejectAllPending(terminalError);
         });
 
         this.startActivityTracker();
@@ -164,6 +175,13 @@ export class AcpStdioTransport {
     static readonly DEFAULT_TIMEOUT_MS = 120_000;
 
     async sendRequest(method: string, params?: unknown, options?: { timeoutMs?: number }): Promise<unknown> {
+        if (this.terminalError) {
+            return Promise.reject(this.terminalError);
+        }
+        if (this.protocolError) {
+            return Promise.reject(this.protocolError);
+        }
+
         const id = this.nextId++;
         const payload: JsonRpcRequest = {
             jsonrpc: '2.0',
@@ -217,6 +235,9 @@ export class AcpStdioTransport {
 
     async close(): Promise<void> {
         this.clearActivityTracker();
+        if (!this.terminalError) {
+            this.terminalError = new Error('ACP transport closed');
+        }
         // Graceful: SIGTERM to entire process group first
         this.killProcessGroup('SIGTERM');
         // Wait for graceful shutdown
@@ -225,7 +246,7 @@ export class AcpStdioTransport {
         this.killProcessGroup('SIGKILL');
         // End stdin after signals (process likely dead by now)
         try { this.process.stdin.end(); } catch {}
-        this.rejectAllPending(new Error('ACP transport closed'));
+        this.rejectAllPending(this.terminalError);
     }
 
     private handleStdout(chunk: string): void {
@@ -343,8 +364,20 @@ export class AcpStdioTransport {
     }
 
     private writePayload(payload: JsonRpcRequest | JsonRpcNotification | JsonRpcResponse): void {
+        if (this.terminalError) {
+            throw this.terminalError;
+        }
         const serialized = JSON.stringify(payload);
-        this.process.stdin.write(`${serialized}\n`);
+        try {
+            this.process.stdin.write(`${serialized}\n`);
+        } catch (error) {
+            const terminalError = error instanceof Error
+                ? new Error(`ACP write failed: ${error.message}`, { cause: error })
+                : new Error(`ACP write failed: ${String(error)}`);
+            this.terminalError = terminalError;
+            this.rejectAllPending(terminalError);
+            throw terminalError;
+        }
     }
 
     private rejectAllPending(error: Error): void {

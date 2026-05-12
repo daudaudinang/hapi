@@ -32,6 +32,13 @@ export function useSessionActions(
         await queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
     }
 
+    const invalidateRuntimeConfig = async () => {
+        await invalidateSession()
+        if (sessionId && agentFlavor === 'opencode') {
+            await queryClient.invalidateQueries({ queryKey: queryKeys.sessionOpencodeModels(sessionId) })
+        }
+    }
+
     const abortMutation = useMutation({
         mutationFn: async () => {
             if (!api || !sessionId) {
@@ -98,7 +105,7 @@ export function useSessionActions(
             }
             await api.setModel(sessionId, model)
         },
-        onSuccess: () => void invalidateSession(),
+        onSuccess: () => void invalidateRuntimeConfig(),
     })
 
     const modelReasoningEffortMutation = useMutation({
@@ -106,15 +113,15 @@ export function useSessionActions(
             if (!api || !sessionId) {
                 throw new Error('Session unavailable')
             }
-            if (agentFlavor !== 'codex') {
-                throw new Error('Model reasoning effort is only supported for Codex sessions')
+            if (agentFlavor !== 'codex' && agentFlavor !== 'opencode') {
+                throw new Error('Model reasoning effort is only supported for Codex and OpenCode sessions')
             }
-            if (!codexCollaborationModeSupported) {
+            if (agentFlavor === 'codex' && !codexCollaborationModeSupported) {
                 throw new Error('Model reasoning effort is only supported for remote Codex sessions')
             }
             await api.setModelReasoningEffort(sessionId, modelReasoningEffort)
         },
-        onSuccess: () => void invalidateSession(),
+        onSuccess: () => void invalidateRuntimeConfig(),
     })
 
     const effortMutation = useMutation({

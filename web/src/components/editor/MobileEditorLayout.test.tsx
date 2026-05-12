@@ -108,6 +108,7 @@ function baseProps() {
         onAddTerminalToChat: vi.fn(),
         onRegisterTerminalClose: vi.fn(),
         onSaveActiveFile: vi.fn().mockResolvedValue(undefined),
+        setTabViewMode: vi.fn(),
         saveActiveFileRef: { current: null },
     }
 }

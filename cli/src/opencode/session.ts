@@ -28,6 +28,7 @@ export class OpencodeSession extends AgentSessionBase<OpencodeMode> {
         startedBy: 'runner' | 'terminal';
         startingMode: 'local' | 'remote';
         permissionMode?: PermissionMode;
+        modelReasoningEffort?: string | null;
     }) {
         super({
             api: opts.api,
@@ -44,7 +45,8 @@ export class OpencodeSession extends AgentSessionBase<OpencodeMode> {
                 ...metadata,
                 opencodeSessionId: sessionId
             }),
-            permissionMode: opts.permissionMode
+            permissionMode: opts.permissionMode,
+            modelReasoningEffort: opts.modelReasoningEffort
         });
 
         this.startedBy = opts.startedBy;
@@ -75,6 +77,10 @@ export class OpencodeSession extends AgentSessionBase<OpencodeMode> {
 
     setModel = (model: string | null): void => {
         this.model = model;
+    };
+
+    setModelReasoningEffort = (modelReasoningEffort: string | null): void => {
+        this.modelReasoningEffort = modelReasoningEffort;
     };
 
     recordLocalLaunchFailure = (message: string, exitReason: LocalLaunchExitReason): void => {

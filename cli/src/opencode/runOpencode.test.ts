@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockOpencodeSession = vi.hoisted(() => ({
     setModel: vi.fn(),
+    setModelReasoningEffort: vi.fn(),
     setPermissionMode: vi.fn(),
     pushKeepAlive: vi.fn(),
     thinking: false,
@@ -87,6 +88,7 @@ describe('runOpencode set-session-config handler', () => {
         harness.opencodeLoopArgs.length = 0;
         harness.opencodeLoopError = null;
         mockOpencodeSession.setModel.mockReset();
+        mockOpencodeSession.setModelReasoningEffort.mockReset();
         mockOpencodeSession.setPermissionMode.mockReset();
         mockOpencodeSession.pushKeepAlive.mockReset();
         harness.session.onUserMessage.mockReset();
@@ -147,6 +149,17 @@ describe('runOpencode set-session-config handler', () => {
 
         expect(applied.model).toBeNull();
         expect(mockOpencodeSession.setModel).toHaveBeenLastCalledWith(null);
+    });
+
+    it('applies OpenCode model reasoning effort via set-session-config RPC', async () => {
+        await runOpencode({});
+
+        const handler = getConfigHandler();
+        const result = await handler({ modelReasoningEffort: 'high' }) as Record<string, unknown>;
+        const applied = result.applied as Record<string, unknown>;
+
+        expect(applied.modelReasoningEffort).toBe('high');
+        expect(mockOpencodeSession.setModelReasoningEffort).toHaveBeenLastCalledWith('high');
     });
 
     it('rejects non-string, non-null model values', async () => {

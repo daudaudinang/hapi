@@ -17,6 +17,14 @@ export type RpcReadFileResponse = {
     error?: string
 }
 
+export type RpcReadFileRawResponse = {
+    success: boolean
+    data?: string
+    mimeType?: string
+    size?: number
+    error?: string
+}
+
 export type RpcUploadFileResponse = {
     success: boolean
     path?: string
@@ -142,10 +150,17 @@ export type RpcOpencodeModel = {
     name?: string
 }
 
+export type RpcOpencodeEffort = {
+    effortId: string
+    name?: string
+}
+
 export type RpcListOpencodeModelsResponse = {
     success: boolean
     availableModels?: RpcOpencodeModel[]
     currentModelId?: string | null
+    availableEfforts?: RpcOpencodeEffort[]
+    currentEffortId?: string | null
     error?: string
 }
 
@@ -287,6 +302,14 @@ export class RpcGateway {
             return { success: false, error: 'Unexpected editor-read-file result' }
         }
         return result as RpcReadFileResponse
+    }
+
+    async editorReadFileRaw(machineId: string, path: string): Promise<RpcReadFileRawResponse> {
+        const result = await this.machineRpc(machineId, 'editor-read-file-raw', { path }) as RpcReadFileRawResponse | unknown
+        if (!result || typeof result !== 'object') {
+            return { success: false, error: 'Unexpected editor-read-file-raw result' }
+        }
+        return result as RpcReadFileRawResponse
     }
 
     async editorListProjects(machineId: string): Promise<RpcEditorProjectsResponse> {

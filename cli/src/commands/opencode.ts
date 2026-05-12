@@ -16,6 +16,7 @@ export const opencodeCommand: CommandDefinition = {
                 startingMode?: 'local' | 'remote'
                 permissionMode?: OpencodePermissionMode
                 model?: string
+                modelReasoningEffort?: string
                 resumeSessionId?: string
             } = {}
 
@@ -53,6 +54,12 @@ export const opencodeCommand: CommandDefinition = {
                         throw new Error('Missing --model value')
                     }
                     options.model = model
+                } else if (arg === '--model-reasoning-effort' || arg === '--variant') {
+                    const effort = commandArgs[++i]
+                    if (!effort) {
+                        throw new Error(`Missing ${arg} value`)
+                    }
+                    options.modelReasoningEffort = effort
                 }
             }
 

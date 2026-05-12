@@ -630,8 +630,9 @@ const handleNewFileFromTabs = useCallback(() => {
                     onCloseTerminalTab={editor.closeTab}
                     onAddTerminalToChat={handleAddTerminalToChat}
                     onRegisterTerminalClose={handleRegisterTerminalClose}
-                onSaveActiveFile={handleSaveActiveFile}
-                saveActiveFileRef={saveActiveFileRef}
+                    onSaveActiveFile={handleSaveActiveFile}
+                    setTabViewMode={editor.setTabViewMode}
+                    saveActiveFileRef={saveActiveFileRef}
                 />
                 <EditorContextMenu
                     filePath={editor.contextMenuFile}
@@ -750,6 +751,7 @@ const handleNewFileFromTabs = useCallback(() => {
                                 onNewFile={handleNewFileFromTabs}
                                 onDirtyChange={editor.setTabDirty}
                                 onAddSelectionToChat={handleAddSelectionToChat}
+                                setTabViewMode={editor.setTabViewMode}
                             saveRef={saveActiveFileRef}
                             />
                         )}

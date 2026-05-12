@@ -90,6 +90,50 @@ export class ApiClient {
         }
     }
 
+    private async requestBlob(
+        path: string,
+        init?: RequestInit,
+        attempt: number = 0,
+        overrideToken?: string | null
+    ): Promise<Blob> {
+        const headers = new Headers(init?.headers)
+        const liveToken = this.getToken ? this.getToken() : null
+        const authToken = overrideToken !== undefined
+            ? (overrideToken ?? (liveToken ?? this.token))
+            : (liveToken ?? this.token)
+        if (authToken) {
+            headers.set('authorization', `Bearer ${authToken}`)
+        }
+        if (init?.body !== undefined && !headers.has('content-type')) {
+            headers.set('content-type', 'application/json')
+        }
+
+        const res = await fetch(this.buildUrl(path), {
+            ...init,
+            headers
+        })
+
+        if (res.status === 401) {
+            if (attempt === 0 && this.onUnauthorized) {
+                const refreshed = await this.onUnauthorized()
+                if (refreshed) {
+                    this.token = refreshed
+                    return await this.requestBlob(path, init, attempt + 1, refreshed)
+                }
+            }
+            throw new Error('Session expired. Please sign in again.')
+        }
+
+        if (!res.ok) {
+            const body = await res.text().catch(() => '')
+            const code = parseErrorCode(body)
+            const detail = body ? `: ${body}` : ''
+            throw new ApiError(`HTTP ${res.status} ${res.statusText}${detail}`, res.status, code, body || undefined)
+        }
+
+        return await res.blob()
+    }
+
     private async request<T>(
         path: string,
         init?: RequestInit,
@@ -529,6 +573,19 @@ export class ApiClient {
             `/api/editor/file`,
             {
                 method: "POST",
+                body: JSON.stringify({ machineId, path })
+            }
+        )
+    }
+
+    async getEditorFileRawBlob(
+        machineId: string,
+        path: string
+    ): Promise<Blob> {
+        return await this.requestBlob(
+            '/api/editor/file/raw',
+            {
+                method: 'POST',
                 body: JSON.stringify({ machineId, path })
             }
         )

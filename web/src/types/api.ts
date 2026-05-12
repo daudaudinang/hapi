@@ -230,10 +230,17 @@ export type OpencodeModelSummary = {
     name?: string
 }
 
+export type OpencodeEffortSummary = {
+    effortId: string
+    name?: string
+}
+
 export type OpencodeModelsResponse = {
     success: boolean
     availableModels?: OpencodeModelSummary[]
     currentModelId?: string | null
+    availableEfforts?: OpencodeEffortSummary[]
+    currentEffortId?: string | null
     error?: string
 }
 
@@ -356,5 +363,4 @@ export type EditorGitStashListResponse = {
     stashes: EditorGitStashEntry[]
     error?: string
 }
-
 

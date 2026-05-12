@@ -11,7 +11,7 @@ import { useActiveSuggestions, type Suggestion } from '@/hooks/useActiveSuggesti
 import { useDirectorySuggestions } from '@/hooks/useDirectorySuggestions'
 import { useRecentPaths } from '@/hooks/useRecentPaths'
 import { useTranslation } from '@/lib/use-translation'
-import type { AgentType, ClaudeEffort, CodexReasoningEffort, SessionType } from './types'
+import type { AgentType, ClaudeEffort, ReasoningEffort, SessionType } from './types'
 import { ActionButtons } from './ActionButtons'
 import { AgentSelector } from './AgentSelector'
 import { DirectorySection } from './DirectorySection'
@@ -55,7 +55,7 @@ export function NewSession(props: {
     const [agent, setAgent] = useState<AgentType>(loadPreferredAgent)
     const [model, setModel] = useState('auto')
     const [effort, setEffort] = useState<ClaudeEffort>('auto')
-    const [modelReasoningEffort, setModelReasoningEffort] = useState<CodexReasoningEffort>('default')
+    const [modelReasoningEffort, setModelReasoningEffort] = useState<ReasoningEffort>('default')
     const [yoloMode, setYoloMode] = useState(loadPreferredYoloMode)
     const [sessionType, setSessionType] = useState<SessionType>('simple')
     const [worktreeName, setWorktreeName] = useState('')
@@ -184,7 +184,22 @@ export function NewSession(props: {
     useEffect(() => {
         // Reset selection when agent / machine / directory changes; new probe = new defaults.
         setOpencodeSelectedModel(null)
+        setModelReasoningEffort('default')
     }, [agent, machineId, deferredDirectory])
+    const opencodeReasoningEffortOptions = useMemo(() => {
+        if (agent !== 'opencode' || opencodeModelsState.availableEfforts.length === 0) {
+            return []
+        }
+        return [
+            { value: 'default', label: 'Default' },
+            ...opencodeModelsState.availableEfforts
+                .filter((effort) => effort.effortId !== 'default')
+                .map((effort) => ({
+                    value: effort.effortId,
+                    label: effort.name ?? effort.effortId
+                }))
+        ]
+    }, [agent, opencodeModelsState.availableEfforts])
 
     const currentDirectoryExists = trimmedDirectory ? pathExistence[trimmedDirectory] : undefined
     const needsDirectoryCreationWarning = sessionType === 'simple' && trimmedDirectory !== '' && currentDirectoryExists === false
@@ -319,7 +334,7 @@ export function NewSession(props: {
                 ? (opencodeSelectedModel ?? undefined)
                 : (model !== 'auto' ? model : undefined)
             const resolvedEffort = agent === 'claude' && effort !== 'auto' ? effort : undefined
-            const resolvedModelReasoningEffort = agent === 'codex' && modelReasoningEffort !== 'default'
+            const resolvedModelReasoningEffort = (agent === 'codex' || agent === 'opencode') && modelReasoningEffort !== 'default'
                 ? modelReasoningEffort
                 : undefined
             const result = await spawnSession({
@@ -429,6 +444,7 @@ export function NewSession(props: {
             <ReasoningEffortSelector
                 agent={agent}
                 value={modelReasoningEffort}
+                options={opencodeReasoningEffortOptions}
                 isDisabled={isFormDisabled}
                 onChange={setModelReasoningEffort}
             />

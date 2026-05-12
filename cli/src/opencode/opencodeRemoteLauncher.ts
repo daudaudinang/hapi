@@ -20,6 +20,7 @@ class OpencodeRemoteLauncher extends RemoteLauncherBase {
     private displayPermissionMode: PermissionMode | null = null;
     private instructionsSent = false;
     private currentBackendModel: string | null = null;
+    private currentBackendEffort: string | null = null;
     private setModelSupported: boolean | undefined = undefined;
 
     constructor(session: OpencodeSession) {
@@ -92,18 +93,21 @@ class OpencodeRemoteLauncher extends RemoteLauncherBase {
         // does not trigger a redundant setModel on the very first turn.
         const initialMetadata = backend.getSessionModelsMetadata?.(acpSessionId);
         this.currentBackendModel = initialMetadata?.currentModelId ?? null;
+        this.currentBackendEffort = initialMetadata?.currentEffortId ?? null;
 
         // Expose the cached models metadata via per-session RPC so the hub can
         // forward it to the web UI's model selector without round-tripping ACP.
         session.client.rpcHandlerManager.registerHandler('listOpencodeModels', async () => {
             const metadata = backend.getSessionModelsMetadata?.(acpSessionId);
             if (!metadata) {
-                return { success: true, availableModels: [], currentModelId: null };
+                return { success: true, availableModels: [], currentModelId: null, availableEfforts: [], currentEffortId: null };
             }
             return {
                 success: true,
                 availableModels: metadata.availableModels,
-                currentModelId: metadata.currentModelId
+                currentModelId: metadata.currentModelId,
+                availableEfforts: metadata.availableEfforts ?? [],
+                currentEffortId: metadata.currentEffortId ?? null
             };
         });
 
@@ -139,11 +143,7 @@ class OpencodeRemoteLauncher extends RemoteLauncherBase {
             // RPC, we learn that from the first method-not-found response and stop
             // attempting it for the rest of this session.
             //
-            // The very first batch seeds currentBackendModel — the OpenCode CLI was
-            // launched with that model via --model and there is nothing to switch yet.
-            if (batch.mode.model && this.currentBackendModel === null) {
-                this.currentBackendModel = batch.mode.model;
-            } else if (batch.mode.model && batch.mode.model !== this.currentBackendModel) {
+            if (batch.mode.model && batch.mode.model !== this.currentBackendModel) {
                 if (!backend.setModel || this.setModelSupported === false) {
                     batch.mode.model = this.currentBackendModel ?? undefined;
                 } else {
@@ -170,6 +170,27 @@ class OpencodeRemoteLauncher extends RemoteLauncherBase {
                             });
                         }
                         batch.mode.model = this.currentBackendModel ?? undefined;
+                    }
+                }
+            }
+
+            const requestedEffort = batch.mode.modelReasoningEffort ?? null;
+            if (requestedEffort !== this.currentBackendEffort) {
+                if (!backend.setConfigOption) {
+                    batch.mode.modelReasoningEffort = this.currentBackendEffort;
+                } else {
+                    const backendEffort = requestedEffort ?? 'default';
+                    logger.debug(`[opencode-remote] Switching effort inline: ${this.currentBackendEffort ?? '(default)'} -> ${requestedEffort ?? '(default)'}`);
+                    try {
+                        await backend.setConfigOption(acpSessionId, 'effort', backendEffort, { flavor: 'opencode' });
+                        this.currentBackendEffort = requestedEffort;
+                    } catch (error) {
+                        logger.warn('[opencode-remote] Inline effort switch failed', error);
+                        session.sendSessionEvent({
+                            type: 'message',
+                            message: `Failed to switch effort to ${requestedEffort ?? 'default'}. Continuing with ${this.currentBackendEffort ?? '(default)'}.`
+                        });
+                        batch.mode.modelReasoningEffort = this.currentBackendEffort;
                     }
                 }
             }

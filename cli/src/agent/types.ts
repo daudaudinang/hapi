@@ -66,12 +66,15 @@ export type AgentSessionModelDescriptor = {
 export type AgentSessionModelsMetadata = {
     availableModels: AgentSessionModelDescriptor[];
     currentModelId: string | null;
+    availableEfforts?: Array<{ effortId: string; name?: string }>;
+    currentEffortId?: string | null;
 };
 
 export interface AgentBackend {
     initialize(): Promise<void>;
     newSession(config: AgentSessionConfig): Promise<string>;
     setModel?(sessionId: string, modelId: string, opts?: { flavor?: AgentFlavor }): Promise<void>;
+    setConfigOption?(sessionId: string, configId: string, value: string, opts?: { flavor?: AgentFlavor }): Promise<void>;
     getSessionModelsMetadata?(sessionId: string): AgentSessionModelsMetadata | undefined;
     prompt(sessionId: string, content: PromptContent[], onUpdate: (msg: AgentMessage) => void): Promise<void>;
     cancelPrompt(sessionId: string): Promise<void>;

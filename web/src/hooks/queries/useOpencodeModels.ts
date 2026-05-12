@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import type { ApiClient } from '@/api/client'
-import type { OpencodeModelSummary } from '@/types/api'
+import type { OpencodeEffortSummary, OpencodeModelSummary } from '@/types/api'
 import { queryKeys } from '@/lib/query-keys'
 
 export function useOpencodeModels(args: {
@@ -10,6 +10,8 @@ export function useOpencodeModels(args: {
 }): {
     availableModels: OpencodeModelSummary[]
     currentModelId: string | null
+    availableEfforts: OpencodeEffortSummary[]
+    currentEffortId: string | null
     isLoading: boolean
     error: string | null
 } {
@@ -37,6 +39,8 @@ export function useOpencodeModels(args: {
     return {
         availableModels: query.data?.availableModels ?? [],
         currentModelId: query.data?.currentModelId ?? null,
+        availableEfforts: query.data?.availableEfforts ?? [],
+        currentEffortId: query.data?.currentEffortId ?? null,
         isLoading: query.isLoading,
         error: query.data?.success === false
             ? (query.data.error ?? 'Failed to load OpenCode models')

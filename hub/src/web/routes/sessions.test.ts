@@ -153,7 +153,7 @@ describe('sessions routes', () => {
         ])
     })
 
-    it('rejects model reasoning effort changes for non-Codex sessions', async () => {
+    it('rejects model reasoning effort changes for flavors without model reasoning support', async () => {
         const session = createSession({
             metadata: {
                 path: '/tmp/project',
@@ -171,9 +171,32 @@ describe('sessions routes', () => {
 
         expect(response.status).toBe(400)
         expect(await response.json()).toEqual({
-            error: 'Model reasoning effort is only supported for Codex sessions'
+            error: 'Model reasoning effort is only supported for Codex and OpenCode sessions'
         })
         expect(applySessionConfigCalls).toEqual([])
+    })
+
+    it('applies model reasoning effort changes for remote OpenCode sessions', async () => {
+        const session = createSession({
+            metadata: {
+                path: '/tmp/project',
+                host: 'localhost',
+                flavor: 'opencode'
+            }
+        })
+        const { app, applySessionConfigCalls } = createApp(session)
+
+        const response = await app.request('/api/sessions/session-1/model-reasoning-effort', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ modelReasoningEffort: 'high' })
+        })
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toEqual({ ok: true })
+        expect(applySessionConfigCalls).toEqual([
+            ['session-1', { modelReasoningEffort: 'high' }]
+        ])
     })
 
     it('rejects model reasoning effort changes for local Codex sessions', async () => {
@@ -194,7 +217,7 @@ describe('sessions routes', () => {
 
         expect(response.status).toBe(409)
         expect(await response.json()).toEqual({
-            error: 'Model reasoning effort can only be changed for remote Codex sessions'
+            error: 'Model reasoning effort can only be changed for remote Codex/OpenCode sessions'
         })
         expect(applySessionConfigCalls).toEqual([])
     })

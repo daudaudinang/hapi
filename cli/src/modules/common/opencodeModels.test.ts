@@ -86,6 +86,35 @@ describe('listOpencodeModelsForCwd', () => {
         expect(result.currentModelId).toBeNull()
     })
 
+    it('extracts OpenCode effort options from ACP _meta variants', async () => {
+        sendRequestMock
+            .mockResolvedValueOnce({ protocolVersion: 1 })
+            .mockResolvedValueOnce({
+                sessionId: 'sess-effort',
+                models: {
+                    availableModels: [{ modelId: 'openai/o3', name: 'OpenAI/o3' }],
+                    currentModelId: 'openai/o3'
+                },
+                _meta: {
+                    opencode: {
+                        modelId: 'openai/o3',
+                        variant: 'high',
+                        availableVariants: ['low', 'medium', 'high']
+                    }
+                }
+            })
+
+        const result = await listOpencodeModelsForCwd('/effort/cwd')
+
+        expect(result.success).toBe(true)
+        expect(result.availableEfforts).toEqual([
+            { effortId: 'low', name: 'Low' },
+            { effortId: 'medium', name: 'Medium' },
+            { effortId: 'high', name: 'High' }
+        ])
+        expect(result.currentEffortId).toBe('high')
+    })
+
     it('reads availableModels from top-level fields too (alternate response shape)', async () => {
         sendRequestMock
             .mockResolvedValueOnce({ protocolVersion: 1 })
