@@ -36,6 +36,7 @@ export const codexCommand: CommandDefinition = {
                 resumeSessionId?: string
                 model?: string
                 modelReasoningEffort?: ReasoningEffort
+                recoveryContext?: string
             } = {}
             const unknownArgs: string[] = []
             let hasExplicitPermissionMode = false
@@ -76,6 +77,15 @@ export const codexCommand: CommandDefinition = {
                         throw new Error('Missing --model-reasoning-effort value')
                     }
                     options.modelReasoningEffort = parseReasoningEffort(effort)
+                } else if (arg === '--recovery-context') {
+                    const encoded = commandArgs[++i]
+                    if (encoded) {
+                        try {
+                            options.recoveryContext = Buffer.from(encoded, 'base64').toString('utf-8')
+                        } catch {
+                            // Malformed base64 — silently ignore
+                        }
+                    }
                 } else {
                     unknownArgs.push(arg)
                 }

@@ -33,6 +33,7 @@ interface LoopOptions {
     modelReasoningEffort?: ReasoningEffort;
     collaborationMode?: CodexCollaborationMode;
     resumeSessionId?: string;
+    recoveryContext?: string;
     onSessionReady?: (session: CodexSession) => void;
 }
 
@@ -63,8 +64,8 @@ export async function loop(opts: LoopOptions): Promise<void> {
         session,
         startingMode: opts.startingMode,
         logTag: 'codex-loop',
-        runLocal: codexLocalLauncher,
-        runRemote: codexRemoteLauncher,
+        runLocal: (session) => codexLocalLauncher(session, opts.recoveryContext),
+        runRemote: (session) => codexRemoteLauncher(session, opts.recoveryContext),
         onSessionReady: opts.onSessionReady
     });
 }

@@ -37,10 +37,13 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
     private currentThreadId: string | null = null;
     private currentTurnId: string | null = null;
 
-    constructor(session: CodexSession) {
+    private recoveryContext: string | null = null
+
+    constructor(session: CodexSession, recoveryContext?: string) {
         super(process.env.DEBUG ? session.logPath : undefined);
         this.session = session;
         this.appServerClient = new CodexAppServerClient();
+        this.recoveryContext = recoveryContext ?? null;
     }
 
     protected createDisplay(context: RemoteLauncherDisplayContext): React.ReactElement {
@@ -802,6 +805,7 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
 
                 if (!hasThread) {
                     const threadParams = buildThreadStartParams({
+                        developerInstructions: this.recoveryContext ?? undefined,
                         cwd: session.path,
                         mode: message.mode,
                         mcpServers,
@@ -851,6 +855,11 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
                     this.currentThreadId = threadId;
                     session.onSessionFound(threadId);
                     hasThread = true;
+
+                // Consume recovery context after first successful thread creation
+                if (hasThread && this.recoveryContext) {
+                    this.recoveryContext = null
+                }
                 } else {
                     if (!this.currentThreadId) {
                         logger.debug('[Codex] Missing thread id; restarting app-server thread');
@@ -948,7 +957,7 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
     }
 }
 
-export async function codexRemoteLauncher(session: CodexSession): Promise<'switch' | 'exit'> {
-    const launcher = new CodexRemoteLauncher(session);
+export async function codexRemoteLauncher(session: CodexSession, recoveryContext?: string): Promise<'switch' | 'exit'> {
+    const launcher = new CodexRemoteLauncher(session, recoveryContext);
     return launcher.launch();
 }

@@ -29,6 +29,7 @@ export async function runCodex(opts: {
     resumeSessionId?: string;
     model?: string;
     modelReasoningEffort?: ReasoningEffort;
+    recoveryContext?: string;
 }): Promise<void> {
     const workingDirectory = getInvokedCwd();
     const startedBy = opts.startedBy ?? 'terminal';
@@ -312,6 +313,7 @@ export async function runCodex(opts: {
             modelReasoningEffort: currentModelReasoningEffort,
             collaborationMode: currentCollaborationMode,
             resumeSessionId: opts.resumeSessionId,
+            recoveryContext: opts.recoveryContext,
             onModeChange: createModeChangeHandler(session),
             onSessionReady: (instance) => {
                 sessionWrapperRef.current = instance;

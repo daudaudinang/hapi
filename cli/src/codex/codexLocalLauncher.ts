@@ -10,7 +10,7 @@ import { stripCodexCliOverrides } from './utils/codexCliOverrides';
 import { buildCodexPermissionModeCliArgs } from './utils/permissionModeConfig';
 import { BaseLocalLauncher } from '@/modules/common/launcher/BaseLocalLauncher';
 
-export async function codexLocalLauncher(session: CodexSession): Promise<'switch' | 'exit'> {
+export async function codexLocalLauncher(session: CodexSession, _recoveryContext?: string): Promise<'switch' | 'exit'> {
     const resumeSessionId = session.sessionId;
     let primarySessionId = resumeSessionId;
     let primaryTranscriptPath: string | null = null;
