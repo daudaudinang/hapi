@@ -18,6 +18,7 @@ export const opencodeCommand: CommandDefinition = {
                 model?: string
                 modelReasoningEffort?: string
                 resumeSessionId?: string
+                recoveryContext?: string
             } = {}
 
             let hasExplicitPermissionMode = false
@@ -60,6 +61,15 @@ export const opencodeCommand: CommandDefinition = {
                         throw new Error(`Missing ${arg} value`)
                     }
                     options.modelReasoningEffort = effort
+                } else if (arg === '--recovery-context') {
+                    const encoded = commandArgs[++i]
+                    if (encoded) {
+                        try {
+                            options.recoveryContext = Buffer.from(encoded, 'base64').toString('utf-8')
+                        } catch {
+                            // Malformed base64 — silently ignore
+                        }
+                    }
                 }
             }
 

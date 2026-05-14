@@ -20,6 +20,7 @@ interface OpencodeLoopOptions {
     model?: string;
     modelReasoningEffort?: string;
     resumeSessionId?: string;
+    recoveryContext?: string;
     hookServer: OpencodeHookServer;
     hookUrl: string;
     onSessionReady?: (session: OpencodeSession) => void;
@@ -57,7 +58,7 @@ export async function opencodeLoop(opts: OpencodeLoopOptions): Promise<void> {
             hookServer: opts.hookServer,
             hookUrl: opts.hookUrl
         }),
-        runRemote: (instance) => opencodeRemoteLauncher(instance),
+        runRemote: (instance) => opencodeRemoteLauncher(instance, opts.recoveryContext),
         onSessionReady: opts.onSessionReady
     });
 }

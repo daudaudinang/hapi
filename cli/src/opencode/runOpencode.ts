@@ -21,6 +21,7 @@ export async function runOpencode(opts: {
     model?: string;
     modelReasoningEffort?: string;
     resumeSessionId?: string;
+    recoveryContext?: string;
 } = {}): Promise<void> {
     const workingDirectory = getInvokedCwd();
     const startedBy = opts.startedBy ?? 'terminal';
@@ -182,6 +183,7 @@ export async function runOpencode(opts: {
             model: sessionModel ?? undefined,
             modelReasoningEffort: sessionModelReasoningEffort ?? undefined,
             resumeSessionId: opts.resumeSessionId,
+            recoveryContext: opts.recoveryContext,
             hookServer,
             hookUrl,
             onModeChange: createModeChangeHandler(session),

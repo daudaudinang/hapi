@@ -18,14 +18,17 @@ class OpencodeRemoteLauncher extends RemoteLauncherBase {
     private happyServer: { stop: () => void } | null = null;
     private abortController = new AbortController();
     private displayPermissionMode: PermissionMode | null = null;
+    private recoveryContext: string | null = null
+    private recoveryContextConsumed = false
     private instructionsSent = false;
     private currentBackendModel: string | null = null;
     private currentBackendEffort: string | null = null;
     private setModelSupported: boolean | undefined = undefined;
 
-    constructor(session: OpencodeSession) {
+    constructor(session: OpencodeSession, recoveryContext?: string) {
         super(process.env.DEBUG ? session.logPath : undefined);
         this.session = session;
+        this.recoveryContext = recoveryContext ?? null;
     }
 
     public async launch(): Promise<RemoteLauncherExitReason> {
@@ -201,8 +204,14 @@ class OpencodeRemoteLauncher extends RemoteLauncherBase {
             // Inject title instructions on first prompt
             let messageText = batch.message;
             if (!this.instructionsSent) {
-                messageText = `${TITLE_INSTRUCTION}\n\n${batch.message}`;
-                this.instructionsSent = true;
+                const parts: string[] = [TITLE_INSTRUCTION]
+                if (this.recoveryContext && !this.recoveryContextConsumed) {
+                    parts.push(this.recoveryContext)
+                    this.recoveryContextConsumed = true
+                }
+                parts.push(batch.message)
+                messageText = parts.join('\n\n')
+                this.instructionsSent = true
             }
 
             const promptContent: PromptContent[] = [{
@@ -330,8 +339,9 @@ function toAcpMcpServers(config: Record<string, { command: string; args: string[
 }
 
 export async function opencodeRemoteLauncher(
-    session: OpencodeSession
+    session: OpencodeSession,
+    recoveryContext?: string
 ): Promise<'switch' | 'exit'> {
-    const launcher = new OpencodeRemoteLauncher(session);
+    const launcher = new OpencodeRemoteLauncher(session, recoveryContext);
     return launcher.launch();
 }
