@@ -1,4 +1,6 @@
 import type { StoredMessage } from '../store/types'
+import { isObject } from '@hapi/protocol'
+import { unwrapRoleWrappedRecordEnvelope } from '@hapi/protocol/messages'
 
 interface ParsedTurn {
     userText: string
@@ -14,21 +16,15 @@ export function buildRecoveryContext(messages: StoredMessage[]): string | null {
 
     for (const message of messages) {
         try {
-            const content = message.content
-            if (content === null || content === undefined || typeof content !== 'object') continue
+            const record = unwrapRoleWrappedRecordEnvelope(message.content)
+            if (!record) continue
 
-            const record = content as Record<string, unknown>
-            const role = typeof record.role === 'string' ? record.role : undefined
-            if (!role) continue
-
+            const role = record.role
             if (role === 'user') {
                 const innerContent = record.content
-                if (!innerContent || typeof innerContent !== 'object') continue
-                const innerType = (innerContent as Record<string, unknown>).type
-                if (innerType !== 'text') continue
-                const text = typeof (innerContent as Record<string, unknown>).text === 'string'
-                    ? (innerContent as Record<string, unknown>).text as string
-                    : undefined
+                if (!isObject(innerContent)) continue
+                if (innerContent.type !== 'text') continue
+                const text = typeof innerContent.text === 'string' ? innerContent.text : undefined
                 if (!text) continue
 
                 currentTurn = { userText: text, agentTexts: [] }
@@ -36,22 +32,18 @@ export function buildRecoveryContext(messages: StoredMessage[]): string | null {
                 continue
             }
 
-            if (role === 'agent') {
+            if (role === 'agent' || role === 'assistant') {
                 if (!currentTurn) continue
 
                 const innerContent = record.content
-                if (!innerContent || typeof innerContent !== 'object') continue
-                const innerRecord = innerContent as Record<string, unknown>
-                const innerType = innerRecord.type
+                if (!isObject(innerContent)) continue
+                const innerType = innerContent.type
 
                 if (innerType === 'codex' || innerType === 'event') {
-                    const data = innerRecord.data
-                    if (!data || typeof data !== 'object') continue
-                    const dataType = (data as Record<string, unknown>).type
-                    if (dataType !== 'message') continue
-                    const text = typeof (data as Record<string, unknown>).text === 'string'
-                        ? (data as Record<string, unknown>).text as string
-                        : undefined
+                    const data = innerContent.data
+                    if (!isObject(data)) continue
+                    if (data.type !== 'message') continue
+                    const text = typeof data.text === 'string' ? data.text : undefined
                     if (!text) continue
                     currentTurn.agentTexts.push(text)
                 }

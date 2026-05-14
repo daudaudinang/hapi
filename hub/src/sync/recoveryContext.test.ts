@@ -114,4 +114,51 @@ describe('buildRecoveryContext', () => {
         ]
         expect(buildRecoveryContext(messages)).toBeNull()
     })
+
+    // --- New tests for the fixes ---
+
+    it('handles wrapped-envelope messages (message wrapper)', () => {
+        const messages: StoredMessage[] = [
+            msg({ seq: 1, content: { message: { role: 'user', content: { type: 'text', text: 'Wrapped user message' } } } }),
+            msg({ seq: 2, content: { message: { role: 'agent', content: { type: 'codex', data: { type: 'message', text: 'Wrapped agent reply' } } } } }),
+        ]
+        const ctx = buildRecoveryContext(messages)
+        expect(ctx).not.toBeNull()
+        expect(ctx!).toContain('Wrapped user message')
+        expect(ctx!).toContain('Wrapped agent reply')
+    })
+
+    it('handles data-wrapped envelope messages', () => {
+        const messages: StoredMessage[] = [
+            msg({ seq: 1, content: { data: { message: { role: 'user', content: { type: 'text', text: 'Data-wrapped user' } } } } }),
+            msg({ seq: 2, content: { data: { message: { role: 'agent', content: { type: 'codex', data: { type: 'message', text: 'Data-wrapped reply' } } } } } }),
+        ]
+        const ctx = buildRecoveryContext(messages)
+        expect(ctx).not.toBeNull()
+        expect(ctx!).toContain('Data-wrapped user')
+        expect(ctx!).toContain('Data-wrapped reply')
+    })
+
+    it('handles assistant role alongside agent role', () => {
+        const messages: StoredMessage[] = [
+            msg({ seq: 1, content: { role: 'user', content: { type: 'text', text: 'Hello assistant' } } }),
+            msg({ seq: 2, content: { role: 'assistant', content: { type: 'codex', data: { type: 'message', text: 'Assistant response here' } } } }),
+        ]
+        const ctx = buildRecoveryContext(messages)
+        expect(ctx).not.toBeNull()
+        expect(ctx!).toContain('Hello assistant')
+        expect(ctx!).toContain('Assistant response here')
+    })
+
+    it('handles mixed agent and assistant roles in same session', () => {
+        const messages: StoredMessage[] = [
+            msg({ seq: 1, content: { role: 'user', content: { type: 'text', text: 'Task 1' } } }),
+            msg({ seq: 2, content: { role: 'agent', content: { type: 'codex', data: { type: 'message', text: 'Agent reply' } } } }),
+            msg({ seq: 3, content: { role: 'user', content: { type: 'text', text: 'Task 2' } } }),
+            msg({ seq: 4, content: { role: 'assistant', content: { type: 'codex', data: { type: 'message', text: 'Assistant reply' } } } }),
+        ]
+        const ctx = buildRecoveryContext(messages)
+        expect(ctx!).toContain('Agent reply')
+        expect(ctx!).toContain('Assistant reply')
+    })
 })
