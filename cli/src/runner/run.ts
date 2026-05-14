@@ -959,5 +959,9 @@ export function buildCliArgs(
   } else if (yolo) {
     args.push('--yolo');
   }
+  if (options.recoveryContext) {
+    const encoded = Buffer.from(options.recoveryContext).toString("base64")
+    args.push("--recovery-context", encoded)
+  }
   return args;
 }
