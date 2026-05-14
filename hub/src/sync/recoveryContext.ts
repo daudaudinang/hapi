@@ -43,7 +43,7 @@ export function buildRecoveryContext(messages: StoredMessage[]): string | null {
                     const data = innerContent.data
                     if (!isObject(data)) continue
                     if (data.type !== 'message') continue
-                    const text = typeof data.text === 'string' ? data.text : undefined
+                    const text = typeof data.text === 'string' && data.text ? data.text : typeof data.message === 'string' && data.message ? data.message : undefined
                     if (!text) continue
                     currentTurn.agentTexts.push(text)
                 }

@@ -85,6 +85,21 @@ describe('buildRecoveryContext', () => {
         expect(ctx!).toContain('Task failed: 429')
     })
 
+    
+    it('extracts agent text from data.message field (real-world format)', () => {
+        const messages: StoredMessage[] = [
+            msg({ seq: 1, content: { role: 'user', content: { type: 'text', text: 'Hello' } } }),
+            msg({ seq: 2, content: { role: 'agent', content: { type: 'codex', data: { type: 'message', message: 'I found the issue' } } } }),
+            msg({ seq: 3, content: { role: 'agent', content: { type: 'codex', data: { type: 'message', message: 'Fixed it' } } } }),
+            msg({ seq: 4, content: { role: 'agent', content: { type: 'event', data: { type: 'message', message: 'Task failed: 429' } } } }),
+        ]
+        const ctx = buildRecoveryContext(messages)
+        expect(ctx).not.toBeNull()
+        expect(ctx!).toContain('I found the issue')
+        expect(ctx!).toContain('Fixed it')
+        expect(ctx!).toContain('Task failed: 429')
+    })
+
     it('silently skips malformed messages', () => {
         const messages: StoredMessage[] = [
             msg({ seq: 1, content: { role: 'user', content: { type: 'text', text: 'Hi' } } }),

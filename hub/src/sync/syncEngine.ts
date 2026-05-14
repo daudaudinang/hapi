@@ -523,7 +523,7 @@ export class SyncEngine {
         // Gate to codex + opencode only (Claude handles its own resume; Cursor not verified)
         const recoveryContext = (flavor === 'codex' || flavor === 'opencode')
             ? (() => {
-                const oldMessages = this.messageService.getAllSessionMessages(access.sessionId, 500)
+                const oldMessages = this.messageService.getAllSessionMessages(access.sessionId, 5000)
                 return buildRecoveryContext(oldMessages) ?? undefined
               })()
             : undefined
