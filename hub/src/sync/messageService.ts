@@ -1,6 +1,7 @@
 import type { AttachmentMetadata, DecryptedMessage } from '@hapi/protocol/types'
 import type { Server } from 'socket.io'
 import type { Store } from '../store'
+import type { StoredMessage } from '../store/types'
 import { EventPublisher } from './eventPublisher'
 
 export class MessageService {
@@ -133,6 +134,14 @@ export class MessageService {
             createdAt: message.createdAt,
             invokedAt: message.invokedAt
         }))
+    }
+
+    /**
+     * Fetch all messages for a session up to maxLimit (for recovery context generation).
+     * Returns messages in chronological order (oldest first).
+     */
+    getAllSessionMessages(sessionId: string, maxLimit: number = 1000): StoredMessage[] {
+        return this.store.messages.getMessages(sessionId, maxLimit)
     }
 
     async sendMessage(
