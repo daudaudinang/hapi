@@ -13,6 +13,7 @@ export interface SpawnSessionOptions {
     token?: string
     sessionType?: 'simple' | 'worktree'
     worktreeName?: string
+    recoveryContext?: string
 }
 
 export type SpawnSessionResult =

@@ -32,6 +32,7 @@ import {
     type RpcReadFileRawResponse,
     type RpcUploadFileResponse
 } from './rpcGateway'
+import { buildRecoveryContext } from './recoveryContext'
 import { SessionCache } from './sessionCache'
 
 export type { Session, SyncEvent } from '@hapi/protocol/types'
@@ -240,7 +241,7 @@ export class SyncEngine {
         time: number
         thinking?: boolean
         mode?: 'local' | 'remote'
-        permissionMode?: PermissionMode
+        permissionMode?: PermissionMode,
         model?: string | null
         modelReasoningEffort?: string | null
         effort?: string | null
@@ -393,7 +394,7 @@ export class SyncEngine {
     async applySessionConfig(
         sessionId: string,
         config: {
-            permissionMode?: PermissionMode
+            permissionMode?: PermissionMode,
             model?: string | null
             modelReasoningEffort?: string | null
             effort?: string | null
@@ -441,7 +442,8 @@ export class SyncEngine {
         worktreeName?: string,
         resumeSessionId?: string,
         effort?: string,
-        permissionMode?: PermissionMode
+        permissionMode?: PermissionMode,
+        recoveryContext?: string,
     ): Promise<{ type: 'success'; sessionId: string } | { type: 'error'; message: string }> {
         return await this.rpcGateway.spawnSession(
             machineId,
@@ -454,7 +456,8 @@ export class SyncEngine {
             worktreeName,
             resumeSessionId,
             effort,
-            permissionMode
+            permissionMode,
+            recoveryContext
         )
     }
 
@@ -516,6 +519,15 @@ export class SyncEngine {
             return { type: 'error', message: 'No machine online', code: 'no_machine_online' }
         }
 
+        // Build recovery context from old session messages (before any merge)
+        // Gate to codex + opencode only (Claude handles its own resume; Cursor not verified)
+        const recoveryContext = (flavor === 'codex' || flavor === 'opencode')
+            ? (() => {
+                const oldMessages = this.messageService.getAllSessionMessages(access.sessionId, 500)
+                return buildRecoveryContext(oldMessages) ?? undefined
+              })()
+            : undefined
+
         const effectivePermissionMode = opts?.permissionMode ?? session.permissionMode ?? undefined
         const spawnResult = await this.rpcGateway.spawnSession(
             targetMachine.id,
@@ -528,7 +540,8 @@ export class SyncEngine {
             undefined,
             resumeToken,
             session.effort ?? undefined,
-            effectivePermissionMode
+            effectivePermissionMode,
+            recoveryContext
         )
 
         if (spawnResult.type !== 'success') {
