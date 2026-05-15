@@ -201,17 +201,19 @@ class OpencodeRemoteLauncher extends RemoteLauncherBase {
             this.applyDisplayMode(batch.mode.permissionMode);
             messageBuffer.addMessage(batch.message, 'user');
 
-            // Inject title instructions on first prompt
+            // Inject title instructions + recovery context on first prompt
+            let injectedTitle = false
+            let injectedRecovery = false
             let messageText = batch.message;
             if (!this.instructionsSent) {
                 const parts: string[] = [TITLE_INSTRUCTION]
+                injectedTitle = true
                 if (this.recoveryContext && !this.recoveryContextConsumed) {
                     parts.push(this.recoveryContext)
-                    this.recoveryContextConsumed = true
+                    injectedRecovery = true
                 }
                 parts.push(batch.message)
                 messageText = parts.join('\n\n')
-                this.instructionsSent = true
             }
 
             const promptContent: PromptContent[] = [{
@@ -225,6 +227,9 @@ class OpencodeRemoteLauncher extends RemoteLauncherBase {
                 await backend.prompt(acpSessionId, promptContent, (message: AgentMessage) => {
                     this.handleAgentMessage(message);
                 });
+                // Consume flags only after successful prompt
+                if (injectedTitle) this.instructionsSent = true
+                if (injectedRecovery) this.recoveryContextConsumed = true
             } catch (error) {
                 logger.warn('[opencode-remote] prompt failed', error);
                 session.sendSessionEvent({
