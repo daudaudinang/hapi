@@ -1,3 +1,4 @@
+import { isObject } from '@hapi/protocol'
 import type { ClientToServerEvents } from '@hapi/protocol'
 import { z } from 'zod'
 import { randomUUID } from 'node:crypto'
@@ -64,10 +65,11 @@ export type SessionHandlersDeps = {
     onWebappEvent?: (event: SyncEvent) => void
     onBackgroundTaskDelta?: (sessionId: string, delta: { started: number; completed: number }) => void
     onSessionActivity?: (sessionId: string, updatedAt: number) => void
+    onSessionCrashed?: (sessionId: string) => void
 }
 
 export function registerSessionHandlers(socket: CliSocketWithData, deps: SessionHandlersDeps): void {
-    const { store, resolveSessionAccess, emitAccessError, onSessionAlive, onSessionEnd, onWebappEvent, onBackgroundTaskDelta, onSessionActivity } = deps
+    const { store, resolveSessionAccess, emitAccessError, onSessionAlive, onSessionEnd, onWebappEvent, onBackgroundTaskDelta, onSessionActivity, onSessionCrashed } = deps
 
     socket.on('message', (data: unknown) => {
         const parsed = messageSchema.safeParse(data)
@@ -122,6 +124,22 @@ export function registerSessionHandlers(socket: CliSocketWithData, deps: Session
         const bgDelta = extractBackgroundTaskDelta(content)
         if (bgDelta) {
             onBackgroundTaskDelta?.(sid, bgDelta)
+        }
+
+        // Detect thread crash event from CLI → notify hub to set session inactive
+        if (
+            isObject(content) &&
+            (content as Record<string, unknown>).role === 'agent' &&
+            isObject((content as Record<string, unknown>).content)
+        ) {
+            const inner = (content as Record<string, unknown>).content as Record<string, unknown>
+            if (
+                inner.type === 'event' &&
+                isObject(inner.data) &&
+                (inner.data as Record<string, unknown>).type === 'thread-crashed'
+            ) {
+                onSessionCrashed?.(sid)
+            }
         }
 
         const update = {
