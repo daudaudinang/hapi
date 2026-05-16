@@ -46,6 +46,7 @@ export class AgentSessionBase<Mode> {
     private readonly sessionLabel: string;
     private readonly sessionIdLabel: string;
     private keepAliveInterval: NodeJS.Timeout | null = null;
+    private keepaliveStopped = false;
     protected permissionMode?: SessionPermissionMode;
     protected model?: SessionModel;
     protected modelReasoningEffort?: SessionModelReasoningEffort;
@@ -74,6 +75,7 @@ export class AgentSessionBase<Mode> {
 
         this.client.keepAlive(this.thinking, this.mode, this.getKeepAliveRuntime());
         this.keepAliveInterval = setInterval(() => {
+            if (this.keepaliveStopped) return;
             this.client.keepAlive(this.thinking, this.mode, this.getKeepAliveRuntime());
         }, 2000);
 
@@ -125,6 +127,7 @@ export class AgentSessionBase<Mode> {
     };
 
     stopKeepAlive = (): void => {
+        this.keepaliveStopped = true;
         if (this.keepAliveInterval) {
             clearInterval(this.keepAliveInterval);
             this.keepAliveInterval = null;
