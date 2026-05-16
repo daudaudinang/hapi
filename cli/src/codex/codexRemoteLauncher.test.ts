@@ -223,6 +223,9 @@ function createSessionStub(messages = ['hello from launcher test']) {
         },
         sendUserMessage(text: string) {
             client.sendUserMessage(text);
+        },
+        stopKeepAlive() {
+            // no-op: keepalive is mocked in tests
         }
     };
 
@@ -295,6 +298,7 @@ describe('codexRemoteLauncher', () => {
 
         expect(exitReason).toBe('exit');
         expect(harness.notifications.map((entry) => entry.method)).toEqual(['turn/started', 'thread/status/changed']);
+        expect(sessionEvents).toContainEqual({ type: 'thread-crashed' });
         expect(sessionEvents).toContainEqual({
             type: 'message',
             message: 'Task failed: Codex thread entered systemError'

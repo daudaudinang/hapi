@@ -300,6 +300,12 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
                     invalidThreadId = eventThreadId ?? this.currentThreadId;
                     this.currentThreadId = null;
                     hasThread = false;
+                    // Stop heartbeat so hub can mark session inactive.
+                    // Without this, the 2s keepalive would re-activate the session
+                    // before auto-resume can trigger.
+                    session.stopKeepAlive();
+                    // Notify hub that thread crashed so auto-resume can trigger
+                    session.sendSessionEvent({ type: 'thread-crashed' });
                 }
             }
 
@@ -910,6 +916,10 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
                     this.currentTurnId = null;
                     this.currentThreadId = null;
                     hasThread = false;
+                    // Stop heartbeat so hub can mark session inactive
+                    session.stopKeepAlive();
+                    // Notify hub that thread crashed so auto-resume can trigger
+                    session.sendSessionEvent({ type: 'thread-crashed' });
                 }
             } finally {
                 if (!turnInFlight) {
