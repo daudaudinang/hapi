@@ -272,6 +272,17 @@ export class SyncEngine {
         this.triggerDedupIfNeeded(payload.sid)
     }
 
+    /**
+     * Handle a thread crash notification from CLI.
+     * Sets session inactive WITHOUT setting sessionEndReasons,
+     * so auto-resume can still trigger.
+     * NOT calling triggerDedupIfNeeded — dedup happens naturally when
+     * the new CLI (from auto-resume) sends handleSessionAlive.
+     */
+    handleSessionCrashed(sessionId: string): void {
+        this.sessionCache.markThreadCrashed(sessionId)
+    }
+
     handleBackgroundTaskDelta(sessionId: string, delta: { started: number; completed: number }): void {
         this.sessionCache.applyBackgroundTaskDelta(sessionId, delta)
     }

@@ -355,6 +355,29 @@ export class SessionCache {
         this.publisher.emit({ type: 'session-updated', sessionId: session.id, data: { active: false, thinking: false, backgroundTaskCount: 0 } })
     }
 
+    /**
+     * Mark a session inactive due to thread crash. Unlike handleSessionEnd,
+     * this does NOT set a session end reason — auto-resume should still work.
+     *
+     * The CLI MUST call stopKeepAlive() before sending the thread-crashed event
+     * to prevent the 2s heartbeat from re-activating the session.
+     */
+    markThreadCrashed(sessionId: string): void {
+        const session = this.sessions.get(sessionId)
+        if (!session || !session.active) return
+
+        session.active = false
+        session.thinking = false
+        session.backgroundTaskCount = 0
+        this.pendingThinkingUntilBySessionId.delete(session.id)
+
+        this.publisher.emit({
+            type: 'session-updated',
+            sessionId: session.id,
+            data: { active: false, thinking: false, backgroundTaskCount: 0 }
+        })
+    }
+
     expireInactive(now: number = Date.now()): string[] {
         const sessionTimeoutMs = 30_000
         const expired: string[] = []

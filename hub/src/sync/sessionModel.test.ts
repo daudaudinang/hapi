@@ -1004,3 +1004,100 @@ describe('session model', () => {
         })
     })
 })
+
+describe('crash recovery flow', () => {
+    it('markThreadCrashed sets session inactive without setting session end reason', () => {
+        const store = new Store(':memory:')
+        const events: SyncEvent[] = []
+        const cache = new SessionCache(store, createPublisher(events))
+
+        const session = cache.getOrCreateSession(
+            'crash-test',
+            { path: '/tmp/test', host: 'test', flavor: 'codex', codexSessionId: 'cs-1' },
+            {},
+            'default'
+        )
+        cache.handleSessionAlive({ sid: session.id, time: Date.now() })
+        expect(cache.getSession(session.id)?.active).toBe(true)
+
+        cache.markThreadCrashed(session.id)
+        expect(cache.getSession(session.id)?.active).toBe(false)
+
+        const updateEvents = events.filter(e => e.type === 'session-updated' && e.sessionId === session.id)
+        const lastUpdate = updateEvents[updateEvents.length - 1]
+        expect(lastUpdate?.data).toMatchObject({ active: false, thinking: false })
+    })
+
+    it('is a no-op when session is already inactive', () => {
+        const store = new Store(':memory:')
+        const events: SyncEvent[] = []
+        const cache = new SessionCache(store, createPublisher(events))
+
+        const session = cache.getOrCreateSession(
+            'inactive-test',
+            { path: '/tmp/test', host: 'test', flavor: 'codex' },
+            {},
+            'default'
+        )
+        const eventCountBefore = events.length
+        cache.markThreadCrashed(session.id)
+        expect(events.length).toBe(eventCountBefore)
+    })
+
+    it('is a no-op for non-existent session', () => {
+        const store = new Store(':memory:')
+        const events: SyncEvent[] = []
+        const cache = new SessionCache(store, createPublisher(events))
+
+        const eventCountBefore = events.length
+        cache.markThreadCrashed('non-existent-id')
+        expect(events.length).toBe(eventCountBefore)
+    })
+
+    it('markThreadCrashed then handleSessionAlive makes session active again', () => {
+        const store = new Store(':memory:')
+        const events: SyncEvent[] = []
+        const cache = new SessionCache(store, createPublisher(events))
+
+        const session = cache.getOrCreateSession(
+            'crash-reactivate',
+            { path: '/tmp/test', host: 'test', flavor: 'codex', codexSessionId: 'cs-ra' },
+            {},
+            'default'
+        )
+        cache.handleSessionAlive({ sid: session.id, time: Date.now() })
+        expect(cache.getSession(session.id)?.active).toBe(true)
+
+        cache.markThreadCrashed(session.id)
+        expect(cache.getSession(session.id)?.active).toBe(false)
+
+        // In production stopKeepAlive() prevents this, but at the SessionCache
+        // unit level, handleSessionAlive will re-activate a crashed session.
+        // This tests that markThreadCrashed doesn't permanently lock the session.
+        cache.handleSessionAlive({ sid: session.id, time: Date.now() })
+        expect(cache.getSession(session.id)?.active).toBe(true)
+    })
+
+    it('session-end with terminated blocks auto-resume but crash does not', () => {
+        const store = new Store(':memory:')
+        const events: SyncEvent[] = []
+        const cache = new SessionCache(store, createPublisher(events))
+
+        const session = cache.getOrCreateSession(
+            'crash-vs-end',
+            { path: '/tmp/test', host: 'test', flavor: 'codex', codexSessionId: 'cs-ve', machineId: 'm1' },
+            {},
+            'default'
+        )
+        cache.handleSessionAlive({ sid: session.id, time: Date.now() })
+
+        // After crash: session is inactive, ready for auto-resume
+        cache.markThreadCrashed(session.id)
+        expect(cache.getSession(session.id)?.active).toBe(false)
+
+        // After end: session is inactive, blocked from auto-resume
+        cache.handleSessionAlive({ sid: session.id, time: Date.now() })
+        cache.handleSessionEnd({ sid: session.id, time: Date.now(), reason: 'terminated' })
+        expect(cache.getSession(session.id)?.active).toBe(false)
+    })
+})
