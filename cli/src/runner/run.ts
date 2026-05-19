@@ -233,16 +233,26 @@ export async function startRunner(options: { workspaceRoot?: string } = {}): Pro
     const spawnSession = async (options: SpawnSessionOptions): Promise<SpawnSessionResult> => {
       logger.debugLargeJson('[RUNNER RUN] Spawning session', options);
 
-      // Spawn guard: prevent duplicate agent processes for the same resume session
+      // Spawn guard: if a process with the same resume session is still alive,
+      // kill it before spawning the new one. This handles the case where the
+      // agent crashed (e.g. 429 rate limit) but the CLI wrapper did not exit
+      // (Codex sends thread-crashed but keeps running; Claude catches errors
+      // and continues the loop). Without this, resume is permanently blocked.
       if (options.resumeSessionId) {
         for (const [existingPid, tracked] of pidToTrackedSession.entries()) {
           if (tracked.resumeSessionId === options.resumeSessionId) {
             if (isProcessAlive(existingPid)) {
-              logger.debug(`[RUNNER RUN] Spawn guard: session ${options.resumeSessionId} already running (PID ${existingPid}), rejecting duplicate spawn`);
-              return {
-                type: 'error',
-                errorMessage: `Agent session is already running (PID ${existingPid}). Cannot spawn duplicate.`
-              };
+              logger.debug(`[RUNNER RUN] Spawn guard: killing existing session ${options.resumeSessionId} (PID ${existingPid}) to allow resume`);
+              try {
+                if (tracked.childProcess) {
+                  void killProcessByChildProcess(tracked.childProcess, true);
+                } else {
+                  void killProcess(existingPid, true);
+                }
+              } catch {
+                // best-effort kill
+              }
+              pidToTrackedSession.delete(existingPid);
             } else {
               // Process is dead but tracking entry remains — clean it up
               logger.debug(`[RUNNER RUN] Spawn guard: stale tracking entry for PID ${existingPid}, cleaning up`);
