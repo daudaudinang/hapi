@@ -4,6 +4,7 @@ import {
     buildDeveloperInstructionsArg,
     buildSessionStartHookConfigArgs
 } from './codexMcpConfig';
+import { TITLE_INSTRUCTION } from './systemPrompt';
 
 describe('codexMcpConfig', () => {
     describe('buildMcpServerConfigArgs', () => {
@@ -104,5 +105,12 @@ describe('codexMcpConfig', () => {
             expect(args[1]).toContain('type = "command"');
             expect(args[1]).toContain('hook-forwarder --port 4312 --token secret-token');
         });
+    });
+});
+
+describe('Codex HAPI title prompt wording', () => {
+    it('describes hapi_session as HAPI-added, not the whole provider tool universe', () => {
+        expect(TITLE_INSTRUCTION).toContain('The HAPI-added MCP server named "hapi_session" provides exactly one tool: change_title.');
+        expect(TITLE_INSTRUCTION).toContain('Other provider, user, project, and global tools may also be available.');
     });
 });

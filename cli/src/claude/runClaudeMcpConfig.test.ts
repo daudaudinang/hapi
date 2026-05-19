@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { systemPrompt } from './utils/systemPrompt'
 
 declare const __dirname: string
 
@@ -17,5 +18,12 @@ describe('Claude HAPI MCP configuration', () => {
     it('does not advertise a local debug log file when file logging is disabled', () => {
         expect(runClaudeSource).not.toContain('Logs: ${logPath}')
         expect(runClaudeSource).toContain('Local file logs: disabled')
+    })
+})
+
+describe('Claude HAPI title prompt wording', () => {
+    it('describes hapi_session as HAPI-added, not the whole provider tool universe', () => {
+        expect(systemPrompt).toContain('The HAPI-added MCP server named "hapi_session" provides exactly one tool: change_title.')
+        expect(systemPrompt).toContain('Other provider, user, project, and global tools may also be available.')
     })
 })

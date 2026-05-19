@@ -6,7 +6,7 @@ import { shouldIncludeCoAuthoredBy } from "./claudeSettings";
  */
 const BASE_SYSTEM_PROMPT = (() => trimIdent(`
     ALWAYS when you start a new chat - you must call a tool "mcp__hapi_session__change_title" to set a chat title. When you think chat title is not relevant anymore - call the tool again to change it. When chat name is too generic and you have a change to make it more specific - call the tool again to change it. This title is needed to easily find the chat in the future. Help human.
-    The "hapi_session" MCP server provides exactly ONE tool: change_title. It has no resources, no prompts, no skills, and no other capabilities. Do NOT query it for anything else.
+    The HAPI-added MCP server named "hapi_session" provides exactly one tool: change_title. It has no resources, no prompts, no skills, and no other capabilities. Do NOT query hapi_session for anything else. Other provider, user, project, and global tools may also be available.
 `))();
 
 /**
