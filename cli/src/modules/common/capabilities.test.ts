@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mergeCapabilityNames, normalizeCapabilityName, toProviderCommandName } from './capabilities'
+import { mergeCapabilityNames, normalizeCapabilityName, sameCapabilityNames, toProviderCommandName } from './capabilities'
 
 describe('normalizeCapabilityName', () => {
     it('trims strings and returns null for empty or non-string values', () => {
@@ -24,6 +24,19 @@ describe('mergeCapabilityNames', () => {
 
     it('handles undefined inputs as empty lists', () => {
         expect(mergeCapabilityNames(undefined, undefined)).toEqual([])
+    })
+})
+
+
+describe('sameCapabilityNames', () => {
+    it('compares normalized capability sets independent of order and duplicates', () => {
+        expect(sameCapabilityNames([' write ', 'Read', 'Read'], ['Read', 'write'])).toBe(true)
+        expect(sameCapabilityNames(['Read'], ['Read', 'Write'])).toBe(false)
+    })
+
+    it('treats missing and blank-only lists as equal', () => {
+        expect(sameCapabilityNames(undefined, [])).toBe(true)
+        expect(sameCapabilityNames(['   '], undefined)).toBe(true)
     })
 })
 

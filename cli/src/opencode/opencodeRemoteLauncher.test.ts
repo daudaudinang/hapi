@@ -2,19 +2,32 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MessageQueue2 } from '@/utils/MessageQueue2';
 import type { OpencodeMode, PermissionMode } from './types';
 
-const harness = vi.hoisted(() => ({
+const harness = {
     setModelArgs: [] as Array<{ sessionId: string; modelId: string; flavor?: string }>,
     setConfigOptionArgs: [] as Array<{ sessionId: string; configId: string; value: string; flavor?: string }>,
     promptCount: 0,
     events: [] as string[],
-    setModelImpl: null as null | ((sessionId: string, modelId: string) => Promise<void>)
-}));
+    setModelImpl: null as null | ((sessionId: string, modelId: string) => Promise<void>),
+    onAvailableCommandsHandler: null as null | ((commands: Array<{ name: string; description?: string }>) => void),
+    onAvailableCommandsCalls: [] as unknown[],
+    availableCommandUpdates: [] as Array<Array<{ name: string; description?: string }>>
+};
 
 vi.mock('./utils/opencodeBackend', () => ({
     createOpencodeBackend: vi.fn(() => ({
         initialize: vi.fn(async () => {}),
-        newSession: vi.fn(async () => 'acp-session-1'),
-        loadSession: vi.fn(async () => 'acp-session-1'),
+        newSession: vi.fn(async () => {
+            for (const commands of harness.availableCommandUpdates) {
+                harness.onAvailableCommandsHandler?.(commands);
+            }
+            return 'acp-session-1';
+        }),
+        loadSession: vi.fn(async () => {
+            for (const commands of harness.availableCommandUpdates) {
+                harness.onAvailableCommandsHandler?.(commands);
+            }
+            return 'acp-session-1';
+        }),
         setModel: vi.fn(async (sessionId: string, modelId: string, opts?: { flavor?: string }) => {
             harness.events.push(`setModel:${modelId}`);
             harness.setModelArgs.push({ sessionId, modelId, flavor: opts?.flavor });
@@ -36,6 +49,10 @@ vi.mock('./utils/opencodeBackend', () => ({
         respondToPermission: vi.fn(async () => {}),
         onStderrError: vi.fn(),
         onPermissionRequest: vi.fn(),
+        onAvailableCommands: vi.fn((handler: ((commands: Array<{ name: string; description?: string }>) => void) | null) => {
+            harness.onAvailableCommandsCalls.push(handler);
+            harness.onAvailableCommandsHandler = handler;
+        }),
         disconnect: vi.fn(async () => {}),
         getSessionModelsMetadata: vi.fn(() => undefined)
     }))
@@ -96,12 +113,17 @@ function createSessionStub(items: Array<{ message: string; mode: OpencodeMode }>
 
     const sessionEvents: Array<{ type: string; [key: string]: unknown }> = [];
     const rpcHandlers = new Map<string, (params: unknown) => unknown>();
+    const metadataUpdates: Array<Record<string, unknown>> = [];
 
     const client = {
         rpcHandlerManager: {
             registerHandler(method: string, handler: (params: unknown) => unknown) {
                 rpcHandlers.set(method, handler);
             }
+        },
+        updateMetadata(handler: (metadata: Record<string, unknown>) => Record<string, unknown>) {
+            const next = handler(metadataUpdates.at(-1) ?? { path: session.path, host: 'test' });
+            metadataUpdates.push(next);
         },
         sendAgentMessage(_message: unknown) {},
         sendUserMessage(_text: string) {},
@@ -134,7 +156,7 @@ function createSessionStub(items: Array<{ message: string; mode: OpencodeMode }>
         sendUserMessage(_text: string) {}
     };
 
-    return { session, sessionEvents, rpcHandlers };
+    return { session, sessionEvents, rpcHandlers, metadataUpdates };
 }
 
 describe('opencodeRemoteLauncher inline model switch', () => {
@@ -144,6 +166,57 @@ describe('opencodeRemoteLauncher inline model switch', () => {
         harness.promptCount = 0;
         harness.events = [];
         harness.setModelImpl = null;
+        harness.onAvailableCommandsHandler = null;
+        harness.onAvailableCommandsCalls = [];
+        harness.availableCommandUpdates = [];
+    });
+
+    it('records available OpenCode commands in slash command metadata', async () => {
+        harness.availableCommandUpdates = [[
+            { name: 'gitnexus:detect_impact', description: 'Analyze impact' },
+            { name: 'md2html' }
+        ]];
+        const { session, metadataUpdates } = createSessionStub([
+            { message: 'hello', mode: createMode() }
+        ]);
+
+        await opencodeRemoteLauncher(session as never);
+
+        expect(metadataUpdates.at(-1)).toMatchObject({
+            slashCommands: [
+                'opencode:gitnexus:detect_impact',
+                'opencode:md2html'
+            ]
+        });
+    });
+
+    it('returns the current metadata object for duplicate OpenCode command updates', async () => {
+        const commands = [
+            { name: 'gitnexus:detect_impact', description: 'Analyze impact' },
+            { name: 'md2html' }
+        ];
+        harness.availableCommandUpdates = [commands, [...commands].reverse()];
+        const { session, metadataUpdates } = createSessionStub([
+            { message: 'hello', mode: createMode() }
+        ]);
+
+        await opencodeRemoteLauncher(session as never);
+
+        expect(metadataUpdates).toHaveLength(2);
+        expect(metadataUpdates[1]).toBe(metadataUpdates[0]);
+    });
+
+    it('clears the available command callback during cleanup', async () => {
+        const { session } = createSessionStub([
+            { message: 'hello', mode: createMode() }
+        ]);
+
+        await opencodeRemoteLauncher(session as never);
+
+        expect(harness.onAvailableCommandsCalls).toHaveLength(2);
+        expect(typeof harness.onAvailableCommandsCalls[0]).toBe('function');
+        expect(harness.onAvailableCommandsCalls[1]).toBeNull();
+        expect(harness.onAvailableCommandsHandler).toBeNull();
     });
 
     it('calls setModel with opencode flavor between turns when the queued model differs', async () => {

@@ -34,3 +34,14 @@ export function toProviderCommandName(provider: 'opencode' | 'gemini', commandNa
     const normalized = normalizeCapabilityName(commandName)
     return normalized === null ? null : `${provider}:${normalized}`
 }
+
+export function sameCapabilityNames(left?: readonly string[], right?: readonly string[]): boolean {
+    const normalizedLeft = mergeCapabilityNames(left, undefined)
+    const normalizedRight = mergeCapabilityNames(right, undefined)
+
+    if (normalizedLeft.length !== normalizedRight.length) {
+        return false
+    }
+
+    return normalizedLeft.every((name, index) => name === normalizedRight[index])
+}

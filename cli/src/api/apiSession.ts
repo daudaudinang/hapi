@@ -517,6 +517,9 @@ export class ApiSessionClient extends EventEmitter {
             await backoff(async () => {
                 const current = this.metadata ?? ({} as Metadata)
                 const updated = handler(current)
+                if (updated === current) {
+                    return
+                }
 
                 const answer = await this.socket.emitWithAck('update-metadata', {
                     sid: this.sessionId,
