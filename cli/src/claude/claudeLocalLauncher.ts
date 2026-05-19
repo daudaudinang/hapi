@@ -50,7 +50,6 @@ export async function claudeLocalLauncher(session: Session): Promise<'switch' | 
                 claudeEnvVars: session.claudeEnvVars,
                 claudeArgs: session.claudeArgs,
                 mcpServers: session.mcpServers,
-                allowedTools: session.allowedTools,
                 hookSettingsPath: session.hookSettingsPath,
             });
         },
