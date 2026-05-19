@@ -3,6 +3,7 @@ import { logger } from '@/ui/logger';
 import { buildHapiMcpBridge } from '@/codex/utils/buildHapiMcpBridge';
 import { convertAgentMessage } from '@/agent/messageConverter';
 import type { AgentMessage, McpServerStdio, PromptContent } from '@/agent/types';
+import { mergeCapabilityNames, sameCapabilityNames, toProviderCommandName } from '@/modules/common/capabilities';
 import { RemoteLauncherBase, type RemoteLauncherDisplayContext, type RemoteLauncherExitReason } from '@/modules/common/remote/RemoteLauncherBase';
 import { OpencodeDisplay } from '@/ui/ink/OpencodeDisplay';
 import type { OpencodeSession } from './session';
@@ -61,6 +62,23 @@ class OpencodeRemoteLauncher extends RemoteLauncherBase {
         });
 
         await backend.initialize();
+
+        backend.onAvailableCommands?.((commands) => {
+            const names = commands
+                .map((command) => toProviderCommandName('opencode', command.name))
+                .filter((name): name is string => Boolean(name));
+            if (names.length === 0) return;
+            session.client.updateMetadata((metadata) => {
+                const slashCommands = mergeCapabilityNames(metadata.slashCommands, names);
+                if (sameCapabilityNames(metadata.slashCommands, slashCommands)) {
+                    return metadata;
+                }
+                return {
+                    ...metadata,
+                    slashCommands
+                };
+            });
+        });
 
         const resumeSessionId = session.sessionId;
         const mcpServerList = toAcpMcpServers(mcpServers);
@@ -256,6 +274,7 @@ class OpencodeRemoteLauncher extends RemoteLauncherBase {
         }
 
         if (this.backend) {
+            this.backend.onAvailableCommands?.(null);
             await this.backend.disconnect();
             this.backend = null;
         }

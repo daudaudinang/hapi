@@ -74,7 +74,7 @@ describe('Query', () => {
             }
         }
 
-        const result = query({ prompt })
+        const result = query({ prompt, options: { pathToClaudeCodeExecutable: 'claude' } })
 
         await expect(result.next()).rejects.toThrow('prompt failed')
     })
@@ -93,8 +93,72 @@ describe('Query', () => {
             }
         }
 
-        const result = query({ prompt, options: { promptFailureCleanupTimeoutMs: 10 } })
+        const result = query({ prompt, options: { pathToClaudeCodeExecutable: 'claude', promptFailureCleanupTimeoutMs: 10 } })
 
         await expect(result.next()).rejects.toThrow('prompt failed')
+    })
+
+
+    it('does not pass --allowedTools when no restriction is requested', async () => {
+        const child = createFakeChild()
+        spawnMock.mockReturnValueOnce(child)
+        process.env.HAPI_CLAUDE_PATH = 'claude'
+
+        const { query } = await import('./query')
+        const result = query({
+            prompt: 'hello',
+            options: {
+                pathToClaudeCodeExecutable: 'claude',
+                allowedTools: []
+            }
+        })
+
+        child.stdout.write(JSON.stringify({
+            type: 'result',
+            subtype: 'success',
+            num_turns: 1,
+            total_cost_usd: 0,
+            duration_ms: 1,
+            duration_api_ms: 1,
+            is_error: false,
+            session_id: 's-1'
+        }) + '\n')
+        child.emit('close', 0)
+
+        await result.next()
+        const [, args] = spawnMock.mock.calls[0]
+        expect(args).not.toContain('--allowedTools')
+    })
+
+    it('passes --allowedTools when an explicit restriction is requested', async () => {
+        const child = createFakeChild()
+        spawnMock.mockReturnValueOnce(child)
+        process.env.HAPI_CLAUDE_PATH = 'claude'
+
+        const { query } = await import('./query')
+        const result = query({
+            prompt: 'hello',
+            options: {
+                pathToClaudeCodeExecutable: 'claude',
+                allowedTools: ['Read', 'mcp__github__get_issue']
+            }
+        })
+
+        child.stdout.write(JSON.stringify({
+            type: 'result',
+            subtype: 'success',
+            num_turns: 1,
+            total_cost_usd: 0,
+            duration_ms: 1,
+            duration_api_ms: 1,
+            is_error: false,
+            session_id: 's-1'
+        }) + '\n')
+        child.emit('close', 0)
+
+        await result.next()
+        const [, args] = spawnMock.mock.calls[0]
+        expect(args).toContain('--allowedTools')
+        expect(args).toContain('Read,mcp__github__get_issue')
     })
 })

@@ -284,4 +284,103 @@ describe('claudeRemote async message handling', () => {
             process.off('unhandledRejection', onUnhandled);
         }
     });
+
+    it('does not restrict Claude tools to HAPI baseline tools by default', async () => {
+        const querySpy = vi.spyOn(claudeSdk, 'query').mockImplementation(queryMock as typeof claudeSdk.query)
+        const { claudeRemote } = await import('./claudeRemote')
+
+        const sdkMessages: SDKMessage[] = [
+            {
+                type: 'result',
+                subtype: 'success',
+                num_turns: 1,
+                total_cost_usd: 0,
+                duration_ms: 1,
+                duration_api_ms: 1,
+                is_error: false,
+                session_id: 's-1'
+            } as unknown as SDKMessage
+        ]
+        queryMock.mockReturnValueOnce(createAsyncStream(sdkMessages))
+
+        try {
+            await claudeRemote({
+                sessionId: 'session-1',
+                path: process.cwd(),
+                mcpServers: {},
+                claudeEnvVars: {},
+                claudeArgs: [],
+                allowedTools: ['mcp__hapi_session__change_title'],
+                hookSettingsPath: '/tmp/hook.json',
+                canCallTool: async () => ({ behavior: 'allow', updatedInput: {} }),
+                nextMessage: async () => ({ message: 'A', mode: { permissionMode: 'default' } }),
+                onReady: () => {},
+                isAborted: () => false,
+                onSessionFound: () => {},
+                onMessage: () => {},
+                onCompletionEvent: () => {},
+                onSessionReset: () => {}
+            })
+
+            expect(queryMock).toHaveBeenCalledTimes(1)
+            const options = queryMock.mock.calls[0][0].options
+            expect(options.allowedTools).toBeUndefined()
+        } finally {
+            queryMock.mockReset()
+            querySpy.mockRestore()
+        }
+    })
+
+    it('preserves explicit user allowedTools restrictions and appends HAPI title tool', async () => {
+        const querySpy = vi.spyOn(claudeSdk, 'query').mockImplementation(queryMock as typeof claudeSdk.query)
+        const { claudeRemote } = await import('./claudeRemote')
+
+        const sdkMessages: SDKMessage[] = [
+            {
+                type: 'result',
+                subtype: 'success',
+                num_turns: 1,
+                total_cost_usd: 0,
+                duration_ms: 1,
+                duration_api_ms: 1,
+                is_error: false,
+                session_id: 's-1'
+            } as unknown as SDKMessage
+        ]
+        queryMock.mockReturnValueOnce(createAsyncStream(sdkMessages))
+
+        try {
+            await claudeRemote({
+                sessionId: 'session-1',
+                path: process.cwd(),
+                mcpServers: {},
+                claudeEnvVars: {},
+                claudeArgs: [],
+                allowedTools: ['mcp__hapi_session__change_title'],
+                hookSettingsPath: '/tmp/hook.json',
+                canCallTool: async () => ({ behavior: 'allow', updatedInput: {} }),
+                nextMessage: async () => ({
+                    message: 'A',
+                    mode: {
+                        permissionMode: 'default',
+                        allowedTools: ['Read']
+                    }
+                }),
+                onReady: () => {},
+                isAborted: () => false,
+                onSessionFound: () => {},
+                onMessage: () => {},
+                onCompletionEvent: () => {},
+                onSessionReset: () => {}
+            })
+
+            expect(queryMock).toHaveBeenCalledTimes(1)
+            const options = queryMock.mock.calls[0][0].options
+            expect(options.allowedTools).toEqual(['Read', 'mcp__hapi_session__change_title'])
+        } finally {
+            queryMock.mockReset()
+            querySpy.mockRestore()
+        }
+    })
+
 });

@@ -20,7 +20,7 @@ export async function claudeRemote(opts: {
     mcpServers?: Record<string, any>,
     claudeEnvVars?: Record<string, string>,
     claudeArgs?: string[],
-    allowedTools: string[],
+    allowedTools?: string[],
     hookSettingsPath: string,
     signal?: AbortSignal,
     canCallTool: (toolName: string, input: unknown, mode: EnhancedMode, options: { signal: AbortSignal }) => Promise<PermissionResult>,
@@ -132,7 +132,9 @@ export async function claudeRemote(opts: {
         fallbackModel: initial.mode.fallbackModel,
         customSystemPrompt: initial.mode.customSystemPrompt ? initial.mode.customSystemPrompt + '\n\n' + systemPrompt : undefined,
         appendSystemPrompt: initial.mode.appendSystemPrompt ? initial.mode.appendSystemPrompt + '\n\n' + systemPrompt : systemPrompt,
-        allowedTools: initial.mode.allowedTools ? initial.mode.allowedTools.concat(opts.allowedTools) : opts.allowedTools,
+        allowedTools: initial.mode.allowedTools
+            ? initial.mode.allowedTools.concat(opts.allowedTools ?? [])
+            : undefined,
         disallowedTools: initial.mode.disallowedTools,
         canCallTool: (toolName: string, input: unknown, options: { signal: AbortSignal }) => opts.canCallTool(toolName, input, mode, options),
         abort: opts.signal,

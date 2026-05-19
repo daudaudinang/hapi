@@ -1,5 +1,35 @@
-import { describe, expect, it } from 'vitest'
-import { isExternalUserMessage } from './apiSession'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+var ioMock = vi.fn()
+
+vi.mock('socket.io-client', () => ({
+    io: (...args: unknown[]) => ioMock(...args)
+}))
+
+vi.mock('@/api/rpc/RpcHandlerManager', () => ({
+    RpcHandlerManager: class {
+        onSocketConnect(): void { }
+        onSocketDisconnect(): void { }
+        registerHandler(): void { }
+        handleRequest(): Promise<string> {
+            return Promise.resolve('{}')
+        }
+    }
+}))
+
+vi.mock('../modules/common/registerCommonHandlers', () => ({
+    registerCommonHandlers: () => { }
+}))
+
+vi.mock('@/terminal/TerminalManager', () => ({
+    TerminalManager: class {
+        closeAll(): void { }
+    }
+}))
+
+import { ApiSessionClient, isExternalUserMessage } from './apiSession'
+import type { Metadata, Session } from './types'
+
 
 describe('isExternalUserMessage', () => {
     const baseUserMsg = {
@@ -94,5 +124,68 @@ describe('isExternalUserMessage', () => {
                 message: { role: 'user', content: '  \n<task-notification>\n<task-id>x</task-id>\n</task-notification>' },
             })
         ).toBe(false)
+    })
+})
+
+
+describe('ApiSessionClient.updateMetadata', () => {
+    const now = 1_710_000_000_000
+
+    beforeEach(() => {
+        ioMock.mockReset()
+    })
+
+    function makeSocket() {
+        return {
+            on: vi.fn(),
+            off: vi.fn(),
+            connect: vi.fn(),
+            emit: vi.fn(),
+            emitWithAck: vi.fn(async () => ({ result: 'success', version: 2, metadata: { path: '/tmp/project', host: 'test-host' } })),
+            volatile: { emit: vi.fn() }
+        }
+    }
+
+    function makeSession(metadata: Metadata): Session {
+        return {
+            id: 'session-1',
+            namespace: 'default',
+            seq: 1,
+            createdAt: now,
+            updatedAt: now,
+            active: true,
+            activeAt: now,
+            metadata,
+            metadataVersion: 1,
+            agentState: null,
+            agentStateVersion: 0,
+            thinking: false,
+            thinkingAt: now,
+            todos: [],
+            model: null,
+            modelReasoningEffort: null,
+            effort: null,
+            permissionMode: undefined,
+            collaborationMode: undefined
+        }
+    }
+
+    it('does not emit when handler returns the current metadata object', async () => {
+        const fakeSocket = makeSocket()
+        ioMock.mockReturnValue(fakeSocket)
+        const current: Metadata = { path: '/tmp/project', host: 'test-host' }
+        const client = new ApiSessionClient('cli-token', makeSession(current))
+
+        await new Promise<void>((resolve) => {
+            client.updateMetadata((metadata) => {
+                expect(metadata).toBe(current)
+                resolve()
+                return metadata
+            })
+        })
+
+        await Promise.resolve()
+
+        expect(fakeSocket.emitWithAck).not.toHaveBeenCalled()
     })
 })
