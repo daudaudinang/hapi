@@ -63,6 +63,8 @@ export type AgentSessionModelDescriptor = {
     name?: string;
 };
 
+export type AgentAvailableCommand = { name: string; description?: string };
+
 export type AgentSessionModelsMetadata = {
     availableModels: AgentSessionModelDescriptor[];
     currentModelId: string | null;
@@ -80,6 +82,7 @@ export interface AgentBackend {
     cancelPrompt(sessionId: string): Promise<void>;
     respondToPermission(sessionId: string, request: PermissionRequest, response: PermissionResponse): Promise<void>;
     onPermissionRequest(handler: (request: PermissionRequest) => void): void;
+    onAvailableCommands?(handler: ((commands: AgentAvailableCommand[]) => void) | null): void;
     disconnect(): Promise<void>;
 }
 

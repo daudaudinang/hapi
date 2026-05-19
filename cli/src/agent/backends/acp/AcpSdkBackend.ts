@@ -1,5 +1,5 @@
 import type { AgentFlavor } from '@hapi/protocol';
-import type { AgentBackend, AgentMessage, AgentSessionConfig, PermissionRequest, PermissionResponse, PromptContent } from '@/agent/types';
+import type { AgentAvailableCommand, AgentBackend, AgentMessage, AgentSessionConfig, PermissionRequest, PermissionResponse, PromptContent } from '@/agent/types';
 import { asString, isObject } from '@hapi/protocol';
 import { AcpStdioTransport, type AcpStderrError } from './AcpStdioTransport';
 import { AcpMessageHandler } from './AcpMessageHandler';
@@ -15,6 +15,8 @@ export type AcpModelDescriptor = {
     modelId: string;
     name?: string;
 };
+
+export type AcpAvailableCommand = AgentAvailableCommand;
 
 export type AcpEffortDescriptor = {
     effortId: string;
@@ -32,6 +34,7 @@ export class AcpSdkBackend implements AgentBackend {
     private transport: AcpStdioTransport | null = null;
     private permissionHandler: ((request: PermissionRequest) => void) | null = null;
     private stderrErrorHandler: ((error: AcpStderrError) => void) | null = null;
+    private availableCommandsHandler: ((commands: AcpAvailableCommand[]) => void) | null = null;
     private readonly pendingPermissions = new Map<string, PendingPermission>();
     private readonly sessionModelsMetadata = new Map<string, AcpSessionModelsMetadata>();
     private messageHandler: AcpMessageHandler | null = null;
@@ -318,6 +321,10 @@ export class AcpSdkBackend implements AgentBackend {
         this.stderrErrorHandler = handler;
     }
 
+    onAvailableCommands(handler: ((commands: AcpAvailableCommand[]) => void) | null): void {
+        this.availableCommandsHandler = handler;
+    }
+
     /**
      * Returns true if currently processing a message (prompt in progress).
      * Useful for checking if it's safe to perform session operations.
@@ -366,7 +373,27 @@ export class AcpSdkBackend implements AgentBackend {
         }
         this.lastSessionUpdateAt = Date.now();
         const update = params.update;
+        this.emitAvailableCommands(update);
         this.messageHandler?.handleUpdate(update);
+    }
+
+    private emitAvailableCommands(update: unknown): void {
+        if (!isObject(update)) return;
+        if (update.sessionUpdate !== 'available_commands_update') return;
+        if (!Array.isArray(update.availableCommands)) return;
+
+        const commands: AcpAvailableCommand[] = [];
+        for (const entry of update.availableCommands) {
+            if (!isObject(entry)) continue;
+            const name = asString(entry.name);
+            if (!name) continue;
+            const description = asString(entry.description) ?? undefined;
+            commands.push(description ? { name, description } : { name });
+        }
+
+        if (commands.length > 0) {
+            this.availableCommandsHandler?.(commands);
+        }
     }
 
     private async waitForSessionUpdateQuiet(quietMs: number, timeoutMs: number): Promise<void> {

@@ -317,6 +317,41 @@ describe('AcpSdkBackend', () => {
         });
     });
 
+
+    it('emits available commands and skips invalid entries from session updates', () => {
+        const backend = new AcpSdkBackend({ command: 'opencode' });
+        const received: unknown[] = [];
+        backend.onAvailableCommands((commands) => {
+            received.push(commands);
+        });
+
+        const backendInternal = backend as unknown as {
+            handleSessionUpdate: (params: unknown) => void;
+        };
+
+        backendInternal.handleSessionUpdate({
+            sessionId: 'session-1',
+            update: {
+                sessionUpdate: 'available_commands_update',
+                availableCommands: [
+                    { name: 'gitnexus:issue', description: 'Create or inspect GitNexus issues' },
+                    { name: '' },
+                    { description: 'missing name' },
+                    null,
+                    'not-object',
+                    { name: 'md2html', description: 'Convert Markdown to HTML' }
+                ]
+            }
+        });
+
+        expect(received).toEqual([
+            [
+                { name: 'gitnexus:issue', description: 'Create or inspect GitNexus issues' },
+                { name: 'md2html', description: 'Convert Markdown to HTML' }
+            ]
+        ]);
+    });
+
     it('emits turn_complete after trailing tool updates from the same turn', async () => {
         backendStatics.UPDATE_QUIET_PERIOD_MS = 8;
         backendStatics.UPDATE_DRAIN_TIMEOUT_MS = 200;
