@@ -153,6 +153,22 @@ describe('sessions routes', () => {
         ])
     })
 
+    it('applies collaboration mode changes for inactive remote Codex sessions', async () => {
+        const { app, applySessionConfigCalls } = createApp(createSession({ active: false }))
+
+        const response = await app.request('/api/sessions/session-1/collaboration-mode', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ mode: 'plan' })
+        })
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toEqual({ ok: true })
+        expect(applySessionConfigCalls).toEqual([
+            ['session-1', { collaborationMode: 'plan' }]
+        ])
+    })
+
     it('rejects model reasoning effort changes for flavors without model reasoning support', async () => {
         const session = createSession({
             metadata: {
@@ -238,8 +254,40 @@ describe('sessions routes', () => {
         ])
     })
 
+    it('applies model reasoning effort changes for inactive remote Codex sessions', async () => {
+        const { app, applySessionConfigCalls } = createApp(createSession({ active: false }))
+
+        const response = await app.request('/api/sessions/session-1/model-reasoning-effort', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ modelReasoningEffort: 'xhigh' })
+        })
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toEqual({ ok: true })
+        expect(applySessionConfigCalls).toEqual([
+            ['session-1', { modelReasoningEffort: 'xhigh' }]
+        ])
+    })
+
     it('applies model changes for remote Codex sessions', async () => {
         const { app, applySessionConfigCalls } = createApp(createSession())
+
+        const response = await app.request('/api/sessions/session-1/model', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ model: 'gpt-5.5' })
+        })
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toEqual({ ok: true })
+        expect(applySessionConfigCalls).toEqual([
+            ['session-1', { model: 'gpt-5.5' }]
+        ])
+    })
+
+    it('applies model changes for inactive remote Codex sessions', async () => {
+        const { app, applySessionConfigCalls } = createApp(createSession({ active: false }))
 
         const response = await app.request('/api/sessions/session-1/model', {
             method: 'POST',

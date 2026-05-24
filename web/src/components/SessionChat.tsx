@@ -131,6 +131,7 @@ export function SessionChat(props: {
             label: effort.name ?? effort.effortId
         }))
     }, [agentFlavor, opencodeModelsState.availableEfforts])
+    const codexModelsError = props.session.active ? codexModelsState.error : null
     const {
         abortSession,
         switchSession,
@@ -513,11 +514,11 @@ export function SessionChat(props: {
                         onOutlineOpenChange={setOutlineOpen}
                     />
 
-                    {codexCollaborationModeSupported && codexModelsState.error && !codexErrorDismissed ? (
+                    {codexCollaborationModeSupported && codexModelsError && !codexErrorDismissed ? (
                         <div className="px-3 pb-2">
                             <div className="mx-auto w-full max-w-full rounded-md bg-[var(--app-subtle-bg)] p-3 text-sm text-red-500 flex items-center justify-between gap-3">
                                 <span className="flex-1 min-w-0">
-                                    {t('session.codexModelsLoadFailed')}: {codexModelsState.error}
+                                    {t('session.codexModelsLoadFailed')}: {codexModelsError}
                                 </span>
                                 <button
                                     type="button"
@@ -566,18 +567,18 @@ export function SessionChat(props: {
                         contextWindow={reduced.latestUsage?.contextWindow}
                         controlledByUser={controlledByUser}
                         onCollaborationModeChange={
-                            codexCollaborationModeSupported && props.session.active && !controlledByUser
+                            codexCollaborationModeSupported && !controlledByUser
                                 ? handleCollaborationModeChange
                                 : undefined
                         }
                         onPermissionModeChange={handlePermissionModeChange}
                         onModelChange={
                             agentFlavor === 'codex'
-                                ? (props.session.active && !controlledByUser && !codexModelsState.error ? handleModelChange : undefined)
+                                ? (!controlledByUser && !codexModelsError ? handleModelChange : undefined)
                                 : handleModelChange
                         }
                         onModelReasoningEffortChange={
-                            (agentFlavor === 'codex' || agentFlavor === 'opencode') && props.session.active && !controlledByUser
+                            (agentFlavor === 'codex' || agentFlavor === 'opencode') && !controlledByUser
                                 ? handleModelReasoningEffortChange
                                 : undefined
                         }

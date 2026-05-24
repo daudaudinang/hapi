@@ -53,6 +53,13 @@ describe('getModelOptionsForFlavor', () => {
         expect(options).toEqual([])
     })
 
+    it('returns the current opencode model before models are discovered (no claude fallback)', () => {
+        const options = getModelOptionsForFlavor('opencode', 'ollama/exaone:4.5-33b-q8')
+        expect(options).toEqual([
+            { value: 'ollama/exaone:4.5-33b-q8', label: 'ollama/exaone:4.5-33b-q8' }
+        ])
+    })
+
     it('includes the current opencode model when it is missing from explicit options', () => {
         const options = getModelOptionsForFlavor('opencode', 'ollama/legacy', [
             { value: 'ollama/exaone:4.5-33b-q8', label: 'Ollama EXAONE' }

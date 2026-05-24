@@ -60,7 +60,7 @@ export function getModelOptionsForFlavor(
     // those options arrive, render an empty list rather than the Claude fallback —
     // the latter would surface unrelated Claude models in an OpenCode session.
     if (flavor === 'opencode') {
-        return []
+        return withCurrentModelOption([], currentModel)
     }
     return getClaudeComposerModelOptions(currentModel)
 }
