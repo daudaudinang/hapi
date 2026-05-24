@@ -1025,7 +1025,7 @@ describe('crash recovery flow', () => {
 
         const updateEvents = events.filter(e => e.type === 'session-updated' && e.sessionId === session.id)
         const lastUpdate = updateEvents[updateEvents.length - 1]
-        expect(lastUpdate?.data).toMatchObject({ active: false, thinking: false })
+        expect((lastUpdate as any)?.data).toMatchObject({ active: false, thinking: false })
     })
 
     it('is a no-op when session is already inactive', () => {
@@ -1095,9 +1095,11 @@ describe('crash recovery flow', () => {
         cache.markThreadCrashed(session.id)
         expect(cache.getSession(session.id)?.active).toBe(false)
 
-        // After end: session is inactive, blocked from auto-resume
+        // After end: session is inactive. At SyncEngine level,
+        // handleSessionEnd would set sessionEndReasons='terminated' → blocks auto-resume.
+        // At SessionCache level, both paths just set active=false.
         cache.handleSessionAlive({ sid: session.id, time: Date.now() })
-        cache.handleSessionEnd({ sid: session.id, time: Date.now(), reason: 'terminated' })
+        cache.handleSessionEnd({ sid: session.id, time: Date.now() })
         expect(cache.getSession(session.id)?.active).toBe(false)
     })
 })
