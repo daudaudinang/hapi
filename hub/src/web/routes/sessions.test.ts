@@ -71,12 +71,22 @@ function createApp(session: Session, opts?: {
         ],
         currentModelId: 'ollama/exaone:4.5-33b-q8'
     })
+    const cacheCodexModelsForSessionCalls: Array<[string, unknown]> = []
+    const cacheOpencodeModelsForSessionCalls: Array<[string, unknown]> = []
+    const cacheCodexModelsForSession = (sessionId: string, result: unknown) => {
+        cacheCodexModelsForSessionCalls.push([sessionId, result])
+    }
+    const cacheOpencodeModelsForSession = (sessionId: string, result: unknown) => {
+        cacheOpencodeModelsForSessionCalls.push([sessionId, result])
+    }
     const resumeSession = opts?.resumeSession ?? (async (sessionId: string) => ({ type: 'success', sessionId }))
     const engine = {
         resolveSessionAccess: () => ({ ok: true, sessionId: session.id, session }),
         applySessionConfig,
         listCodexModelsForSession,
         listOpencodeModelsForSession,
+        cacheCodexModelsForSession,
+        cacheOpencodeModelsForSession,
         resumeSession
     } as Partial<SyncEngine>
 
@@ -87,7 +97,7 @@ function createApp(session: Session, opts?: {
     })
     app.route('/api', createSessionsRoutes(() => engine as SyncEngine))
 
-    return { app, applySessionConfigCalls }
+    return { app, applySessionConfigCalls, cacheCodexModelsForSessionCalls, cacheOpencodeModelsForSessionCalls }
 }
 
 describe('sessions routes', () => {
@@ -429,8 +439,40 @@ describe('sessions routes', () => {
         ])
     })
 
-    it('returns Codex models for active Codex sessions', async () => {
-        const { app } = createApp(createSession())
+    it('returns Codex models for active Codex sessions and caches them', async () => {
+        const { app, cacheCodexModelsForSessionCalls } = createApp(createSession())
+
+        const response = await app.request('/api/sessions/session-1/codex-models')
+
+        const expected = {
+            success: true,
+            models: [
+                { id: 'gpt-5.5', displayName: 'GPT-5.5', isDefault: true }
+            ]
+        }
+        expect(response.status).toBe(200)
+        expect(await response.json()).toEqual(expected)
+        expect(cacheCodexModelsForSessionCalls).toEqual([
+            ['session-1', expected]
+        ])
+    })
+
+    it('returns cached Codex models for inactive Codex sessions', async () => {
+        const session = createSession({
+            active: false,
+            metadata: {
+                path: '/tmp/project',
+                host: 'localhost',
+                flavor: 'codex',
+                cachedCodexModels: {
+                    cachedAt: 123,
+                    models: [
+                        { id: 'provider-model', displayName: 'Provider Model', isDefault: false }
+                    ]
+                }
+            }
+        })
+        const { app, cacheCodexModelsForSessionCalls } = createApp(session)
 
         const response = await app.request('/api/sessions/session-1/codex-models')
 
@@ -438,13 +480,89 @@ describe('sessions routes', () => {
         expect(await response.json()).toEqual({
             success: true,
             models: [
-                { id: 'gpt-5.5', displayName: 'GPT-5.5', isDefault: true }
+                { id: 'provider-model', displayName: 'Provider Model', isDefault: false }
             ]
+        })
+        expect(cacheCodexModelsForSessionCalls).toEqual([])
+    })
+
+    it('returns a cache miss for inactive Codex sessions without cached models', async () => {
+        const { app } = createApp(createSession({ active: false }))
+
+        const response = await app.request('/api/sessions/session-1/codex-models')
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toEqual({
+            success: false,
+            error: 'No cached Codex models available for this session'
         })
     })
 
-    it('returns OpenCode models for active OpenCode sessions', async () => {
+    it('returns OpenCode models for active OpenCode sessions and caches them', async () => {
         const session = createSession({
+            metadata: { path: '/tmp/project', host: 'localhost', flavor: 'opencode' }
+        })
+        const { app, cacheOpencodeModelsForSessionCalls } = createApp(session)
+
+        const response = await app.request('/api/sessions/session-1/opencode-models')
+
+        const expected = {
+            success: true,
+            availableModels: [
+                { modelId: 'ollama/exaone:4.5-33b-q8', name: 'Ollama (SER8)/EXAONE 4.5 33B Q8' },
+                { modelId: 'mlx/qwen3:0.6b', name: 'MLX/Qwen3 0.6B' }
+            ],
+            currentModelId: 'ollama/exaone:4.5-33b-q8'
+        }
+        expect(response.status).toBe(200)
+        expect(await response.json()).toEqual(expected)
+        expect(cacheOpencodeModelsForSessionCalls).toEqual([
+            ['session-1', expected]
+        ])
+    })
+
+    it('returns cached OpenCode models for inactive OpenCode sessions', async () => {
+        const session = createSession({
+            active: false,
+            metadata: {
+                path: '/tmp/project',
+                host: 'localhost',
+                flavor: 'opencode',
+                cachedOpencodeModels: {
+                    cachedAt: 123,
+                    availableModels: [
+                        { modelId: 'provider/opencode-model', name: 'Provider OpenCode Model' }
+                    ],
+                    currentModelId: 'provider/opencode-model',
+                    availableEfforts: [
+                        { effortId: 'high', name: 'High' }
+                    ],
+                    currentEffortId: 'high'
+                }
+            }
+        })
+        const { app, cacheOpencodeModelsForSessionCalls } = createApp(session)
+
+        const response = await app.request('/api/sessions/session-1/opencode-models')
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toEqual({
+            success: true,
+            availableModels: [
+                { modelId: 'provider/opencode-model', name: 'Provider OpenCode Model' }
+            ],
+            currentModelId: 'provider/opencode-model',
+            availableEfforts: [
+                { effortId: 'high', name: 'High' }
+            ],
+            currentEffortId: 'high'
+        })
+        expect(cacheOpencodeModelsForSessionCalls).toEqual([])
+    })
+
+    it('returns a cache miss for inactive OpenCode sessions without cached models', async () => {
+        const session = createSession({
+            active: false,
             metadata: { path: '/tmp/project', host: 'localhost', flavor: 'opencode' }
         })
         const { app } = createApp(session)
@@ -453,12 +571,8 @@ describe('sessions routes', () => {
 
         expect(response.status).toBe(200)
         expect(await response.json()).toEqual({
-            success: true,
-            availableModels: [
-                { modelId: 'ollama/exaone:4.5-33b-q8', name: 'Ollama (SER8)/EXAONE 4.5 33B Q8' },
-                { modelId: 'mlx/qwen3:0.6b', name: 'MLX/Qwen3 0.6B' }
-            ],
-            currentModelId: 'ollama/exaone:4.5-33b-q8'
+            success: false,
+            error: 'No cached OpenCode models available for this session'
         })
     })
 

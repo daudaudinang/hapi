@@ -9,6 +9,32 @@ const MetadataSummarySchema = z.object({
     updatedAt: z.number()
 })
 
+
+const CachedCodexModelsSchema = z.object({
+    models: z.array(z.object({
+        id: z.string(),
+        displayName: z.string(),
+        isDefault: z.boolean(),
+        defaultReasoningEffort: z.string().nullable().optional(),
+        supportedReasoningEfforts: z.array(z.string()).optional()
+    })),
+    cachedAt: z.number()
+})
+
+const CachedOpencodeModelsSchema = z.object({
+    availableModels: z.array(z.object({
+        modelId: z.string(),
+        name: z.string().optional()
+    })),
+    currentModelId: z.string().nullable().optional(),
+    availableEfforts: z.array(z.object({
+        effortId: z.string(),
+        name: z.string().optional()
+    })).optional(),
+    currentEffortId: z.string().nullable().optional(),
+    cachedAt: z.number()
+})
+
 export const WorktreeMetadataSchema = z.object({
     basePath: z.string(),
     branch: z.string(),
@@ -47,7 +73,9 @@ export const MetadataSchema = z.object({
     archiveReason: z.string().optional(),
     flavor: z.string().nullish(),
     worktree: WorktreeMetadataSchema.optional(),
-    lastUserRequest: z.string().optional()
+    lastUserRequest: z.string().optional(),
+    cachedCodexModels: CachedCodexModelsSchema.optional(),
+    cachedOpencodeModels: CachedOpencodeModelsSchema.optional()
 })
 
 export type Metadata = z.infer<typeof MetadataSchema>

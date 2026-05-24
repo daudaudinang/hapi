@@ -453,6 +453,26 @@ export class SessionCache {
         this.publisher.emit({ type: 'session-updated', sessionId, data: session })
     }
 
+    cacheSessionMetadata(sessionId: string, metadataPatch: Record<string, unknown>): void {
+        const session = this.sessions.get(sessionId)
+        if (!session) return
+
+        const currentMetadata = session.metadata ?? { path: '', host: '' }
+        const newMetadata = { ...currentMetadata, ...metadataPatch }
+
+        const result = this.store.sessions.updateSessionMetadata(
+            sessionId,
+            newMetadata,
+            session.metadataVersion,
+            session.namespace,
+            { touchUpdatedAt: false }
+        )
+
+        if (result.result === 'success') {
+            this.refreshSession(sessionId)
+        }
+    }
+
     async renameSession(sessionId: string, name: string): Promise<void> {
         const session = this.sessions.get(sessionId)
         if (!session) {

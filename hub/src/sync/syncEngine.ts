@@ -794,6 +794,16 @@ export class SyncEngine {
         return await this.rpcGateway.listCodexModelsForSession(sessionId)
     }
 
+    cacheCodexModelsForSession(sessionId: string, result: RpcListCodexModelsResponse): void {
+        if (!result.success || !result.models) return
+        this.sessionCache.cacheSessionMetadata(sessionId, {
+            cachedCodexModels: {
+                models: result.models,
+                cachedAt: Date.now()
+            }
+        })
+    }
+
     async listCodexModelsForMachine(machineId: string): Promise<RpcListCodexModelsResponse> {
         return await this.rpcGateway.listCodexModelsForMachine(machineId)
     }
@@ -862,6 +872,19 @@ export class SyncEngine {
 
     async listOpencodeModelsForSession(sessionId: string): Promise<RpcListOpencodeModelsResponse> {
         return await this.rpcGateway.listOpencodeModelsForSession(sessionId)
+    }
+
+    cacheOpencodeModelsForSession(sessionId: string, result: RpcListOpencodeModelsResponse): void {
+        if (!result.success || !result.availableModels) return
+        this.sessionCache.cacheSessionMetadata(sessionId, {
+            cachedOpencodeModels: {
+                availableModels: result.availableModels,
+                currentModelId: result.currentModelId ?? null,
+                availableEfforts: result.availableEfforts ?? [],
+                currentEffortId: result.currentEffortId ?? null,
+                cachedAt: Date.now()
+            }
+        })
     }
 
     async listOpencodeModelsForCwd(machineId: string, cwd: string): Promise<RpcListOpencodeModelsResponse> {

@@ -89,7 +89,7 @@ export function SessionChat(props: {
     const codexModelsState = useCodexModels({
         api: props.api,
         sessionId: props.session.id,
-        enabled: agentFlavor === 'codex' && props.session.active && !controlledByUser
+        enabled: agentFlavor === 'codex' && !controlledByUser
     })
     const [codexErrorDismissed, setCodexErrorDismissed] = useState(false)
     const codexModelOptions = useMemo(() => {
@@ -109,7 +109,7 @@ export function SessionChat(props: {
     const opencodeModelsState = useOpencodeModels({
         api: props.api,
         sessionId: props.session.id,
-        enabled: agentFlavor === 'opencode' && props.session.active
+        enabled: agentFlavor === 'opencode'
     })
     const opencodeModelOptions = useMemo(() => {
         if (agentFlavor !== 'opencode') {

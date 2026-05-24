@@ -584,7 +584,7 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine, { requireActive: true })
+        const sessionResult = requireSessionFromParam(c, engine)
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -597,8 +597,17 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
             }, 400)
         }
 
+        if (!sessionResult.session.active) {
+            const cached = sessionResult.session.metadata?.cachedCodexModels
+            if (!cached) {
+                return c.json({ success: false, error: 'No cached Codex models available for this session' })
+            }
+            return c.json({ success: true, models: cached.models })
+        }
+
         try {
             const result = await engine.listCodexModelsForSession(sessionResult.sessionId)
+            engine.cacheCodexModelsForSession?.(sessionResult.sessionId, result)
             return c.json(result)
         } catch (error) {
             return c.json({
@@ -614,7 +623,7 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine, { requireActive: true })
+        const sessionResult = requireSessionFromParam(c, engine)
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -627,8 +636,23 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
             }, 400)
         }
 
+        if (!sessionResult.session.active) {
+            const cached = sessionResult.session.metadata?.cachedOpencodeModels
+            if (!cached) {
+                return c.json({ success: false, error: 'No cached OpenCode models available for this session' })
+            }
+            return c.json({
+                success: true,
+                availableModels: cached.availableModels,
+                currentModelId: cached.currentModelId ?? null,
+                availableEfforts: cached.availableEfforts ?? [],
+                currentEffortId: cached.currentEffortId ?? null
+            })
+        }
+
         try {
             const result = await engine.listOpencodeModelsForSession(sessionResult.sessionId)
+            engine.cacheOpencodeModelsForSession?.(sessionResult.sessionId, result)
             return c.json(result)
         } catch (error) {
             return c.json({
