@@ -37,6 +37,18 @@ describe('getModelOptionsForFlavor', () => {
         ])
     })
 
+    it('does not fall back to Claude models for Codex before provider models are discovered', () => {
+        const options = getModelOptionsForFlavor('codex', null)
+        expect(options).toEqual([])
+    })
+
+    it('returns the current Codex model before provider models are discovered', () => {
+        const options = getModelOptionsForFlavor('codex', 'gpt-5.5')
+        expect(options).toEqual([
+            { value: 'gpt-5.5', label: 'gpt-5.5' }
+        ])
+    })
+
     it('returns only the supplied custom options for opencode flavor (no claude fallback)', () => {
         const options = getModelOptionsForFlavor('opencode', null, [
             { value: 'ollama/exaone:4.5-33b-q8', label: 'Ollama (SER8)/EXAONE 4.5 33B Q8' },
@@ -95,6 +107,11 @@ describe('getNextModelForFlavor', () => {
             { value: 'gpt-5.5', label: 'GPT-5.5' },
             { value: 'gpt-5.4', label: 'GPT-5.4' }
         ])
+        expect(next).toBe('gpt-5.5')
+    })
+
+    it('keeps the current Codex model when provider models have not loaded', () => {
+        const next = getNextModelForFlavor('codex', 'gpt-5.5')
         expect(next).toBe('gpt-5.5')
     })
 

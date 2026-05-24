@@ -56,10 +56,10 @@ export function getModelOptionsForFlavor(
     if (flavor === 'gemini') {
         return getGeminiModelOptions(currentModel)
     }
-    // OpenCode discovers models dynamically via the listOpencodeModels RPC. Until
-    // those options arrive, render an empty list rather than the Claude fallback —
-    // the latter would surface unrelated Claude models in an OpenCode session.
-    if (flavor === 'opencode') {
+    // Codex/OpenCode discover models dynamically via RPC. Until those options
+    // arrive, avoid falling through to Claude presets; show only the current
+    // persisted model when one exists.
+    if (flavor === 'codex' || flavor === 'opencode') {
         return withCurrentModelOption([], currentModel)
     }
     return getClaudeComposerModelOptions(currentModel)
@@ -81,12 +81,11 @@ export function getNextModelForFlavor(
     if (flavor === 'gemini') {
         return getNextGeminiModel(currentModel)
     }
-    // OpenCode discovers models dynamically via the listOpencodeModels RPC. Until
-    // those options arrive, pressing the Ctrl/Cmd+M shortcut must not fall through
-    // to the Claude preset cycler — that would post `sonnet`/`opus` into an
-    // OpenCode session and the next turn would attempt `session/set_model` with a
-    // Claude id. Keep the current model unchanged instead.
-    if (flavor === 'opencode') {
+    // Codex/OpenCode discover models dynamically via RPC. Until those options
+    // arrive, pressing Ctrl/Cmd+M must not fall through to the Claude preset
+    // cycler — that would post a Claude model into a non-Claude session. Keep the
+    // current model unchanged instead.
+    if (flavor === 'codex' || flavor === 'opencode') {
         return normalizeCurrentModel(currentModel)
     }
     return getNextClaudeComposerModel(currentModel)
