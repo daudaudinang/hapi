@@ -262,6 +262,12 @@ export class AcpSdkBackend implements AgentBackend {
 
             stopReason = isObject(response) ? asString(response.stopReason) : null;
         } finally {
+            // Start the post-response drain window when the prompt response returns,
+            // not at the last update timestamp. Under load, the response itself may
+            // be delayed long enough that trailing tool updates are scheduled after
+            // an older text update; without resetting here, the quiet-period check
+            // can return immediately and emit turn_complete before those updates.
+            this.lastSessionUpdateAt = Date.now();
             await this.waitForSessionUpdateQuiet(
                 AcpSdkBackend.UPDATE_QUIET_PERIOD_MS,
                 AcpSdkBackend.UPDATE_DRAIN_TIMEOUT_MS
