@@ -65,6 +65,21 @@ export type ResumeSessionResult =
 
 const MAX_AUTO_RESUME_ATTEMPTS = 3
 
+/**
+ * Detect upstream LLM API errors that indicate corrupted thread history
+ * (e.g. tool_use block with non-dict input). These errors persist on resume
+ * because the provider rejects the same bad payload every time. The fix is
+ * to discard the stale thread id and start fresh.
+ *
+ * Strict matching: requires BOTH "invalid_request_error" AND a tool_use/dict
+ * marker to avoid false positives from unrelated 4xx errors.
+ */
+function isUpstreamApiCorruptionError(error: string): boolean {
+    const hasInvalidRequest = /invalid_request_error/i.test(error)
+    const hasToolUseMarker = /tool_use\.input|tool_use_id|Input should be a valid dictionary|valid dictionary/i.test(error)
+    return hasInvalidRequest && hasToolUseMarker
+}
+
 export class SyncEngine {
     private readonly eventPublisher: EventPublisher
     private readonly sessionCache: SessionCache
@@ -278,9 +293,38 @@ export class SyncEngine {
      * so auto-resume can still trigger.
      * NOT calling triggerDedupIfNeeded — dedup happens naturally when
      * the new CLI (from auto-resume) sends handleSessionAlive.
+     *
+     * If `error` indicates upstream API corruption (e.g. tool_use.input
+     * invalid → 400 from LLM provider), clear the stale `codexSessionId`
+     * so auto-resume starts a fresh thread instead of resuming the
+     * broken one. Then trigger auto-resume immediately.
      */
-    handleSessionCrashed(sessionId: string): void {
+    handleSessionCrashed(sessionId: string, error?: string): void {
         this.sessionCache.markThreadCrashed(sessionId)
+
+        if (!error) return
+        if (!isUpstreamApiCorruptionError(error)) return
+
+        const stored = this.sessionCache.getSession(sessionId)
+        if (!stored) return
+
+        const flavor = (stored.metadata as { flavor?: string } | null)?.flavor
+        if (flavor !== 'codex' && flavor !== 'opencode') return
+
+        const metadataPatch: Record<string, unknown> = {}
+        if (flavor === 'codex') metadataPatch.codexSessionId = null
+        if (flavor === 'opencode') metadataPatch.opencodeSessionId = null
+
+        console.warn(
+            `[sync] Clearing ${flavor}SessionId for ${sessionId} due to upstream API corruption; ` +
+            `triggering auto-resume. error=${error.slice(0, 200)}`
+        )
+        this.sessionCache.cacheSessionMetadata(sessionId, metadataPatch)
+
+        // Fire-and-forget: namespace lookup via stored session
+        this.triggerAutoResume(sessionId, stored.namespace).catch(() => {
+            // Errors logged inside triggerAutoResume
+        })
     }
 
     handleBackgroundTaskDelta(sessionId: string, delta: { started: number; completed: number }): void {

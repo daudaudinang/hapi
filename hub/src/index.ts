@@ -191,7 +191,7 @@ async function main() {
         onMachineAlive: (payload) => syncEngine?.handleMachineAlive(payload),
         onBackgroundTaskDelta: (sessionId, delta) => syncEngine?.handleBackgroundTaskDelta(sessionId, delta),
         onSessionActivity: (sessionId, updatedAt) => syncEngine?.recordSessionActivity(sessionId, updatedAt),
-        onSessionCrashed: (sessionId) => syncEngine?.handleSessionCrashed(sessionId)
+        onSessionCrashed: (sessionId, error) => syncEngine?.handleSessionCrashed(sessionId, error)
     })
 
     syncEngine = new SyncEngine(store, socketServer.io, socketServer.rpcRegistry, sseManager)

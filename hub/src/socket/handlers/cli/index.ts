@@ -43,7 +43,7 @@ export type CliHandlersDeps = {
     onWebappEvent?: (event: SyncEvent) => void
     onBackgroundTaskDelta?: (sessionId: string, delta: { started: number; completed: number }) => void
     onSessionActivity?: (sessionId: string, updatedAt: number) => void
-    onSessionCrashed?: (sessionId: string) => void
+    onSessionCrashed?: (sessionId: string, error?: string) => void
 }
 
 export function registerCliHandlers(socket: CliSocketWithData, deps: CliHandlersDeps): void {

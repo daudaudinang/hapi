@@ -298,7 +298,7 @@ describe('codexRemoteLauncher', () => {
 
         expect(exitReason).toBe('exit');
         expect(harness.notifications.map((entry) => entry.method)).toEqual(['turn/started', 'thread/status/changed']);
-        expect(sessionEvents).toContainEqual({ type: 'thread-crashed' });
+        expect(sessionEvents).toContainEqual(expect.objectContaining({ type: 'thread-crashed' }));
         expect(sessionEvents).toContainEqual({
             type: 'message',
             message: 'Task failed: Codex thread entered systemError'

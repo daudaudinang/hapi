@@ -1102,4 +1102,93 @@ describe('crash recovery flow', () => {
         cache.handleSessionEnd({ sid: session.id, time: Date.now() })
         expect(cache.getSession(session.id)?.active).toBe(false)
     })
+
+    describe('handleSessionCrashed with upstream API corruption', () => {
+        const codexError = JSON.stringify({
+            error: {
+                message: '[400]: {"type":"error","error":{"type":"invalid_request_error","message":"invalid params, messages.19.content.1.tool_use.input: Input should be a valid dictionary (2013)"}}',
+                type: 'invalid_request_error',
+                code: 'bad_request'
+            }
+        })
+
+        function setupCodexSession(): { store: Store; engine: SyncEngine; sessionId: string } {
+            const store = new Store(':memory:')
+            const engine = new SyncEngine(
+                store,
+                { of: () => ({ to: () => ({ emit() {} }) }) } as never,
+                new RpcRegistry(),
+                { broadcast() {} } as never
+            )
+            const session = engine.getOrCreateSession(
+                'crash-corrupt',
+                { path: '/tmp/test', host: 'test', flavor: 'codex', codexSessionId: 'cs-bad', machineId: 'm1' },
+                null,
+                'default'
+            )
+            engine.handleSessionAlive({ sid: session.id, time: Date.now() })
+            return { store, engine, sessionId: session.id }
+        }
+
+        it('clears codexSessionId when error indicates tool_use.input corruption', () => {
+            const { store, engine, sessionId } = setupCodexSession()
+            try {
+                engine.handleSessionCrashed(sessionId, codexError)
+
+                const stored = store.sessions.getSession(sessionId)
+                expect((stored?.metadata as { codexSessionId?: string } | null)?.codexSessionId ?? null).toBeNull()
+            } finally {
+                engine.stop()
+            }
+        })
+
+        it('does not clear codexSessionId when error is unrelated (e.g. network)', () => {
+            const { store, engine, sessionId } = setupCodexSession()
+            try {
+                engine.handleSessionCrashed(sessionId, 'Connection reset by peer')
+
+                const stored = store.sessions.getSession(sessionId)
+                expect((stored?.metadata as { codexSessionId?: string } | null)?.codexSessionId).toBe('cs-bad')
+            } finally {
+                engine.stop()
+            }
+        })
+
+        it('does not clear codexSessionId when error matches only one marker (false positive guard)', () => {
+            const { store, engine, sessionId } = setupCodexSession()
+            try {
+                // Has invalid_request_error but no tool_use.input marker
+                engine.handleSessionCrashed(sessionId, 'invalid_request_error: something else')
+
+                const stored = store.sessions.getSession(sessionId)
+                expect((stored?.metadata as { codexSessionId?: string } | null)?.codexSessionId).toBe('cs-bad')
+            } finally {
+                engine.stop()
+            }
+        })
+
+        it('does nothing when error is missing', () => {
+            const { store, engine, sessionId } = setupCodexSession()
+            try {
+                engine.handleSessionCrashed(sessionId)
+
+                const stored = store.sessions.getSession(sessionId)
+                expect((stored?.metadata as { codexSessionId?: string } | null)?.codexSessionId).toBe('cs-bad')
+            } finally {
+                engine.stop()
+            }
+        })
+
+        it('marks session inactive regardless of error content', () => {
+            const { store, engine, sessionId } = setupCodexSession()
+            try {
+                engine.handleSessionCrashed(sessionId, 'Any error message')
+
+                const stored = store.sessions.getSession(sessionId)
+                expect(stored?.active).toBe(false)
+            } finally {
+                engine.stop()
+            }
+        })
+    })
 })

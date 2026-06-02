@@ -41,7 +41,7 @@ export type SocketServerDeps = {
     onMachineAlive?: (payload: { machineId: string; time: number }) => void
     onBackgroundTaskDelta?: (sessionId: string, delta: { started: number; completed: number }) => void
     onSessionActivity?: (sessionId: string, updatedAt: number) => void
-    onSessionCrashed?: (sessionId: string) => void
+    onSessionCrashed?: (sessionId: string, error?: string) => void
 }
 
 export function createSocketServer(deps: SocketServerDeps): {

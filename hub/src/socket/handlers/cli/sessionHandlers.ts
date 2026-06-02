@@ -65,7 +65,7 @@ export type SessionHandlersDeps = {
     onWebappEvent?: (event: SyncEvent) => void
     onBackgroundTaskDelta?: (sessionId: string, delta: { started: number; completed: number }) => void
     onSessionActivity?: (sessionId: string, updatedAt: number) => void
-    onSessionCrashed?: (sessionId: string) => void
+    onSessionCrashed?: (sessionId: string, error?: string) => void
 }
 
 export function registerSessionHandlers(socket: CliSocketWithData, deps: SessionHandlersDeps): void {
@@ -138,7 +138,18 @@ export function registerSessionHandlers(socket: CliSocketWithData, deps: Session
                 isObject(inner.data) &&
                 (inner.data as Record<string, unknown>).type === 'thread-crashed'
             ) {
-                onSessionCrashed?.(sid)
+                const crashData = inner.data as Record<string, unknown>
+                let crashError: string | undefined = undefined
+                if (typeof crashData.error === 'string') {
+                    crashError = crashData.error
+                } else if (isObject(crashData.error)) {
+                    try {
+                        crashError = JSON.stringify(crashData.error)
+                    } catch {
+                        crashError = '[Unserializable Error Object]'
+                    }
+                }
+                onSessionCrashed?.(sid, crashError)
             }
         }
 

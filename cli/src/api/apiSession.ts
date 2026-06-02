@@ -466,6 +466,7 @@ export class ApiSessionClient extends EventEmitter {
         type: 'ready'
     } | {
         type: 'thread-crashed'
+        error?: string
     }, id?: string): void {
         const content = {
             role: 'agent',

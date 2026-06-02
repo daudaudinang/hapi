@@ -304,8 +304,13 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
                     // Without this, the 2s keepalive would re-activate the session
                     // before auto-resume can trigger.
                     session.stopKeepAlive();
-                    // Notify hub that thread crashed so auto-resume can trigger
-                    session.sendSessionEvent({ type: 'thread-crashed' });
+                    // Notify hub that thread crashed so auto-resume can trigger.
+                    // Include error so hub can detect upstream API corruption
+                    // (e.g. tool_use.input invalid) and clear the stale thread id.
+                    session.sendSessionEvent({
+                        type: 'thread-crashed',
+                        ...(msg.error ? { error: asString(msg.error) ?? undefined } : {})
+                    });
                 }
             }
 
@@ -911,6 +916,7 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
                     messageBuffer.addMessage('Aborted by user', 'status');
                     session.sendSessionEvent({ type: 'message', message: 'Aborted by user' });
                 } else {
+                    const errorMsg = error instanceof Error ? error.message : String(error);
                     messageBuffer.addMessage('Process exited unexpectedly', 'status');
                     session.sendSessionEvent({ type: 'message', message: 'Process exited unexpectedly' });
                     this.currentTurnId = null;
@@ -918,8 +924,13 @@ class CodexRemoteLauncher extends RemoteLauncherBase {
                     hasThread = false;
                     // Stop heartbeat so hub can mark session inactive
                     session.stopKeepAlive();
-                    // Notify hub that thread crashed so auto-resume can trigger
-                    session.sendSessionEvent({ type: 'thread-crashed' });
+                    // Notify hub that thread crashed so auto-resume can trigger.
+                    // Include error message so hub can detect upstream API corruption
+                    // and clear the stale thread id.
+                    session.sendSessionEvent({
+                        type: 'thread-crashed',
+                        error: errorMsg
+                    });
                 }
             } finally {
                 if (!turnInFlight) {
