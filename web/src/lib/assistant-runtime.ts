@@ -4,11 +4,11 @@ import { useExternalMessageConverter, useExternalStoreRuntime } from '@assistant
 import { safeStringify } from '@hapi/protocol'
 import { renderEventLabel } from '@/chat/presentation'
 import type { ChatBlock, CliOutputBlock } from '@/chat/types'
-import type { AgentEvent, ToolCallBlock } from '@/chat/types'
+import type { AgentEvent, TeamMentionBlock, ToolCallBlock } from '@/chat/types'
 import type { AttachmentMetadata, MessageStatus as HappyMessageStatus, Session } from '@/types/api'
 
 export type HappyChatMessageMetadata = {
-    kind: 'user' | 'assistant' | 'tool' | 'event' | 'cli-output'
+    kind: 'user' | 'assistant' | 'tool' | 'event' | 'cli-output' | 'team-mention'
     status?: HappyMessageStatus
     localId?: string | null
     originalText?: string
@@ -16,9 +16,27 @@ export type HappyChatMessageMetadata = {
     event?: AgentEvent
     source?: CliOutputBlock['source']
     attachments?: AttachmentMetadata[]
+    teamMention?: TeamMentionBlock
 }
 
 function toThreadMessageLike(block: ChatBlock): ThreadMessageLike {
+    if (block.kind === 'team-mention') {
+        const messageId = `team-mention:${block.id}`
+        return {
+            role: 'user',
+            id: messageId,
+            createdAt: new Date(block.createdAt),
+            content: [{ type: 'text', text: block.text }],
+            metadata: {
+                custom: {
+                    kind: 'team-mention',
+                    localId: block.localId,
+                    teamMention: block
+                } satisfies HappyChatMessageMetadata
+            }
+        }
+    }
+
     if (block.kind === 'user-text') {
         const messageId = `user:${block.id}`
         return {

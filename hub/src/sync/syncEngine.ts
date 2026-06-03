@@ -35,6 +35,7 @@ import {
 import { buildRecoveryContext } from './recoveryContext'
 import { SessionCache } from './sessionCache'
 import { TeamChatService } from './teamChatService'
+import { TeamMentionDeliveryService } from './teamMentionDeliveryService'
 
 export type { Session, SyncEvent } from '@hapi/protocol/types'
 export type { Machine } from './machineCache'
@@ -108,7 +109,12 @@ export class SyncEngine {
             this.eventPublisher,
             (sessionId, updatedAt) => this.recordSessionActivity(sessionId, updatedAt)
         )
-        this.teamChatService = new TeamChatService(store, this.eventPublisher)
+        this.teamChatService = new TeamChatService(
+            store,
+            this.eventPublisher,
+            new TeamMentionDeliveryService(this.messageService, store, this.eventPublisher),
+            (namespace, sessionId) => this.getSessionByNamespace(sessionId, namespace)
+        )
         this.rpcGateway = new RpcGateway(io, rpcRegistry)
         this.reloadAll()
         this.inactivityTimer = setInterval(() => this.expireInactive(), 5_000)

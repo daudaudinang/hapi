@@ -4,6 +4,30 @@ import { createCliOutputBlock, isCliOutputText, mergeCliOutputBlocks } from '@/c
 import { parseMessageAsEvent } from '@/chat/reducerEvents'
 import { ensureToolBlock, extractTitleFromChangeTitleInput, isChangeTitleToolName, type PermissionEntry } from '@/chat/reducerTools'
 
+function getTeamMentionMeta(meta: unknown): { requestId: string; teamChatId: string; sourceMessageId: string } | null {
+    if (!meta || typeof meta !== 'object') return null
+    const candidate = meta as Record<string, unknown>
+    if (candidate.sentFrom !== 'team-chat') return null
+    if (typeof candidate.teamMentionRequestId !== 'string') return null
+    if (typeof candidate.teamChatId !== 'string') return null
+    if (typeof candidate.sourceMessageId !== 'string') return null
+    return {
+        requestId: candidate.teamMentionRequestId,
+        teamChatId: candidate.teamChatId,
+        sourceMessageId: candidate.sourceMessageId
+    }
+}
+
+function stripTeamMentionEnvelope(text: string): string {
+    if (!text.startsWith('[HAPI_TEAM_MENTION]')) return text
+    const marker = 'From Team Chat:'
+    const markerIndex = text.indexOf(marker)
+    if (markerIndex === -1) return text.replace('[HAPI_TEAM_MENTION]', '').trim()
+    const body = text.slice(markerIndex + marker.length)
+    const contextIndex = body.indexOf('\n\nContext:')
+    return (contextIndex === -1 ? body : body.slice(0, contextIndex)).trim()
+}
+
 export function reduceTimeline(
     messages: TracedMessage[],
     context: {
@@ -64,6 +88,22 @@ export function reduceTimeline(
         }
 
         if (msg.role === 'user') {
+            const teamMention = getTeamMentionMeta(msg.meta)
+            if (teamMention) {
+                blocks.push({
+                    kind: 'team-mention',
+                    id: msg.id,
+                    localId: msg.localId,
+                    createdAt: msg.createdAt,
+                    requestId: teamMention.requestId,
+                    teamChatId: teamMention.teamChatId,
+                    sourceMessageId: teamMention.sourceMessageId,
+                    text: stripTeamMentionEnvelope(msg.content.text),
+                    status: 'delivered',
+                    meta: msg.meta
+                })
+                continue
+            }
             if (isCliOutputText(msg.content.text, msg.meta)) {
                 blocks.push(createCliOutputBlock({
                     id: msg.id,

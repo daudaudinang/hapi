@@ -1,6 +1,9 @@
 import type { Store } from '../store'
 import type { StoredTeamMessage, StoredTeamMentionRequest, StoredTeamParticipant } from '../store/types'
 import type { EventPublisher } from './eventPublisher'
+import { parseTeamMentions } from './teamMentions'
+import { getMentionDeliveryMode, type TeamMentionDeliveryService } from './teamMentionDeliveryService'
+import type { Session } from '@hapi/protocol/types'
 
 type TeamMessagePage = {
     messages: StoredTeamMessage[]
@@ -15,7 +18,9 @@ type TeamMessagePage = {
 export class TeamChatService {
     constructor(
         private readonly store: Store,
-        private readonly publisher: Pick<EventPublisher, 'emit'>
+        private readonly publisher: Pick<EventPublisher, 'emit'>,
+        private readonly mentionDelivery?: Pick<TeamMentionDeliveryService, 'deliver'>,
+        private readonly resolveSession?: (namespace: string, sessionId: string) => Pick<Session, 'active' | 'thinking' | 'agentState'> | undefined
     ) {}
 
     createTeamChat(input: { namespace: string; name: string; projectPath?: string | null }) {
@@ -76,6 +81,7 @@ export class TeamChatService {
     }) {
         this.requireTeamChat(input.namespace, input.teamChatId)
         this.requireTeamParticipant(input.namespace, input.teamChatId, input.authorParticipantId)
+        const parsedMentions = parseTeamMentions(input.text, this.store.teamChats.listParticipants(input.namespace, input.teamChatId))
         const replyPreview = input.replyToMessageId
             ? this.buildReplyPreview(input.namespace, input.teamChatId, input.replyToMessageId)
             : null
@@ -87,9 +93,32 @@ export class TeamChatService {
             reportType: input.reportType ?? null,
             replyToMessageId: input.replyToMessageId ?? null,
             replyPreview,
-            mentions: input.mentions ?? [],
+            mentions: input.mentions ?? parsedMentions.map((mention) => ({
+                participantId: mention.participantId,
+                sessionId: mention.sessionId
+            })),
             files: input.files ?? []
         })
+        for (const mention of parsedMentions) {
+            const contextSnapshot = this.buildMentionContextSnapshot(input.namespace, input.teamChatId, message.id, input.text)
+            const request = this.store.teamChats.addMentionRequest({
+                namespace: input.namespace,
+                teamChatId: input.teamChatId,
+                sourceMessageId: message.id,
+                targetSessionId: mention.sessionId,
+                contextSnapshot,
+                hopDepth: 0
+            })
+            const session = this.resolveSession?.(input.namespace, mention.sessionId)
+            if (this.mentionDelivery && session) {
+                this.mentionDelivery.deliver({
+                    namespace: input.namespace,
+                    request,
+                    envelope: this.buildMentionEnvelope(request, input.text, contextSnapshot),
+                    mode: getMentionDeliveryMode(session)
+                })
+            }
+        }
         this.publisher.emit({
             type: 'team-message-created',
             namespace: input.namespace,
@@ -176,6 +205,43 @@ export class TeamChatService {
             authorName: author?.displayName ?? 'Unknown',
             excerpt: message.text.slice(0, 160)
         }
+    }
+
+    private buildMentionContextSnapshot(namespace: string, teamChatId: string, messageId: string, originalText: string) {
+        const chat = this.requireTeamChat(namespace, teamChatId)
+        const sharedContext = (chat.sharedContext && typeof chat.sharedContext === 'object')
+            ? chat.sharedContext
+            : { decisions: [], openQuestions: [], relevantFiles: [] }
+        const recentUpdates = this.store.teamChats.getMessages(namespace, teamChatId, 5)
+            .filter((message) => message.id !== messageId)
+            .map((message) => {
+                const author = this.store.teamChats.getParticipant(namespace, message.authorParticipantId)
+                return {
+                    messageId: message.id,
+                    authorName: author?.displayName ?? 'Unknown',
+                    excerpt: message.text.slice(0, 160)
+                }
+            })
+        return {
+            originalText,
+            sharedContext,
+            recentUpdates,
+            attachedFiles: []
+        }
+    }
+
+    private buildMentionEnvelope(request: StoredTeamMentionRequest, text: string, contextSnapshot: unknown): string {
+        return [
+            '[HAPI_TEAM_MENTION]',
+            `requestId=${request.id}`,
+            `teamChatId=${request.teamChatId}`,
+            `sourceMessageId=${request.sourceMessageId}`,
+            '',
+            `From Team Chat: ${text}`,
+            '',
+            'Context:',
+            JSON.stringify(contextSnapshot)
+        ].join('\n')
     }
 
     private requireTeamChat(namespace: string, teamChatId: string) {

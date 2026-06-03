@@ -31,6 +31,10 @@ const messagesQuerySchema = z.object({
     beforeSeq: z.coerce.number().int().min(1).optional()
 })
 
+const updateMentionStatusSchema = z.object({
+    status: z.enum(['seen', 'processing', 'no_action'])
+})
+
 function teamChatErrorResponse(c: Context<WebAppEnv>, error: unknown): Response {
     if (error instanceof Error && error.message.startsWith('TEAM_')) {
         return c.json({ error: 'Team Chat resource not found' }, 404)
@@ -170,6 +174,27 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
                 sessionId: sessionResult.sessionId,
                 requestId: c.req.param('requestId'),
                 status: 'seen'
+            })
+            return c.json({ request })
+        } catch (error) {
+            return teamChatErrorResponse(c, error)
+        }
+    })
+
+    app.patch('/sessions/:id/team-mentions/:requestId', async (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) return engine
+        const sessionResult = requireSessionFromParam(c, engine)
+        if (sessionResult instanceof Response) return sessionResult
+        const body = await c.req.json().catch(() => null)
+        const parsed = updateMentionStatusSchema.safeParse(body)
+        if (!parsed.success) return c.json({ error: 'Invalid body' }, 400)
+        try {
+            const request = engine.updateTeamMentionStatus({
+                namespace: c.get('namespace'),
+                sessionId: sessionResult.sessionId,
+                requestId: c.req.param('requestId'),
+                status: parsed.data.status
             })
             return c.json({ request })
         } catch (error) {

@@ -186,4 +186,26 @@ describe('reduceTimeline', () => {
         const events = blocks.filter(b => b.kind === 'agent-event')
         expect(events).toHaveLength(1)
     })
+
+    it('renders Team Chat mention user records as team-mention blocks', () => {
+        const { blocks } = reduceTimeline([makeUserMessage('[HAPI_TEAM_MENTION]\nhello team mention', {
+            meta: {
+                sentFrom: 'team-chat',
+                teamMentionRequestId: 'req-1',
+                teamChatId: 'team-1',
+                sourceMessageId: 'team-msg-1'
+            }
+        })], makeContext())
+
+        expect(blocks).toHaveLength(1)
+        expect(blocks[0]).toMatchObject({
+            kind: 'team-mention',
+            requestId: 'req-1',
+            teamChatId: 'team-1',
+            sourceMessageId: 'team-msg-1',
+            text: 'hello team mention',
+            status: 'delivered'
+        })
+    })
+
 })

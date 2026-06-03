@@ -485,4 +485,25 @@ describe('normalizeDecryptedMessage', () => {
         })
     })
 
+
+    it('preserves Team Chat mention metadata on synthetic user messages', () => {
+        const message = makeMessage({
+            role: 'user',
+            content: { type: 'text', text: '[HAPI_TEAM_MENTION]\nhello team mention' },
+            meta: {
+                sentFrom: 'team-chat',
+                teamMentionRequestId: 'req-1',
+                teamChatId: 'team-1',
+                sourceMessageId: 'team-msg-1'
+            }
+        })
+
+        const normalized = normalizeDecryptedMessage(message)
+
+        expect(normalized).toMatchObject({
+            role: 'user',
+            meta: { sentFrom: 'team-chat', teamMentionRequestId: 'req-1', teamChatId: 'team-1', sourceMessageId: 'team-msg-1' }
+        })
+    })
+
 })

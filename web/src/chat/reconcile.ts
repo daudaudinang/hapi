@@ -5,6 +5,7 @@ import type {
     AgentTextBlock,
     ChatBlock,
     CliOutputBlock,
+    TeamMentionBlock,
     ToolCallBlock,
     ToolPermission,
     UserTextBlock,
@@ -135,6 +136,17 @@ function areCliOutputBlocksEqual(left: CliOutputBlock, right: CliOutputBlock): b
         && left.meta === right.meta
 }
 
+function areTeamMentionBlocksEqual(left: TeamMentionBlock, right: TeamMentionBlock): boolean {
+    return left.localId === right.localId
+        && left.createdAt === right.createdAt
+        && left.requestId === right.requestId
+        && left.teamChatId === right.teamChatId
+        && left.sourceMessageId === right.sourceMessageId
+        && left.text === right.text
+        && left.status === right.status
+        && left.meta === right.meta
+}
+
 function areAgentEventBlocksEqual(left: AgentEventBlock, right: AgentEventBlock): boolean {
     return left.createdAt === right.createdAt
         && left.meta === right.meta
@@ -206,6 +218,11 @@ function reconcileBlock(block: ChatBlock, prevById: ChatBlocksById): ChatBlock {
     if (block.kind === 'cli-output') {
         const prevBlock = prev as CliOutputBlock
         return areCliOutputBlocksEqual(prevBlock, block) ? prevBlock : block
+    }
+
+    if (block.kind === 'team-mention') {
+        const prevBlock = prev as TeamMentionBlock
+        return areTeamMentionBlocksEqual(prevBlock, block) ? prevBlock : block
     }
 
     if (block.kind === 'agent-reasoning') {

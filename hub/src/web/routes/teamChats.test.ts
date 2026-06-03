@@ -147,4 +147,30 @@ describe('team chat routes', () => {
         expect(calls).toEqual([{ namespace: 'ns-a', sessionId: 'session-1', requestId: 'req-1', status: 'seen' }])
     })
 
+    it('patches Team mention status for allowed lifecycle actions', async () => {
+        const calls: unknown[] = []
+        const engine = {
+            resolveSessionAccess: (sessionId: string, namespace: string) => ({
+                ok: true as const,
+                sessionId,
+                session: { id: sessionId, namespace }
+            }),
+            updateTeamMentionStatus: (input: unknown) => {
+                calls.push(input)
+                return { id: 'req-1', teamChatId: 'team-1', sourceMessageId: 'msg-1', targetSessionId: 'session-1', status: 'no_action', createdAt: 1, resolvedAt: 2 }
+            }
+        }
+        const app = createApp('ns-a', engine)
+
+        const response = await app.request('/api/sessions/session-1/team-mentions/req-1', {
+            method: 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ status: 'no_action' })
+        })
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toEqual({ request: { id: 'req-1', teamChatId: 'team-1', sourceMessageId: 'msg-1', targetSessionId: 'session-1', status: 'no_action', createdAt: 1, resolvedAt: 2 } })
+        expect(calls).toEqual([{ namespace: 'ns-a', sessionId: 'session-1', requestId: 'req-1', status: 'no_action' }])
+    })
+
 })

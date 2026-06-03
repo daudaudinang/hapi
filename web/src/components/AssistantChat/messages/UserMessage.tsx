@@ -5,6 +5,7 @@ import type { HappyChatMessageMetadata } from '@/lib/assistant-runtime'
 import { MessageStatusIndicator } from '@/components/AssistantChat/messages/MessageStatusIndicator'
 import { MessageAttachments } from '@/components/AssistantChat/messages/MessageAttachments'
 import { CliOutputBlock } from '@/components/CliOutputBlock'
+import { TeamMentionMessage } from '@/components/AssistantChat/messages/TeamMentionMessage'
 import { CopyIcon, CheckIcon } from '@/components/icons'
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
 import { getConversationMessageAnchorId } from '@/chat/outline'
@@ -37,6 +38,14 @@ export function HappyUserMessage() {
         const custom = message.metadata.custom as Partial<HappyChatMessageMetadata> | undefined
         return custom?.kind === 'cli-output'
     })
+    const isTeamMention = useAssistantState(({ message }) => {
+        const custom = message.metadata.custom as Partial<HappyChatMessageMetadata> | undefined
+        return custom?.kind === 'team-mention'
+    })
+    const teamMention = useAssistantState(({ message }) => {
+        const custom = message.metadata.custom as Partial<HappyChatMessageMetadata> | undefined
+        return custom?.teamMention ?? null
+    })
     const cliText = useAssistantState(({ message }) => {
         const custom = message.metadata.custom as Partial<HappyChatMessageMetadata> | undefined
         if (custom?.kind !== 'cli-output') return ''
@@ -44,6 +53,23 @@ export function HappyUserMessage() {
     })
 
     if (role !== 'user') return null
+    if (isTeamMention && teamMention) {
+        return (
+            <MessagePrimitive.Root
+                id={getConversationMessageAnchorId(messageId)}
+                className="scroll-mt-4 px-1 min-w-0 max-w-full overflow-x-hidden"
+            >
+                <TeamMentionMessage
+                    block={teamMention}
+                    onOpenTeamChat={() => { window.location.href = `/team-chats/${encodeURIComponent(teamMention.teamChatId)}` }}
+                    onReplyToTeam={() => { window.location.href = `/team-chats/${encodeURIComponent(teamMention.teamChatId)}` }}
+                    onPostUpdate={() => { window.location.href = `/team-chats/${encodeURIComponent(teamMention.teamChatId)}` }}
+                    onViewOriginal={() => { window.location.href = `/team-chats/${encodeURIComponent(teamMention.teamChatId)}` }}
+                    onNoAction={() => { void ctx.api.getSessionTeamMentions(ctx.sessionId).catch(() => undefined) }}
+                />
+            </MessagePrimitive.Root>
+        )
+    }
     const canRetry = status === 'failed' && typeof localId === 'string' && Boolean(ctx.onRetryMessage)
     const onRetry = canRetry ? () => ctx.onRetryMessage!(localId) : undefined
 

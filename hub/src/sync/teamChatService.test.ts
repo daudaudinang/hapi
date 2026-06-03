@@ -51,4 +51,31 @@ describe('TeamChatService', () => {
         expect(() => service.getMessagesAround('default', chatA.id, messageB.message.id, { before: 20, after: 20 })).toThrow('TEAM_MESSAGE_NOT_FOUND')
     })
 
+    it('creates mention requests and delegates delivery for mentioned sessions', () => {
+        const store = new Store(':memory:')
+        const publisher = createPublisher()
+        const target = store.sessions.getOrCreateSession('backend', { path: '/repo' }, null, 'default')
+        const delivery = { deliver: mock(() => undefined) }
+        const service = new TeamChatService(store, publisher, delivery, () => ({
+            active: true,
+            thinking: false,
+            agentState: { controlledByUser: false, requests: {}, completedRequests: {} }
+        } as never))
+        const chat = service.createTeamChat({ namespace: 'default', name: 'Team Chat' })
+        const user = service.addParticipant({ namespace: 'default', teamChatId: chat.id, type: 'user', displayName: 'You', role: 'general', color: '#34d399' })
+        const backend = service.addParticipant({ namespace: 'default', teamChatId: chat.id, type: 'session', sessionId: target.id, displayName: 'Backend API', role: 'backend', color: '#60a5fa' })
+
+        const result = service.postMessage({ namespace: 'default', teamChatId: chat.id, authorParticipantId: user.id, text: '@Backend API confirm fields' })
+
+        expect(result.message.mentions).toEqual([{ participantId: backend.id, sessionId: target.id }])
+        const requests = store.teamChats.listPendingMentionRequests('default', target.id)
+        expect(requests).toHaveLength(1)
+        expect(delivery.deliver).toHaveBeenCalledWith(expect.objectContaining({
+            namespace: 'default',
+            request: expect.objectContaining({ id: requests[0].id }),
+            mode: 'invoke-agent',
+            envelope: expect.stringContaining('[HAPI_TEAM_MENTION]')
+        }))
+    })
+
 })

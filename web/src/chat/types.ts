@@ -163,6 +163,19 @@ export type AgentEventBlock = {
     meta?: unknown
 }
 
+export type TeamMentionBlock = {
+    kind: 'team-mention'
+    id: string
+    localId: string | null
+    createdAt: number
+    requestId: string
+    teamChatId: string
+    sourceMessageId: string
+    text: string
+    status: 'pending' | 'delivered' | 'seen' | 'processing' | 'responded' | 'no_action' | 'superseded' | 'failed'
+    meta?: unknown
+}
+
 export type ToolCallBlock = {
     kind: 'tool-call'
     id: string
@@ -173,4 +186,4 @@ export type ToolCallBlock = {
     meta?: unknown
 }
 
-export type ChatBlock = UserTextBlock | AgentTextBlock | AgentReasoningBlock | CliOutputBlock | ToolCallBlock | AgentEventBlock
+export type ChatBlock = UserTextBlock | AgentTextBlock | AgentReasoningBlock | CliOutputBlock | ToolCallBlock | AgentEventBlock | TeamMentionBlock

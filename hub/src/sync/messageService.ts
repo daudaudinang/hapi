@@ -201,4 +201,63 @@ export class MessageService {
             }
         })
     }
+
+    sendTeamMentionMessage(
+        sessionId: string,
+        payload: {
+            text: string
+            invokeAgent: boolean
+            meta: {
+                sentFrom: 'team-chat'
+                teamMentionRequestId: string
+                teamChatId: string
+                sourceMessageId: string
+            }
+        }
+    ): void {
+        const content = {
+            role: 'user',
+            content: {
+                type: 'text',
+                text: payload.text
+            },
+            meta: payload.meta
+        }
+
+        const msg = this.store.messages.addMessage(sessionId, content)
+        this.onSessionActivity?.(sessionId, msg.createdAt)
+
+        const update = {
+            id: msg.id,
+            seq: msg.seq,
+            createdAt: msg.createdAt,
+            body: {
+                t: 'new-message' as const,
+                sid: sessionId,
+                message: {
+                    id: msg.id,
+                    seq: msg.seq,
+                    createdAt: msg.createdAt,
+                    localId: msg.localId,
+                    content: msg.content
+                }
+            }
+        }
+        if (payload.invokeAgent) {
+            this.io.of('/cli').to(`session:${sessionId}`).emit('update', update)
+        }
+
+        this.publisher.emit({
+            type: 'message-received',
+            sessionId,
+            message: {
+                id: msg.id,
+                seq: msg.seq,
+                localId: msg.localId,
+                content: msg.content,
+                createdAt: msg.createdAt,
+                invokedAt: msg.invokedAt
+            }
+        })
+    }
 }
