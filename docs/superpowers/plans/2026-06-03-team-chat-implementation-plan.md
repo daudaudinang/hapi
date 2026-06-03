@@ -4,7 +4,7 @@
 
 **Goal:** Build Team Chat MVP: project-scoped shared chat, participants, mentions routed into session-side cards, inline replies, structured reports, attention/status panels, and HAPI-style web navigation.
 
-**Architecture:** Hub owns Team Chat state in first-class SQLite tables. Team mentions are persisted as `team_mention_requests` and delivered by `TeamMentionDeliveryService` into target sessions as existing-compatible `user`/`text` session messages with Team metadata; the web renders those messages as Team mention cards. `ReportToTeam` is MVP Hub API + session-side action; provider-native tool injection is explicitly follow-up. SSE events include namespace and `sessionId`/`targetSessionId` so Team Chat and Session Chat caches stay in sync.
+**Architecture:** Hub owns Team Chat state in first-class SQLite tables. Team mentions are persisted as `team_mention_requests` and delivered by `TeamMentionDeliveryService` into target sessions as existing-compatible `user`/`text` session messages with Team metadata; the web renders those messages as Team mention cards. `ReportToTeam` is available through Hub API, session-side UI actions, and an agent-callable HAPI MCP tool where the provider already uses the HAPI MCP bridge. SSE events include namespace and `sessionId`/`targetSessionId` so Team Chat and Session Chat caches stay in sync.
 
 **Tech Stack:** Bun workspaces, TypeScript strict, Hono routes, SQLite via `bun:sqlite`, Socket.IO/SSE, React 19, TanStack Router/Query, `bun:test` for shared/hub tests, Vitest for web tests.
 
@@ -20,7 +20,7 @@ Important architecture decisions for implementation:
 - Team messages need `seq` for pagination and reply scroll stability.
 - Mention requests need `contextSnapshot`, `hopDepth`, and `parentRequestId` for debugging and loop guards.
 - MVP mention delivery uses existing-compatible synthetic `user`/`text` session messages plus metadata; never insert `role: 'system'` / custom `content.type` messages into the CLI delivery path.
-- ReportToTeam begins as Hub API + session-side action. Provider-native agent tools for Claude/Codex/Gemini/OpenCode are a follow-up after MVP, not part of this plan.
+- ReportToTeam begins as Hub API + session-side action, then gets an agent-callable HAPI MCP tool in Task 7.5. The tool is wired for providers that already use the HAPI MCP bridge; any provider without that bridge keeps the UI/API fallback and is called out explicitly.
 - Participants should be archived/removed from active participant lists without deleting historical message authors.
 
 
@@ -41,7 +41,7 @@ Parallel-safe execution requires separate worktrees and contract locks:
 | 1 | Yes, separate worktrees | Task 2 and Task 4 tests/client shell | Storage and web API client/types can proceed after protocol names are locked; merge Task 2 before service implementation. |
 | 2 | Mostly sequential | Task 3 then Task 6 | Service/routes create mention delivery contracts; session card pipeline depends on synthetic message metadata. |
 | 3 | Yes, separate worktrees after Task 3 | Task 5 and parts of Task 7 UI | Team Chat UI components and report card styling touch mostly separate files; reconcile after shared web types. |
-| 4 | No | Task 8 and Task 9 | Realtime/nav/full verification integrate all previous work. |
+| 4 | No | Task 7.5, then Task 8 and Task 9 | Agent-callable tool depends on Task 7 service/report route; realtime/nav/full verification integrate all previous work. |
 
 If using a single branch/worktree, execute tasks sequentially. Use parallel subagents for read-only reviews at every checkpoint.
 
@@ -101,6 +101,17 @@ If using a single branch/worktree, execute tasks sequentially. Use parallel suba
   - API behavior and access control.
 - Test: `hub/src/sync/teamChatService.test.ts`
   - Mention routing, context snapshots, status transitions.
+
+### CLI agent tool bridge
+
+- Modify: `cli/src/claude/utils/startHappyServer.ts`
+  - Register HAPI MCP `report_to_team` alongside `change_title`.
+- Modify: `cli/src/codex/happyMcpStdioBridge.ts`
+  - Forward both HAPI MCP tools from stdio to HTTP transport.
+- Modify: `cli/src/codex/utils/buildHapiMcpBridge.ts`
+  - Preserve the same `hapi_session` bridge config while exposing new tool metadata.
+- Modify provider prompts/config tests that currently say HAPI MCP has exactly one tool.
+- Test: `cli/src/claude/utils/startHappyServer.test.ts`, `cli/src/codex/happyMcpStdioBridge.test.ts`, provider prompt/config tests.
 
 ### Web data layer
 
@@ -2155,6 +2166,306 @@ git commit -m "feat: add team chat reports"
 
 ---
 
+
+## Task 7.5: Agent-callable ReportToTeam tool
+
+**Files:**
+- Modify: `shared/src/schemas.ts`
+- Modify: `shared/src/types.ts`
+- Modify: `shared/src/index.ts`
+- Modify: `hub/src/sync/teamChatService.ts`
+- Modify: `hub/src/web/routes/teamChats.ts`
+- Modify: `hub/src/sync/syncEngine.ts`
+- Modify: `cli/src/claude/utils/startHappyServer.ts`
+- Modify: `cli/src/codex/happyMcpStdioBridge.ts`
+- Modify: `cli/src/claude/utils/systemPrompt.ts`
+- Modify: `cli/src/codex/utils/systemPrompt.ts`
+- Modify: `cli/src/opencode/utils/systemPrompt.ts`
+- Test: `shared/src/teamChat.test.ts`
+- Test: `hub/src/web/routes/teamChats.test.ts`
+- Test: `cli/src/claude/utils/startHappyServer.test.ts`
+- Test: `cli/src/codex/happyMcpStdioBridge.test.ts`
+- Test: provider prompt/config tests that mention HAPI MCP tool count.
+
+- [ ] **Step 1: Write shared schema and Hub route tests**
+
+Extend `shared/src/teamChat.test.ts`:
+
+```ts
+import { ReportToTeamInputSchema } from './schemas'
+
+it('parses agent-callable ReportToTeam input', () => {
+    const parsed = ReportToTeamInputSchema.parse({
+        teamChatId: 'team-1',
+        type: 'done',
+        summary: 'Implemented API route',
+        details: 'Added tests and validation.',
+        replyToRequestId: 'req-1',
+        mentions: ['Tests'],
+        files: ['hub/src/web/routes/teamChats.ts']
+    })
+
+    expect(parsed.type).toBe('done')
+    expect(parsed.mentions).toEqual(['Tests'])
+})
+```
+
+Extend `hub/src/web/routes/teamChats.test.ts` with route-level ownership checks:
+
+```ts
+it('accepts agent ReportToTeam when source session owns the request', async () => {
+    const engine = createEngineWithReportToTeamSpy({
+        namespace: 'default',
+        teamChatId: 'team-1',
+        sessionId: 'session-backend',
+        requestId: 'req-1'
+    })
+    const app = createApp('default', engine)
+
+    const response = await app.request('/api/team-chats/team-1/reports', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+            sourceSessionId: 'session-backend',
+            type: 'done',
+            summary: 'Done',
+            replyToRequestId: 'req-1'
+        })
+    })
+
+    expect(response.status).toBe(201)
+    expect(engine.reportToTeamCalls[0].authorSessionId).toBe('session-backend')
+})
+
+it('rejects agent ReportToTeam from a session outside the Team Chat', async () => {
+    const engine = createEngineWithReportToTeamSpy({ namespace: 'default', teamChatId: 'team-1', sessionId: 'session-backend', requestId: 'req-1' })
+    const app = createApp('default', engine)
+
+    const response = await app.request('/api/team-chats/team-1/reports', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ sourceSessionId: 'session-other', type: 'done', summary: 'Done', replyToRequestId: 'req-1' })
+    })
+
+    expect(response.status).toBe(403)
+})
+```
+
+- [ ] **Step 2: Add shared `ReportToTeamInputSchema`**
+
+In `shared/src/schemas.ts`:
+
+```ts
+export const ReportToTeamInputSchema = z.object({
+    teamChatId: z.string().min(1),
+    type: TeamReportTypeSchema,
+    summary: z.string().trim().min(3).max(4_000),
+    details: z.string().trim().max(20_000).optional(),
+    replyToMessageId: z.string().nullable().optional(),
+    replyToRequestId: z.string().nullable().optional(),
+    mentions: z.array(z.string().min(1)).default([]),
+    files: z.array(z.string().min(1)).default([])
+})
+
+export type ReportToTeamInput = z.infer<typeof ReportToTeamInputSchema>
+```
+
+Export `ReportToTeamInput` from `shared/src/types.ts` and `shared/src/index.ts`.
+
+- [ ] **Step 3: Add Hub route support for agent source session**
+
+In `hub/src/web/routes/teamChats.ts`, extend report body schema:
+
+```ts
+const reportToTeamRequestSchema = ReportToTeamInputSchema.extend({
+    authorParticipantId: z.string().optional(),
+    sourceSessionId: z.string().optional()
+}).refine((value) => Boolean(value.authorParticipantId || value.sourceSessionId), {
+    message: 'authorParticipantId or sourceSessionId is required'
+})
+```
+
+Route behavior:
+
+```ts
+app.post('/team-chats/:id/reports', async (c) => {
+    const engine = requireSyncEngine(c, getSyncEngine)
+    if (engine instanceof Response) return engine
+    const body = await c.req.json().catch(() => null)
+    const parsed = reportToTeamRequestSchema.safeParse({ ...body, teamChatId: c.req.param('id') })
+    if (!parsed.success) return c.json({ error: 'Invalid body' }, 400)
+
+    const result = engine.reportToTeam({
+        namespace: c.get('namespace'),
+        teamChatId: c.req.param('id'),
+        ...parsed.data
+    })
+    return c.json(result, 201)
+})
+```
+
+`TeamChatService.reportToTeam()` must resolve `authorParticipantId` from `sourceSessionId` when a tool call supplies session identity. If `replyToRequestId` is present, validate that the request target session is the same `sourceSessionId`.
+
+- [ ] **Step 4: Write CLI HAPI MCP tool tests**
+
+Create `cli/src/claude/utils/startHappyServer.test.ts`:
+
+```ts
+import { describe, expect, it, mock } from 'bun:test'
+import { startHappyServer } from './startHappyServer'
+
+it('exposes change_title and report_to_team tools', async () => {
+    const client = createFakeApiSessionClient()
+    const server = await startHappyServer(client)
+    try {
+        expect(server.toolNames).toEqual(['change_title', 'report_to_team'])
+    } finally {
+        server.stop()
+    }
+})
+
+it('report_to_team forwards report payload to the session client', async () => {
+    const client = createFakeApiSessionClient()
+    const server = await startHappyServer(client)
+    try {
+        const response = await callHttpMcpTool(server.url, 'report_to_team', {
+            teamChatId: 'team-1',
+            type: 'done',
+            summary: 'Done',
+            replyToRequestId: 'req-1'
+        })
+
+        expect(response.isError).toBe(false)
+        expect(client.reportToTeamCalls[0].teamChatId).toBe('team-1')
+    } finally {
+        server.stop()
+    }
+})
+```
+
+Create `cli/src/codex/happyMcpStdioBridge.test.ts`:
+
+```ts
+import { describe, expect, it } from 'bun:test'
+import { HAPI_MCP_TOOL_NAMES } from './happyMcpStdioBridge'
+
+it('bridges every HAPI MCP tool name', () => {
+    expect(HAPI_MCP_TOOL_NAMES).toEqual(['change_title', 'report_to_team'])
+})
+```
+
+Use small local helpers in the tests; do not leave `createFakeApiSessionClient` or `callHttpMcpTool` undefined.
+
+- [ ] **Step 5: Add session-client forwarding method**
+
+In `cli/src/api/apiSession.ts`, add a focused method:
+
+```ts
+async reportToTeam(input: ReportToTeamInput): Promise<{ ok: true } | { ok: false; error: string }> {
+    try {
+        await axios.post(`${this.hubUrl}/api/team-chats/${encodeURIComponent(input.teamChatId)}/reports`, {
+            ...input,
+            sourceSessionId: this.sessionId
+        }, { headers: buildHubRequestHeaders(this.token) })
+        return { ok: true }
+    } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
+}
+```
+
+If `ApiSessionClient` does not currently expose `hubUrl`/token for REST helpers, add a private helper beside existing axios calls instead of duplicating auth/header logic.
+
+- [ ] **Step 6: Register `report_to_team` in the HAPI MCP HTTP server**
+
+In `cli/src/claude/utils/startHappyServer.ts`:
+
+```ts
+const reportToTeamInputSchema: z.ZodTypeAny = ReportToTeamInputSchema.omit({ teamChatId: true }).extend({
+    teamChatId: z.string().describe('Team Chat id to report into')
+})
+
+mcp.registerTool<any, any>('report_to_team', {
+    description: 'Post a structured progress/reply/done/blocked/question/handoff update back to the HAPI Team Chat.',
+    title: 'Report To Team',
+    inputSchema: reportToTeamInputSchema
+}, async (args: ReportToTeamInput) => {
+    const result = await client.reportToTeam(args)
+    return result.ok
+        ? { content: [{ type: 'text' as const, text: 'Reported to Team Chat.' }], isError: false }
+        : { content: [{ type: 'text' as const, text: `Failed to report to Team Chat: ${result.error}` }], isError: true }
+})
+```
+
+Return:
+
+```ts
+toolNames: ['change_title', 'report_to_team']
+```
+
+Claude allowed tools therefore include `mcp__hapi_session__report_to_team` through the existing `happyServer.toolNames.map(...)` line.
+
+- [ ] **Step 7: Update Codex/OpenCode bridge and provider instructions**
+
+In `cli/src/codex/happyMcpStdioBridge.ts`:
+
+```ts
+export const HAPI_MCP_TOOL_NAMES = ['change_title', 'report_to_team'] as const
+```
+
+Register each tool name and forward the call to the HTTP MCP server:
+
+```ts
+for (const toolName of HAPI_MCP_TOOL_NAMES) {
+    server.registerTool<any, any>(toolName, getToolDefinition(toolName), async (args: Record<string, unknown>) => {
+        const client = await ensureHttpClient()
+        return await client.callTool({ name: toolName, arguments: args })
+    })
+}
+```
+
+Update provider instructions that currently say the HAPI MCP server has exactly one tool. New wording:
+
+```txt
+The HAPI-added MCP server named "hapi_session" provides session tools including change_title and report_to_team. Use report_to_team only when responding to a Team Chat mention or posting a meaningful Team Chat update.
+```
+
+Update tests:
+
+```bash
+bun --cwd cli test src/claude/runClaudeMcpConfig.test.ts src/codex/utils/codexMcpConfig.test.ts src/opencode/utils/systemPrompt.test.ts
+```
+
+- [ ] **Step 8: Provider scope acceptance**
+
+MVP acceptance:
+
+- Claude: `mcp__hapi_session__report_to_team` is available and auto-allowed through `happyServer.toolNames`.
+- Codex: stdio bridge exposes `report_to_team` through existing `hapi_session` MCP config.
+- OpenCode: generated opencode config receives the same `hapi_session` bridge and updated instruction.
+- Generic ACP agent sessions using `runAgentSession.ts`: MCP bridge exposes the new tool.
+- Gemini direct runner: if it does not currently load the HAPI MCP bridge, do **not** invent a partial hidden behavior. Keep Team Chat UI/API report fallback and record Gemini MCP bridge as follow-up unless implementation adds a real Gemini MCP config path with tests.
+
+- [ ] **Step 9: Run tests/typecheck**
+
+```bash
+bun test shared/src/teamChat.test.ts
+bun --cwd hub test src/web/routes/teamChats.test.ts src/sync/teamReports.test.ts
+bun --cwd cli test src/claude/utils/startHappyServer.test.ts src/codex/happyMcpStdioBridge.test.ts src/claude/runClaudeMcpConfig.test.ts src/codex/utils/codexMcpConfig.test.ts src/opencode/utils/systemPrompt.test.ts
+bun typecheck
+```
+
+Expected: PASS.
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add shared/src/schemas.ts shared/src/types.ts shared/src/index.ts shared/src/teamChat.test.ts hub/src/sync/teamChatService.ts hub/src/web/routes/teamChats.ts hub/src/sync/syncEngine.ts hub/src/web/routes/teamChats.test.ts cli/src/api/apiSession.ts cli/src/claude/utils/startHappyServer.ts cli/src/claude/utils/startHappyServer.test.ts cli/src/codex/happyMcpStdioBridge.ts cli/src/codex/happyMcpStdioBridge.test.ts cli/src/claude/utils/systemPrompt.ts cli/src/codex/utils/systemPrompt.ts cli/src/opencode/utils/systemPrompt.ts cli/src/claude/runClaudeMcpConfig.test.ts cli/src/codex/utils/codexMcpConfig.test.ts cli/src/opencode/utils/systemPrompt.test.ts
+git commit -m "feat: add report to team agent tool"
+```
+
+---
+
 ## Task 8: Realtime invalidation and navigation integration
 
 **Files:**
@@ -2350,6 +2661,7 @@ Skip commit if no docs changed.
 - Delivered/seen/processing/replied/no-action: Tasks 1, 2, 6, 8.
 - Inline reply + scroll: Tasks 3, 5.
 - ReportToTeam/Post update: Task 7.
+- Agent-callable ReportToTeam tool: Task 7.5.
 - Needs attention: Task 7.
 - Top-level navigation: Task 8.
 - Realtime updates: Tasks 3, 8.
@@ -2357,7 +2669,7 @@ Skip commit if no docs changed.
 
 ## Known follow-ups after MVP
 
-- Provider-native `ReportToTeam` tool injection for Claude/Codex/Gemini/OpenCode.
+- Full Gemini direct-runner MCP bridge for `report_to_team` if not covered by existing generic ACP/HAPI MCP bridge.
 - Auto-processing of queued mentions by idle remote sessions.
 - Rich attach-diff/file context from editor/git views.
 - Auto-summary suggestions for Shared context.
