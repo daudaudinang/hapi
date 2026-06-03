@@ -29,6 +29,15 @@ describe('ApiClient team chat methods', () => {
         }))
     })
 
+    it('fetches a Team Chat detail with URL encoding', async () => {
+        const fetchMock = mockJson({ teamChat: { id: 'team/1', name: 'Team' } })
+        const api = new ApiClient('token')
+
+        await api.getTeamChat('team/1')
+
+        expect(fetchMock).toHaveBeenCalledWith('/api/team-chats/team%2F1', expect.any(Object))
+    })
+
     it('fetches Team Chat messages with limit, beforeSeq, and URL encoding', async () => {
         const fetchMock = mockJson({ messages: [], page: { limit: 20, nextBeforeSeq: null, hasMore: false } })
         const api = new ApiClient('token')

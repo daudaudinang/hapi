@@ -231,6 +231,10 @@ export class ApiClient {
         })
     }
 
+    async getTeamChat(teamChatId: string): Promise<TeamChatResponse> {
+        return await this.request<TeamChatResponse>(`/api/team-chats/${encodeURIComponent(teamChatId)}`)
+    }
+
     async getPushVapidPublicKey(): Promise<PushVapidPublicKeyResponse> {
         return await this.request<PushVapidPublicKeyResponse>('/api/push/vapid-public-key')
     }
