@@ -4,7 +4,7 @@ import { z } from 'zod'
 
 import type { SyncEngine } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
-import { requireSyncEngine } from './guards'
+import { requireSessionFromParam, requireSyncEngine } from './guards'
 
 const createTeamChatSchema = z.object({
     name: z.string().min(1),
@@ -72,8 +72,9 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
         const engine = requireSyncEngine(c, getSyncEngine)
         if (engine instanceof Response) return engine
         const parsed = messagesQuerySchema.safeParse(c.req.query())
-        const limit = parsed.success ? parsed.data.limit ?? 50 : 50
-        const beforeSeq = parsed.success ? parsed.data.beforeSeq ?? null : null
+        if (!parsed.success) return c.json({ error: 'Invalid query' }, 400)
+        const limit = parsed.data.limit ?? 50
+        const beforeSeq = parsed.data.beforeSeq ?? null
         try {
             return c.json(engine.getTeamMessages(c.get('namespace'), c.req.param('id'), { limit, beforeSeq }))
         } catch (error) {
@@ -141,6 +142,36 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
         try {
             engine.archiveTeamParticipant(c.get('namespace'), c.req.param('id'), c.req.param('participantId'))
             return c.json({ ok: true })
+        } catch (error) {
+            return teamChatErrorResponse(c, error)
+        }
+    })
+
+    app.get('/sessions/:id/team-mentions', (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) return engine
+        const sessionResult = requireSessionFromParam(c, engine)
+        if (sessionResult instanceof Response) return sessionResult
+        try {
+            return c.json({ requests: engine.listSessionTeamMentions(c.get('namespace'), sessionResult.sessionId) })
+        } catch (error) {
+            return teamChatErrorResponse(c, error)
+        }
+    })
+
+    app.post('/sessions/:id/team-mentions/:requestId/seen', (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) return engine
+        const sessionResult = requireSessionFromParam(c, engine)
+        if (sessionResult instanceof Response) return sessionResult
+        try {
+            const request = engine.updateTeamMentionStatus({
+                namespace: c.get('namespace'),
+                sessionId: sessionResult.sessionId,
+                requestId: c.req.param('requestId'),
+                status: 'seen'
+            })
+            return c.json({ request })
         } catch (error) {
             return teamChatErrorResponse(c, error)
         }

@@ -279,6 +279,19 @@ export class SyncEngine {
         return this.teamChatService.postMessage(input)
     }
 
+    listSessionTeamMentions(namespace: string, sessionId: string) {
+        return this.teamChatService.listSessionMentionRequests(namespace, sessionId)
+    }
+
+    updateTeamMentionStatus(input: {
+        namespace: string
+        sessionId: string
+        requestId: string
+        status: 'pending' | 'delivered' | 'seen' | 'processing' | 'responded' | 'no_action' | 'superseded' | 'failed'
+    }) {
+        return this.teamChatService.updateMentionStatus(input)
+    }
+
     handleRealtimeEvent(event: SyncEvent): void {
         if (event.type === 'session-updated' && event.sessionId) {
             // Snapshot agent session IDs before refresh — safe because JS is single-threaded

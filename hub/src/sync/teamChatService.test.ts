@@ -36,4 +36,19 @@ describe('TeamChatService', () => {
         expect(reply.message.replyPreview).toEqual({ authorName: 'You', excerpt: 'first message' })
         expect(() => service.postMessage({ namespace: 'default', teamChatId: chatA.id, authorParticipantId: userB.id, text: 'wrong chat' })).toThrow('TEAM_PARTICIPANT_NOT_FOUND')
     })
+
+    it('rejects reply context lookups for messages outside the Team Chat', () => {
+        const store = new Store(':memory:')
+        const publisher = createPublisher()
+        const service = new TeamChatService(store, publisher)
+        const chatA = service.createTeamChat({ namespace: 'default', name: 'Team A' })
+        const chatB = service.createTeamChat({ namespace: 'default', name: 'Team B' })
+        const userA = service.addParticipant({ namespace: 'default', teamChatId: chatA.id, type: 'user', displayName: 'A', role: 'general', color: '#34d399' })
+        const userB = service.addParticipant({ namespace: 'default', teamChatId: chatB.id, type: 'user', displayName: 'B', role: 'general', color: '#60a5fa' })
+        const messageB = service.postMessage({ namespace: 'default', teamChatId: chatB.id, authorParticipantId: userB.id, text: 'foreign' })
+        service.postMessage({ namespace: 'default', teamChatId: chatA.id, authorParticipantId: userA.id, text: 'local' })
+
+        expect(() => service.getMessagesAround('default', chatA.id, messageB.message.id, { before: 20, after: 20 })).toThrow('TEAM_MESSAGE_NOT_FOUND')
+    })
+
 })

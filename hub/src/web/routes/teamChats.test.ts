@@ -5,13 +5,13 @@ import type { SyncEngine } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
 import { createTeamChatsRoutes } from './teamChats'
 
-function createApp(namespace: string, engine: Partial<SyncEngine>) {
+function createApp(namespace: string, engine: Record<string, unknown>) {
     const app = new Hono<WebAppEnv>()
     app.use('*', async (c, next) => {
         c.set('namespace', namespace)
         await next()
     })
-    app.route('/api', createTeamChatsRoutes(() => engine as SyncEngine))
+    app.route('/api', createTeamChatsRoutes(() => engine as unknown as SyncEngine))
     return app
 }
 
@@ -78,4 +78,73 @@ describe('team chat routes', () => {
         expect(response.status).toBe(404)
         expect(await response.json()).toEqual({ error: 'Team Chat resource not found' })
     })
+
+    it('rejects wrong-team reply context IDs', async () => {
+        const engine = {
+            getTeamMessagesAround: () => {
+                throw new Error('TEAM_MESSAGE_NOT_FOUND')
+            }
+        }
+        const app = createApp('default', engine)
+
+        const response = await app.request('/api/team-chats/team-a/messages/msg-from-team-b/context')
+
+        expect(response.status).toBe(404)
+        expect(await response.json()).toEqual({ error: 'Team Chat resource not found' })
+    })
+
+    it('rejects invalid Team Chat message query params', async () => {
+        const engine = { getTeamMessages: () => ({ messages: [], page: { limit: 50, beforeSeq: null, nextBeforeSeq: null, hasMore: false } }) }
+        const app = createApp('default', engine)
+
+        const response = await app.request('/api/team-chats/team-1/messages?limit=bad')
+
+        expect(response.status).toBe(400)
+        expect(await response.json()).toEqual({ error: 'Invalid query' })
+    })
+
+    it('lists session Team mention requests through namespace-scoped session access', async () => {
+        const calls: unknown[] = []
+        const engine = {
+            resolveSessionAccess: (sessionId: string, namespace: string) => ({
+                ok: true as const,
+                sessionId,
+                session: { id: sessionId, namespace }
+            }),
+            listSessionTeamMentions: (namespace: string, sessionId: string) => {
+                calls.push({ namespace, sessionId })
+                return [{ id: 'req-1', teamChatId: 'team-1', sourceMessageId: 'msg-1', targetSessionId: sessionId, status: 'seen', createdAt: 1 }]
+            }
+        }
+        const app = createApp('ns-a', engine)
+
+        const response = await app.request('/api/sessions/session-1/team-mentions')
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toEqual({ requests: [{ id: 'req-1', teamChatId: 'team-1', sourceMessageId: 'msg-1', targetSessionId: 'session-1', status: 'seen', createdAt: 1 }] })
+        expect(calls).toEqual([{ namespace: 'ns-a', sessionId: 'session-1' }])
+    })
+
+    it('marks Team mention requests seen with session ownership guard and emits updates', async () => {
+        const calls: unknown[] = []
+        const engine = {
+            resolveSessionAccess: (sessionId: string, namespace: string) => ({
+                ok: true as const,
+                sessionId,
+                session: { id: sessionId, namespace }
+            }),
+            updateTeamMentionStatus: (input: unknown) => {
+                calls.push(input)
+                return { id: 'req-1', teamChatId: 'team-1', sourceMessageId: 'msg-1', targetSessionId: 'session-1', status: 'seen', createdAt: 1, seenAt: 2 }
+            }
+        }
+        const app = createApp('ns-a', engine)
+
+        const response = await app.request('/api/sessions/session-1/team-mentions/req-1/seen', { method: 'POST' })
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toEqual({ request: { id: 'req-1', teamChatId: 'team-1', sourceMessageId: 'msg-1', targetSessionId: 'session-1', status: 'seen', createdAt: 1, seenAt: 2 } })
+        expect(calls).toEqual([{ namespace: 'ns-a', sessionId: 'session-1', requestId: 'req-1', status: 'seen' }])
+    })
+
 })

@@ -120,6 +120,7 @@ export class TeamChatService {
 
     getMessagesAround(namespace: string, teamChatId: string, messageId: string, options: { before: number; after: number }): TeamMessagePage {
         this.requireTeamChat(namespace, teamChatId)
+        this.requireTeamMessage(namespace, teamChatId, messageId)
         const result = this.store.teamChats.getMessagesAround({ namespace, teamChatId, messageId, before: options.before, after: options.after })
         return {
             messages: result.messages,
@@ -134,6 +135,38 @@ export class TeamChatService {
 
     getMentionRequest(namespace: string, requestId: string, expectedSessionId?: string): StoredTeamMentionRequest {
         return this.requireTeamMentionRequest(namespace, requestId, expectedSessionId)
+    }
+
+    listSessionMentionRequests(namespace: string, sessionId: string): StoredTeamMentionRequest[] {
+        return this.store.teamChats.listSessionMentionRequests(namespace, sessionId)
+    }
+
+    updateMentionStatus(input: {
+        namespace: string
+        sessionId: string
+        requestId: string
+        status: StoredTeamMentionRequest['status']
+    }): StoredTeamMentionRequest {
+        const request = this.requireTeamMentionRequest(input.namespace, input.requestId, input.sessionId)
+        const now = Date.now()
+        const updated = this.store.teamChats.updateMentionStatus({
+            namespace: input.namespace,
+            requestId: request.id,
+            status: input.status,
+            seenAt: input.status === 'seen' ? now : undefined,
+            processingStartedAt: input.status === 'processing' ? now : undefined,
+            resolvedAt: ['responded', 'no_action', 'superseded', 'failed'].includes(input.status) ? now : undefined
+        })
+        if (!updated) throw new Error('TEAM_MENTION_NOT_FOUND')
+        this.publisher.emit({
+            type: 'team-mention-updated',
+            namespace: input.namespace,
+            teamChatId: updated.teamChatId,
+            requestId: updated.id,
+            sessionId: updated.targetSessionId,
+            targetSessionId: updated.targetSessionId
+        })
+        return updated
     }
 
     private buildReplyPreview(namespace: string, teamChatId: string, messageId: string): { authorName: string; excerpt: string } {

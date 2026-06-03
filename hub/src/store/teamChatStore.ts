@@ -274,6 +274,15 @@ export class TeamChatStore {
         return rows.map(toMentionRequest)
     }
 
+    listSessionMentionRequests(namespace: string, targetSessionId: string): StoredTeamMentionRequest[] {
+        const rows = this.db.prepare(`
+            SELECT * FROM team_mention_requests
+            WHERE namespace = ? AND target_session_id = ?
+            ORDER BY created_at ASC
+        `).all(namespace, targetSessionId) as TeamMentionRequestRow[]
+        return rows.map(toMentionRequest)
+    }
+
     updateMentionStatus(input: {
         namespace: string
         requestId: string
