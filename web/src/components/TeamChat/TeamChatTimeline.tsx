@@ -18,16 +18,7 @@ export function TeamChatTimeline(props: {
         }
         void Promise.resolve(props.onLoadAround(messageId)).then(() => {
             requestAnimationFrame(() => {
-                const loadedNode = refs.current.get(messageId)
-                if (loadedNode) {
-                    loadedNode.scrollIntoView({ block: 'center', behavior: 'smooth' })
-                    return
-                }
-                // The route merges the around-page before resolving; in tests and
-                // very fast UI paths we still provide feedback that the reply jump
-                // completed even if the exact node is not mounted yet.
-                const fallback = refs.current.get(messageId) ?? refs.current.get(props.messages[0]?.id ?? '')
-                fallback?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+                refs.current.get(messageId)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
             })
         })
     }

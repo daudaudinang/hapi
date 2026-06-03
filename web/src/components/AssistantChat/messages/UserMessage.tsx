@@ -65,7 +65,7 @@ export function HappyUserMessage() {
                     onReplyToTeam={() => { window.location.href = `/team-chats/${encodeURIComponent(teamMention.teamChatId)}` }}
                     onPostUpdate={() => { window.location.href = `/team-chats/${encodeURIComponent(teamMention.teamChatId)}` }}
                     onViewOriginal={() => { window.location.href = `/team-chats/${encodeURIComponent(teamMention.teamChatId)}` }}
-                    onNoAction={() => { void ctx.api.getSessionTeamMentions(ctx.sessionId).catch(() => undefined) }}
+                    onNoAction={() => { void ctx.api.updateTeamMentionStatus(ctx.sessionId, teamMention.requestId, 'no_action').catch(() => undefined) }}
                 />
             </MessagePrimitive.Root>
         )

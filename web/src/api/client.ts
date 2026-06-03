@@ -291,6 +291,17 @@ export class ApiClient {
         return await this.request<{ requests: TeamMentionRequest[] }>(`/api/sessions/${encodeURIComponent(sessionId)}/team-mentions`)
     }
 
+    async updateTeamMentionStatus(
+        sessionId: string,
+        requestId: string,
+        status: TeamMentionRequest['status']
+    ): Promise<{ request: TeamMentionRequest }> {
+        return await this.request<{ request: TeamMentionRequest }>(`/api/sessions/${encodeURIComponent(sessionId)}/team-mentions/${encodeURIComponent(requestId)}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status })
+        })
+    }
+
     async getMessages(
         sessionId: string,
         options: {
