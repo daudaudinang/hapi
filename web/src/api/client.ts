@@ -287,6 +287,23 @@ export class ApiClient {
         return await this.request<{ participants: TeamParticipant[] }>(`/api/team-chats/${encodeURIComponent(teamChatId)}/participants`)
     }
 
+    async addTeamParticipant(
+        teamChatId: string,
+        input: {
+            type: 'user' | 'session'
+            userId?: string | null
+            sessionId?: string | null
+            displayName: string
+            role: TeamParticipant['role']
+            color: string
+        }
+    ): Promise<{ participant: TeamParticipant }> {
+        return await this.request<{ participant: TeamParticipant }>(`/api/team-chats/${encodeURIComponent(teamChatId)}/participants`, {
+            method: 'POST',
+            body: JSON.stringify(input)
+        })
+    }
+
     async getSessionTeamMentions(sessionId: string): Promise<{ requests: TeamMentionRequest[] }> {
         return await this.request<{ requests: TeamMentionRequest[] }>(`/api/sessions/${encodeURIComponent(sessionId)}/team-mentions`)
     }

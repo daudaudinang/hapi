@@ -531,9 +531,24 @@ const settingsRoute = createRoute({
     component: SettingsPage,
 })
 
+export type TeamChatsSearch = {
+    machine?: string
+    project?: string
+}
+
 const teamChatsRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: '/team-chats',
+    validateSearch: (search: Record<string, unknown>): TeamChatsSearch => {
+        const result: TeamChatsSearch = {}
+        if (typeof search.machine === 'string' && search.machine) {
+            result.machine = search.machine
+        }
+        if (typeof search.project === 'string' && search.project) {
+            result.project = search.project
+        }
+        return result
+    },
     component: TeamChatsPage,
 })
 

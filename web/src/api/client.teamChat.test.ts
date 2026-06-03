@@ -62,6 +62,7 @@ describe('ApiClient team chat methods', () => {
 
         await api.sendTeamMessage('team/1', { authorParticipantId: 'p1', text: 'hello', replyToMessageId: 'm1' })
         await api.getTeamParticipants('team/1')
+        await api.addTeamParticipant('team/1', { type: 'session', sessionId: 'session-1', displayName: 'Backend', role: 'backend', color: '#60a5fa' })
         await api.getSessionTeamMentions('session/1')
         await api.updateTeamMentionStatus('session/1', 'req/1', 'no_action')
 
@@ -70,6 +71,10 @@ describe('ApiClient team chat methods', () => {
             body: JSON.stringify({ authorParticipantId: 'p1', text: 'hello', replyToMessageId: 'm1' })
         }))
         expect(fetchMock).toHaveBeenCalledWith('/api/team-chats/team%2F1/participants', expect.any(Object))
+        expect(fetchMock).toHaveBeenCalledWith('/api/team-chats/team%2F1/participants', expect.objectContaining({
+            method: 'POST',
+            body: JSON.stringify({ type: 'session', sessionId: 'session-1', displayName: 'Backend', role: 'backend', color: '#60a5fa' })
+        }))
         expect(fetchMock).toHaveBeenCalledWith('/api/sessions/session%2F1/team-mentions', expect.any(Object))
         expect(fetchMock).toHaveBeenCalledWith('/api/sessions/session%2F1/team-mentions/req%2F1', expect.objectContaining({
             method: 'PATCH',

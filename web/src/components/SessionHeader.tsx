@@ -180,6 +180,7 @@ export function SessionHeader(props: {
     const [renameOpen, setRenameOpen] = useState(false)
     const [archiveOpen, setArchiveOpen] = useState(false)
     const [deleteOpen, setDeleteOpen] = useState(false)
+    const [creatingTeamChat, setCreatingTeamChat] = useState(false)
 
     const { archiveSession, renameSession, deleteSession, isPending } = useSessionActions(
         api,
@@ -208,6 +209,27 @@ export function SessionHeader(props: {
         navigate({ to: '/editor', search: { machine: newMachineId } })
     }, [navigate])
 
+    const handleCreateTeamChatWithSession = useCallback(async () => {
+        if (!api || creatingTeamChat) return
+        setCreatingTeamChat(true)
+        try {
+            const response = await api.createTeamChat({
+                name: title,
+                projectPath: session.metadata?.path ?? null
+            })
+            await api.addTeamParticipant(response.teamChat.id, {
+                type: 'session',
+                sessionId: session.id,
+                displayName: title,
+                role: 'general',
+                color: '#60a5fa'
+            })
+            navigate({ to: '/team-chats/$teamChatId', params: { teamChatId: response.teamChat.id } })
+        } finally {
+            setCreatingTeamChat(false)
+        }
+    }, [api, creatingTeamChat, navigate, session.id, session.metadata?.path, title])
+
     // In Telegram, don't render header (Telegram provides its own)
     if (isTelegramApp()) {
         return null
@@ -233,6 +255,18 @@ export function SessionHeader(props: {
                                     aria-label="Open in Editor"
                                 >
                                     <EditorIcon className="w-4 h-4" />
+                                </button>
+                            ) : null}
+                            {api ? (
+                                <button
+                                    type="button"
+                                    className="db-pinned__compact-action"
+                                    onClick={() => { void handleCreateTeamChatWithSession() }}
+                                    title="Create Team Chat with this session"
+                                    aria-label="Create Team Chat with this session"
+                                    disabled={creatingTeamChat}
+                                >
+                                    💬
                                 </button>
                             ) : null}
                             <button type="button" className="db-pinned__compact-action" onClick={() => navigate({ search: (prev: any) => ({ ...prev, modal: 'files', modalSessionId: session.id }) } as any)} title="Files">
@@ -364,6 +398,20 @@ export function SessionHeader(props: {
                             onClick={() => navigate({ to: '/editor', search: editorSearch })}
                         >
                             <EditorIcon className="w-5 h-5" />
+                        </button>
+                    ) : null}
+
+                    {api ? (
+                        <button
+                            type="button"
+                            className="flex h-8 items-center gap-1 rounded-full px-2 text-xs font-medium text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)] disabled:opacity-50"
+                            title="Create Team Chat with this session"
+                            aria-label="Create Team Chat with this session"
+                            disabled={creatingTeamChat}
+                            onClick={() => { void handleCreateTeamChatWithSession() }}
+                        >
+                            <span aria-hidden="true">💬</span>
+                            <span className="hidden sm:inline">Team</span>
                         </button>
                     ) : null}
 

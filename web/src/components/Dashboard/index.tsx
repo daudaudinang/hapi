@@ -1365,6 +1365,15 @@ export function Dashboard({ api }: DashboardProps) {
                     <button
                         type="button"
                         className="db__topbar-btn"
+                        title="Team Chat"
+                        onClick={() => void navigate({ to: '/team-chats' })}
+                    >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" /></svg>
+                        <span className="db__label">Team Chat</span>
+                    </button>
+                    <button
+                        type="button"
+                        className="db__topbar-btn"
                         title={t('dashboard.settings')}
                         onClick={() => void navigate({ search: (prev: any) => ({ ...prev, modal: 'settings' }) } as any)}
                     >

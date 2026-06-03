@@ -70,6 +70,20 @@ export function EditorHeader(props: {
 
             <button
                 type="button"
+                onClick={() => navigate({
+                    to: '/team-chats',
+                    search: {
+                        machine: props.machineId ?? undefined,
+                        project: props.projectPath ?? undefined
+                    } as never
+                })}
+                className="px-3 py-1 rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] text-xs hover:bg-[var(--app-subtle-bg)] transition-colors"
+            >
+                Team Chat
+            </button>
+
+            <button
+                type="button"
                 onClick={() => navigate({ to: '/sessions' })}
                 className="px-3 py-1 rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] text-xs hover:bg-[var(--app-subtle-bg)] transition-colors"
             >

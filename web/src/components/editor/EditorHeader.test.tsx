@@ -137,4 +137,26 @@ describe('EditorHeader', () => {
 
         expect(navigateMock).toHaveBeenCalledWith({ to: '/sessions' })
     })
+
+    it('opens Team Chat with the selected editor project context', () => {
+        const api = { listEditorProjects: vi.fn() } as unknown as ApiClient
+
+        render(
+            <EditorHeader
+                api={api}
+                machineId="machine-1"
+                projectPath="/repo-a"
+                onSelectMachine={vi.fn()}
+                onSelectProject={vi.fn()}
+                onBrowseProject={vi.fn()}
+            />
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: 'Team Chat' }))
+
+        expect(navigateMock).toHaveBeenCalledWith({
+            to: '/team-chats',
+            search: { machine: 'machine-1', project: '/repo-a' }
+        })
+    })
 })

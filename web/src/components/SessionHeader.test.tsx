@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Session } from '@/types/api'
 import { SessionHeader } from './SessionHeader'
@@ -96,5 +96,29 @@ describe('SessionHeader editor entry point', () => {
         render(<QueryClientProvider client={qc}><SessionHeader session={makeSession({ metadata: { path: '/repo', host: 'host' } })} onBack={vi.fn()} api={null} /></QueryClientProvider>)
 
         expect(screen.queryByRole('button', { name: 'Open in Editor' })).not.toBeInTheDocument()
+    })
+
+    it('creates a Team Chat with the current session', async () => {
+        const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        const api = {
+            createTeamChat: vi.fn(async () => ({ teamChat: { id: 'team-1' } })),
+            addTeamParticipant: vi.fn(async () => ({ participant: { id: 'participant-1' } }))
+        }
+        render(<QueryClientProvider client={qc}><SessionHeader session={makeSession()} onBack={vi.fn()} api={api as never} /></QueryClientProvider>)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Create Team Chat with this session' }))
+
+        await vi.waitFor(() => expect(api.createTeamChat).toHaveBeenCalledWith({ name: 'repo', projectPath: '/repo' }))
+        expect(api.addTeamParticipant).toHaveBeenCalledWith('team-1', {
+            type: 'session',
+            sessionId: 'session-1',
+            displayName: 'repo',
+            role: 'general',
+            color: '#60a5fa'
+        })
+        await waitFor(() => expect(navigateMock).toHaveBeenCalledWith({
+            to: '/team-chats/$teamChatId',
+            params: { teamChatId: 'team-1' }
+        }))
     })
 })
