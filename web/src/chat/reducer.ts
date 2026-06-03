@@ -1,4 +1,5 @@
 import type { AgentState } from '@/types/api'
+import type { TeamMentionRequest } from '@/types/api'
 import type { ChatBlock, NormalizedMessage, UsageData } from '@/chat/types'
 import { traceMessages, type TracedMessage } from '@/chat/tracer'
 import { dedupeAgentEvents, foldApiErrorEvents } from '@/chat/reducerEvents'
@@ -25,7 +26,8 @@ export type LatestUsage = {
 
 export function reduceChatBlocks(
     normalized: NormalizedMessage[],
-    agentState: AgentState | null | undefined
+    agentState: AgentState | null | undefined,
+    teamMentionRequests: TeamMentionRequest[] = []
 ): { blocks: ChatBlock[]; hasReadyEvent: boolean; latestUsage: LatestUsage | null } {
     const permissionsById = getPermissions(agentState)
     const toolIdsInMessages = collectToolIdsFromMessages(normalized)
@@ -47,7 +49,8 @@ export function reduceChatBlocks(
 
     const consumedGroupIds = new Set<string>()
     const emittedTitleChangeToolUseIds = new Set<string>()
-    const reducerContext = { permissionsById, groups, consumedGroupIds, titleChangesByToolUseId, emittedTitleChangeToolUseIds }
+    const teamMentionStatusesById = new Map(teamMentionRequests.map((request) => [request.id, request.status]))
+    const reducerContext = { permissionsById, groups, consumedGroupIds, titleChangesByToolUseId, emittedTitleChangeToolUseIds, teamMentionStatusesById }
     const rootResult = reduceTimeline(root, reducerContext)
     let hasReadyEvent = rootResult.hasReadyEvent
 

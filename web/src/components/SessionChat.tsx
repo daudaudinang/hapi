@@ -29,6 +29,7 @@ import { usePlatform } from '@/hooks/usePlatform'
 import { useSessionActions } from '@/hooks/mutations/useSessionActions'
 import { useCodexModels } from '@/hooks/queries/useCodexModels'
 import { useOpencodeModels } from '@/hooks/queries/useOpencodeModels'
+import { useSessionTeamMentions } from '@/hooks/queries/useSessionTeamMentions'
 import { useVoiceOptional } from '@/lib/voice-context'
 import { RealtimeVoiceSession, registerSessionStore, registerVoiceHooksStore, voiceHooks } from '@/realtime'
 import { isRemoteTerminalSupported } from '@/utils/terminalSupport'
@@ -74,6 +75,7 @@ export function SessionChat(props: {
     onComposerAppendTextConsumed?: () => void
     onNewSessionRequested?: () => void
 }) {
+    const { requests: teamMentionRequests } = useSessionTeamMentions(props.api, props.session.id)
     const { haptic } = usePlatform()
     const { t } = useTranslation()
     const navigate = useNavigate()
@@ -287,8 +289,8 @@ export function SessionChat(props: {
     }, [visibleMessages])
 
     const reduced = useMemo(
-        () => reduceChatBlocks(normalizedMessages, props.session.agentState),
-        [normalizedMessages, props.session.agentState]
+        () => reduceChatBlocks(normalizedMessages, props.session.agentState, teamMentionRequests),
+        [normalizedMessages, props.session.agentState, teamMentionRequests]
     )
     const reconciled = useMemo(
         () => reconcileChatBlocks(reduced.blocks, blocksByIdRef.current),

@@ -1,4 +1,4 @@
-import type { ChatBlock, ToolCallBlock, ToolPermission } from '@/chat/types'
+import type { ChatBlock, TeamMentionBlock, ToolCallBlock, ToolPermission } from '@/chat/types'
 import type { TracedMessage } from '@/chat/tracer'
 import { createCliOutputBlock, isCliOutputText, mergeCliOutputBlocks } from '@/chat/reducerCliOutput'
 import { parseMessageAsEvent } from '@/chat/reducerEvents'
@@ -36,6 +36,7 @@ export function reduceTimeline(
         consumedGroupIds: Set<string>
         titleChangesByToolUseId: Map<string, string>
         emittedTitleChangeToolUseIds: Set<string>
+        teamMentionStatusesById?: Map<string, TeamMentionBlock['status']>
     }
 ): { blocks: ChatBlock[]; toolBlocksById: Map<string, ToolCallBlock>; hasReadyEvent: boolean } {
     const blocks: ChatBlock[] = []
@@ -99,7 +100,7 @@ export function reduceTimeline(
                     teamChatId: teamMention.teamChatId,
                     sourceMessageId: teamMention.sourceMessageId,
                     text: stripTeamMentionEnvelope(msg.content.text),
-                    status: 'delivered',
+                    status: context.teamMentionStatusesById?.get(teamMention.requestId) ?? 'delivered',
                     meta: msg.meta
                 })
                 continue

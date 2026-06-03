@@ -7,6 +7,8 @@ export const queryKeys = {
     teamParticipants: (teamChatId: string) => ['team-chat-participants', teamChatId] as const,
     teamMessages: (teamChatId: string) => ['team-messages', teamChatId] as const,
     teamMessagesAround: (teamChatId: string, messageId: string) => ['team-messages-around', teamChatId, messageId] as const,
+    teamMentionRequestsBase: ['team-mention-requests'] as const,
+    teamMentionRequests: (teamChatId: string, sessionIds: string[]) => ['team-mention-requests', teamChatId, ...sessionIds] as const,
     sessionTeamMentions: (sessionId: string) => ['session-team-mentions', sessionId] as const,
     machines: ['machines'] as const,
     machineCodexModels: (machineId: string) => ['machine-codex-models', machineId] as const,

@@ -6,6 +6,7 @@ import { useTeamChat } from '@/hooks/queries/useTeamChat'
 import { useTeamChatActions } from '@/hooks/mutations/useTeamChatActions'
 import { useTeamChatMessages } from '@/hooks/queries/useTeamChatMessages'
 import { useTeamChatParticipants } from '@/hooks/queries/useTeamChatParticipants'
+import { useTeamChatMentionRequests } from '@/hooks/queries/useTeamChatMentionRequests'
 import type { TeamChatMessage } from '@/types/api'
 
 function mergeMessages(base: TeamChatMessage[], extra: TeamChatMessage[]): TeamChatMessage[] {
@@ -22,6 +23,7 @@ export default function TeamChatDetailPage() {
     const { teamChat, isLoading } = useTeamChat(api, teamChatId)
     const { messages } = useTeamChatMessages(api, teamChatId)
     const { participants } = useTeamChatParticipants(api, teamChatId)
+    const { requests: mentionRequests } = useTeamChatMentionRequests(api, teamChatId, participants)
     const [aroundMessages, setAroundMessages] = useState<TeamChatMessage[]>([])
     const currentParticipant = participants.find((participant) => participant.type === 'user') ?? participants[0] ?? null
     const { sendTeamMessage } = useTeamChatActions(api, teamChatId)
@@ -37,6 +39,7 @@ export default function TeamChatDetailPage() {
             teamChat={teamChat}
             messages={mergedMessages}
             participants={participants}
+            mentionRequests={mentionRequests}
             currentParticipantId={currentParticipant?.id ?? null}
             onSend={(text) => {
                 if (!currentParticipant) return

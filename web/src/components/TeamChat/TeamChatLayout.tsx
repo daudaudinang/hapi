@@ -1,4 +1,4 @@
-import type { TeamChat, TeamChatMessage, TeamParticipant } from '@/types/api'
+import type { TeamChat, TeamChatMessage, TeamMentionRequest, TeamParticipant } from '@/types/api'
 import { TeamChatComposer } from './TeamChatComposer'
 import { TeamChatMobileLayout } from './TeamChatMobileLayout'
 import { TeamChatRightPanel } from './TeamChatRightPanel'
@@ -8,6 +8,7 @@ export function TeamChatLayout(props: {
     teamChat: TeamChat | null
     messages: TeamChatMessage[]
     participants: TeamParticipant[]
+    mentionRequests?: TeamMentionRequest[]
     currentParticipantId: string | null
     onSend: (text: string) => void
     onLoadAround: (messageId?: string) => Promise<unknown> | void
@@ -20,8 +21,8 @@ export function TeamChatLayout(props: {
         />
     )
     const timeline = <TeamChatTimeline messages={props.messages} participants={props.participants} onLoadAround={props.onLoadAround} />
-    const memberList = <TeamChatRightPanel participants={props.participants} messages={props.messages} />
-    const mobileMemberList = <TeamChatRightPanel participants={props.participants} messages={props.messages} className="block h-full w-full border-0 lg:hidden" />
+    const memberList = <TeamChatRightPanel participants={props.participants} messages={props.messages} mentionRequests={props.mentionRequests} />
+    const mobileMemberList = <TeamChatRightPanel participants={props.participants} messages={props.messages} mentionRequests={props.mentionRequests} className="block h-full w-full border-0 lg:hidden" />
     const contextPanel = (
         <div className="p-3 text-sm text-[var(--app-hint)]">
             Default context includes goal, decisions, recent updates, reply preview, and files.

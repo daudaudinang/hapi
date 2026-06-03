@@ -208,4 +208,25 @@ describe('reduceTimeline', () => {
         })
     })
 
+    it('renders Team Chat mention status from request state when available', () => {
+        const context = {
+            ...makeContext(),
+            teamMentionStatusesById: new Map([['req-1', 'no_action' as const]])
+        }
+
+        const { blocks } = reduceTimeline([makeUserMessage('[HAPI_TEAM_MENTION]\nhello team mention', {
+            meta: {
+                sentFrom: 'team-chat',
+                teamMentionRequestId: 'req-1',
+                teamChatId: 'team-1',
+                sourceMessageId: 'team-msg-1'
+            }
+        })], context)
+
+        expect(blocks[0]).toMatchObject({
+            kind: 'team-mention',
+            status: 'no_action'
+        })
+    })
+
 })

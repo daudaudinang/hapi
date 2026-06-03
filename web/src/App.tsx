@@ -234,6 +234,25 @@ function AppInner() {
     }, [])
 
     const handleSseEvent = useCallback((event: SyncEvent) => {
+        if (event.type === 'team-mention-updated') {
+            void queryClient.invalidateQueries({ queryKey: queryKeys.sessionTeamMentions(event.sessionId) })
+            void queryClient.invalidateQueries({ queryKey: queryKeys.teamMentionRequestsBase })
+            return
+        }
+        if (event.type === 'team-message-created') {
+            void queryClient.invalidateQueries({ queryKey: queryKeys.teamMessages(event.teamChatId) })
+            void queryClient.invalidateQueries({ queryKey: queryKeys.teamChat(event.teamChatId) })
+            return
+        }
+        if (event.type === 'team-participant-updated') {
+            void queryClient.invalidateQueries({ queryKey: queryKeys.teamParticipants(event.teamChatId) })
+            return
+        }
+        if (event.type === 'team-chat-updated') {
+            void queryClient.invalidateQueries({ queryKey: queryKeys.teamChats })
+            void queryClient.invalidateQueries({ queryKey: queryKeys.teamChat(event.teamChatId) })
+            return
+        }
         if (event.type !== 'messages-invalidated') {
             return
         }
