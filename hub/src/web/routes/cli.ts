@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { PROTOCOL_VERSION } from '@hapi/protocol'
+import { ReportToTeamInputSchema } from '@hapi/protocol/schemas'
 import { configuration } from '../../configuration'
 import { constantTimeEquals } from '../../utils/crypto'
 import { parseAccessToken } from '../../utils/accessToken'
@@ -149,6 +150,41 @@ export function createCliRoutes(getSyncEngine: () => SyncEngine | null): Hono<Cl
         const limit = parsed.data.limit ?? 200
         const messages = engine.getMessagesAfter(resolved.sessionId, { afterSeq: parsed.data.afterSeq, limit })
         return c.json({ messages })
+    })
+
+    app.post('/sessions/:id/team-reports', async (c) => {
+        const engine = getSyncEngine()
+        if (!engine) {
+            return c.json({ error: 'Not ready' }, 503)
+        }
+        const sessionId = c.req.param('id')
+        const namespace = c.get('namespace')
+        const resolved = resolveSessionForNamespace(engine, sessionId, namespace)
+        if (!resolved.ok) {
+            return c.json({ error: resolved.error }, resolved.status)
+        }
+
+        const body = await c.req.json().catch(() => null)
+        const parsed = ReportToTeamInputSchema.safeParse(body)
+        if (!parsed.success) {
+            return c.json({ error: 'Invalid body' }, 400)
+        }
+
+        try {
+            return c.json(engine.reportToTeam({
+                namespace,
+                sourceSessionId: resolved.sessionId,
+                ...parsed.data
+            }), 201)
+        } catch (error) {
+            if (error instanceof Error && (error.message === 'TEAM_REPORT_TOO_LOW_SIGNAL' || error.message === 'TEAM_MENTION_HOP_LIMIT')) {
+                return c.json({ error: error.message }, 400)
+            }
+            if (error instanceof Error && error.message.startsWith('TEAM_')) {
+                return c.json({ error: 'Team Chat resource not found' }, 404)
+            }
+            throw error
+        }
     })
 
     app.post('/machines', async (c) => {

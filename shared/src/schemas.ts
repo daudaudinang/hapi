@@ -293,7 +293,7 @@ export const ReportToTeamInputSchema = z.object({
     files: z.array(z.string().min(1)).default([])
 })
 
-export type ReportToTeamInput = z.infer<typeof ReportToTeamInputSchema>
+export type ReportToTeamInput = z.input<typeof ReportToTeamInputSchema>
 
 export const AttachmentMetadataSchema = z.object({
     id: z.string(),

@@ -36,6 +36,40 @@ describe('Team Chat reports', () => {
         expect(store.teamChats.listPendingMentionRequests('default', tests.sessionId!).map((item) => item.sourceMessageId)).toEqual([report.message.id])
     })
 
+    it('ReportToTeam resolves the author participant from the source session', () => {
+        const { store, service, chat, backend, user, backendSession } = createContext()
+        const source = service.postMessage({ namespace: 'default', teamChatId: chat.id, authorParticipantId: user.id, text: '@Backend fixed?' }).message
+        const request = store.teamChats.listPendingMentionRequests('default', backendSession.id)[0]
+
+        const report = service.reportToTeam({
+            namespace: 'default',
+            teamChatId: chat.id,
+            sourceSessionId: backendSession.id,
+            type: 'done',
+            summary: 'Schema route is fixed',
+            replyToRequestId: request.id
+        })
+
+        expect(report.message.authorParticipantId).toBe(backend.id)
+        expect(report.message.replyToMessageId).toBe(source.id)
+        expect(store.teamChats.getMentionRequest('default', request.id)?.status).toBe('responded')
+    })
+
+    it('prevents a source session from responding to another session mention request', () => {
+        const { store, service, chat, user, backendSession, testsSession } = createContext()
+        service.postMessage({ namespace: 'default', teamChatId: chat.id, authorParticipantId: user.id, text: '@Tests please verify' })
+        const request = store.teamChats.listPendingMentionRequests('default', testsSession.id)[0]
+
+        expect(() => service.reportToTeam({
+            namespace: 'default',
+            teamChatId: chat.id,
+            sourceSessionId: backendSession.id,
+            type: 'done',
+            summary: 'I should not own this request',
+            replyToRequestId: request.id
+        })).toThrow('TEAM_MENTION_NOT_FOUND')
+    })
+
     it('no-action marks mention without posting a report', () => {
         const { store, service, chat, user, backendSession } = createContext()
         service.postMessage({ namespace: 'default', teamChatId: chat.id, authorParticipantId: user.id, text: '@Backend FYI' })

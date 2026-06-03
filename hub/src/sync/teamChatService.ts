@@ -169,7 +169,8 @@ export class TeamChatService {
     reportToTeam(input: {
         namespace: string
         teamChatId: string
-        authorParticipantId: string
+        authorParticipantId?: string
+        sourceSessionId?: string
         type: NonNullable<StoredTeamMessage['reportType']>
         summary: string
         details?: string
@@ -179,7 +180,7 @@ export class TeamChatService {
         files?: string[]
     }) {
         this.requireTeamChat(input.namespace, input.teamChatId)
-        this.requireTeamParticipant(input.namespace, input.teamChatId, input.authorParticipantId)
+        const authorParticipant = this.resolveReportAuthorParticipant(input)
         const text = input.details ? `${input.summary}\n\n${input.details}` : input.summary
         if (/^(ok|okay|noted|thanks|done)$/i.test(text.trim()) && !input.replyToRequestId) {
             throw new Error('TEAM_REPORT_TOO_LOW_SIGNAL')
@@ -188,25 +189,29 @@ export class TeamChatService {
         if (parentRequest && parentRequest.teamChatId !== input.teamChatId) {
             throw new Error('TEAM_MENTION_NOT_FOUND')
         }
+        if (parentRequest && input.sourceSessionId && parentRequest.targetSessionId !== input.sourceSessionId) {
+            throw new Error('TEAM_MENTION_NOT_FOUND')
+        }
         const hopDepth = parentRequest ? parentRequest.hopDepth + 1 : 0
         if (hopDepth > 3) throw new Error('TEAM_MENTION_HOP_LIMIT')
         const replyToMessageId = input.replyToMessageId ?? parentRequest?.sourceMessageId ?? null
+        const participants = this.store.teamChats.listParticipants(input.namespace, input.teamChatId)
+        const parsedMentions = parseTeamMentions(text, participants)
         const message = this.store.teamChats.addMessage({
             namespace: input.namespace,
             teamChatId: input.teamChatId,
-            authorParticipantId: input.authorParticipantId,
+            authorParticipantId: authorParticipant.id,
             text,
             reportType: input.type,
             replyToMessageId,
             replyPreview: replyToMessageId ? this.buildReplyPreview(input.namespace, input.teamChatId, replyToMessageId) : null,
-            mentions: parseTeamMentions(text, this.store.teamChats.listParticipants(input.namespace, input.teamChatId)).map((mention) => ({
+            mentions: parsedMentions.map((mention) => ({
                 participantId: mention.participantId,
                 sessionId: mention.sessionId
             })),
             files: input.files ?? []
         })
 
-        const parsedMentions = parseTeamMentions(text, this.store.teamChats.listParticipants(input.namespace, input.teamChatId))
         for (const mention of parsedMentions) {
             const contextSnapshot = this.buildMentionContextSnapshot(input.namespace, input.teamChatId, message.id, text)
             const request = this.store.teamChats.addMentionRequest({
@@ -240,6 +245,24 @@ export class TeamChatService {
         }
         this.publisher.emit({ type: 'team-message-created', namespace: input.namespace, teamChatId: input.teamChatId, messageId: message.id })
         return { message }
+    }
+
+    private resolveReportAuthorParticipant(input: {
+        namespace: string
+        teamChatId: string
+        authorParticipantId?: string
+        sourceSessionId?: string
+    }): StoredTeamParticipant {
+        if (input.sourceSessionId) {
+            const participant = this.store.teamChats.getActiveSessionParticipant(input.namespace, input.teamChatId, input.sourceSessionId)
+            if (!participant) throw new Error('TEAM_PARTICIPANT_NOT_FOUND')
+            if (input.authorParticipantId && input.authorParticipantId !== participant.id) {
+                throw new Error('TEAM_PARTICIPANT_NOT_FOUND')
+            }
+            return participant
+        }
+        if (!input.authorParticipantId) throw new Error('TEAM_PARTICIPANT_NOT_FOUND')
+        return this.requireTeamParticipant(input.namespace, input.teamChatId, input.authorParticipantId)
     }
 
     markMentionNoAction(input: { namespace: string; sessionId: string; requestId: string }): StoredTeamMentionRequest {

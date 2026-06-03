@@ -7,10 +7,10 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createServer } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { AddressInfo } from "node:net";
-import { z } from "zod";
 import { logger } from "@/ui/logger";
 import { ApiSessionClient } from "@/api/apiSession";
 import { randomUUID } from "node:crypto";
+import { getHapiSessionToolDefinition, HAPI_SESSION_TOOL_NAMES } from "@/mcp/hapiSessionTools";
 
 export async function startHappyServer(client: ApiSessionClient) {
     // Handler that sends title updates via the client
@@ -39,15 +39,12 @@ export async function startHappyServer(client: ApiSessionClient) {
         version: "1.0.0",
     });
 
-    // Avoid TS instantiation depth issues by widening the schema type.
-    const changeTitleInputSchema: z.ZodTypeAny = z.object({
-        title: z.string().describe('The new title for the chat session'),
-    });
+    const changeTitleTool = getHapiSessionToolDefinition('change_title');
 
     mcp.registerTool<any, any>('change_title', {
-        description: 'Change the title of the current chat session',
-        title: 'Change Chat Title',
-        inputSchema: changeTitleInputSchema,
+        description: changeTitleTool.description,
+        title: changeTitleTool.title,
+        inputSchema: changeTitleTool.inputSchema,
     }, async (args: { title: string }) => {
         const response = await handler(args.title);
         logger.debug('[hapiMCP] Response:', response);
@@ -68,6 +65,36 @@ export async function startHappyServer(client: ApiSessionClient) {
                     {
                         type: 'text' as const,
                         text: `Failed to change chat title: ${response.error || 'Unknown error'}`,
+                    },
+                ],
+                isError: true,
+            };
+        }
+    });
+
+    const reportToTeamTool = getHapiSessionToolDefinition('report_to_team');
+    mcp.registerTool<any, any>('report_to_team', {
+        description: reportToTeamTool.description,
+        title: reportToTeamTool.title,
+        inputSchema: reportToTeamTool.inputSchema,
+    }, async (args: Parameters<ApiSessionClient['reportToTeam']>[0]) => {
+        try {
+            const response = await client.reportToTeam(args);
+            return {
+                content: [
+                    {
+                        type: 'text' as const,
+                        text: `Posted Team Chat ${args.type} report (${response.message.id}).`,
+                    },
+                ],
+                isError: false,
+            };
+        } catch (error) {
+            return {
+                content: [
+                    {
+                        type: 'text' as const,
+                        text: `Failed to report to Team Chat: ${error instanceof Error ? error.message : String(error)}`,
                     },
                 ],
                 isError: true,
@@ -106,7 +133,7 @@ export async function startHappyServer(client: ApiSessionClient) {
 
     return {
         url: baseUrl.toString(),
-        toolNames: ['change_title'],
+        toolNames: [...HAPI_SESSION_TOOL_NAMES],
         stop: () => {
             logger.debug('[hapiMCP] Stopping server');
             mcp.close();

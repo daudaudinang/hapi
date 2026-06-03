@@ -134,6 +134,16 @@ export class TeamChatStore {
         return row ? toParticipant(row) : null
     }
 
+    getActiveSessionParticipant(namespace: string, teamChatId: string, sessionId: string): StoredTeamParticipant | null {
+        const row = this.db.prepare(`
+            SELECT * FROM team_participants
+            WHERE namespace = ? AND team_chat_id = ? AND session_id = ? AND type = 'session' AND archived_at IS NULL
+            ORDER BY joined_at DESC
+            LIMIT 1
+        `).get(namespace, teamChatId, sessionId) as TeamParticipantRow | undefined
+        return row ? toParticipant(row) : null
+    }
+
     listParticipants(namespace: string, teamChatId: string): StoredTeamParticipant[] {
         const rows = this.db.prepare(`
             SELECT * FROM team_participants

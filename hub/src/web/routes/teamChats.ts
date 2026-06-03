@@ -4,7 +4,7 @@ import { z } from 'zod'
 
 import type { SyncEngine } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
-import { requireSessionFromParam, requireSyncEngine } from './guards'
+import { requireSession, requireSessionFromParam, requireSyncEngine } from './guards'
 
 const createTeamChatSchema = z.object({
     name: z.string().min(1),
@@ -36,7 +36,8 @@ const updateMentionStatusSchema = z.object({
 })
 
 const reportToTeamRequestSchema = z.object({
-    authorParticipantId: z.string().min(1),
+    authorParticipantId: z.string().min(1).optional(),
+    sourceSessionId: z.string().min(1).optional(),
     type: z.enum(['reply', 'progress', 'done', 'blocked', 'question', 'handoff']),
     summary: z.string().trim().min(3).max(4_000),
     details: z.string().trim().max(20_000).optional(),
@@ -44,6 +45,8 @@ const reportToTeamRequestSchema = z.object({
     replyToRequestId: z.string().optional().nullable(),
     mentions: z.array(z.string().min(1)).default([]),
     files: z.array(z.string().min(1)).default([])
+}).refine((input) => Boolean(input.authorParticipantId || input.sourceSessionId), {
+    message: 'authorParticipantId or sourceSessionId is required'
 })
 
 function teamChatErrorResponse(c: Context<WebAppEnv>, error: unknown): Response {
@@ -133,6 +136,10 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
         const body = await c.req.json().catch(() => null)
         const parsed = reportToTeamRequestSchema.safeParse(body)
         if (!parsed.success) return c.json({ error: 'Invalid body' }, 400)
+        if (parsed.data.sourceSessionId) {
+            const sessionResult = requireSession(c, engine, parsed.data.sourceSessionId)
+            if (sessionResult instanceof Response) return sessionResult
+        }
         try {
             return c.json(engine.reportToTeam({
                 namespace: c.get('namespace'),

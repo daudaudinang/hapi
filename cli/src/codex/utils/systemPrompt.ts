@@ -17,7 +17,7 @@ export const TITLE_INSTRUCTION = trimIdent(`
     Prefer calling functions.hapi_session__change_title.
     If that exact tool name is unavailable, call an equivalent alias such as hapi_session__change_title, mcp__hapi_session__change_title, or hapi_session_change_title.
     If the task focus changes significantly later, call the title tool again with a better title.
-    The HAPI-added MCP server named "hapi_session" provides exactly one tool: change_title. It has no resources, no prompts, no skills, and no other capabilities. Do NOT query hapi_session for anything else. Other provider, user, project, and global tools may also be available.
+    The HAPI-added MCP server named "hapi_session" provides session tools: change_title and report_to_team. Use report_to_team to post structured Team Chat updates when you were asked/tagged in a Team Chat, need to report progress, completion, a blocker, a question, or a handoff. Other provider, user, project, and global tools may also be available.
 `);
 
 /**

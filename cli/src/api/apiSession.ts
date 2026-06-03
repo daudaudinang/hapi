@@ -10,7 +10,8 @@ import { AsyncLock } from '@/utils/lock'
 import type { RawJSONLines } from '@/claude/types'
 import { configuration } from '@/configuration'
 import { AGENT_MESSAGE_PAYLOAD_TYPE } from "@hapi/protocol"
-import type { SessionEndReason } from '@hapi/protocol'
+import type { ReportToTeamInput, SessionEndReason, TeamChatMessage } from '@hapi/protocol'
+import { TeamChatMessageSchema } from '@hapi/protocol/schemas'
 import type { ClientToServerEvents, ServerToClientEvents, Update } from '@hapi/protocol'
 import {
     TerminalClosePayloadSchema,
@@ -37,6 +38,7 @@ import { cleanupUploadDir } from '../modules/common/handlers/uploads'
 import { TerminalManager } from '@/terminal/TerminalManager'
 import { applyVersionedAck } from './versionedUpdate'
 import { buildHubRequestHeaders, buildSocketIoExtraHeaderOptions } from './hubExtraHeaders'
+import { z } from 'zod'
 
 /**
  * XML tags that Claude Code injects as `type:'user'` messages.
@@ -48,6 +50,10 @@ const SYSTEM_INJECTION_PREFIXES = [
     '<local-command-caveat>',
     '<system-reminder>',
 ]
+
+const reportToTeamResponseSchema = z.object({
+    message: TeamChatMessageSchema
+})
 
 /**
  * Returns true if a JSONL message should be classified as a user-role message
@@ -434,6 +440,25 @@ export class ApiSessionClient extends EventEmitter {
             sid: this.sessionId,
             message: content
         })
+    }
+
+    async reportToTeam(input: ReportToTeamInput): Promise<{ message: TeamChatMessage }> {
+        const response = await axios.post(
+            `${configuration.apiUrl}/cli/sessions/${encodeURIComponent(this.sessionId)}/team-reports`,
+            input,
+            {
+                headers: buildHubRequestHeaders({
+                    Authorization: `Bearer ${this.token}`,
+                    'Content-Type': 'application/json'
+                }),
+                timeout: 15_000
+            }
+        )
+        const parsed = reportToTeamResponseSchema.safeParse(response.data)
+        if (!parsed.success) {
+            throw apiValidationError('Invalid /cli/sessions/:id/team-reports response', response)
+        }
+        return parsed.data
     }
 
     sendAgentMessage(body: unknown): void {

@@ -1,9 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 var ioMock = vi.fn()
+var axiosGetMock = vi.fn()
+var axiosPostMock = vi.fn()
 
 vi.mock('socket.io-client', () => ({
     io: (...args: unknown[]) => ioMock(...args)
+}))
+
+vi.mock('axios', () => ({
+    default: {
+        get: (...args: unknown[]) => axiosGetMock(...args),
+        post: (...args: unknown[]) => axiosPostMock(...args)
+    }
 }))
 
 vi.mock('@/api/rpc/RpcHandlerManager', () => ({
@@ -28,6 +37,7 @@ vi.mock('@/terminal/TerminalManager', () => ({
 }))
 
 import { ApiSessionClient, isExternalUserMessage } from './apiSession'
+import { configuration } from '@/configuration'
 import type { Metadata, Session } from './types'
 
 
@@ -133,6 +143,8 @@ describe('ApiSessionClient.updateMetadata', () => {
 
     beforeEach(() => {
         ioMock.mockReset()
+        axiosGetMock.mockReset()
+        axiosPostMock.mockReset()
     })
 
     function makeSocket() {
@@ -187,5 +199,46 @@ describe('ApiSessionClient.updateMetadata', () => {
         await Promise.resolve()
 
         expect(fakeSocket.emitWithAck).not.toHaveBeenCalled()
+    })
+
+    it('posts ReportToTeam through the CLI session-scoped route', async () => {
+        const fakeSocket = makeSocket()
+        ioMock.mockReturnValue(fakeSocket)
+        configuration._setApiUrl('http://hub.test')
+        configuration._setCliApiToken('cli-token')
+        axiosPostMock.mockResolvedValue({
+            data: {
+                message: {
+                    id: 'msg-report',
+                    teamChatId: 'team/1',
+                    seq: 1,
+                    authorParticipantId: 'p1',
+                    text: 'Implemented tests',
+                    reportType: 'done',
+                    replyToMessageId: null,
+                    replyPreview: null,
+                    mentions: [],
+                    files: [],
+                    createdAt: 1
+                }
+            }
+        })
+        const client = new ApiSessionClient('cli-token', makeSession({ path: '/tmp/project', host: 'test-host' }))
+
+        const result = await client.reportToTeam({
+            teamChatId: 'team/1',
+            type: 'done',
+            summary: 'Implemented tests'
+        })
+
+        expect(result.message.id).toBe('msg-report')
+        expect(axiosPostMock).toHaveBeenCalledWith(
+            'http://hub.test/cli/sessions/session-1/team-reports',
+            { teamChatId: 'team/1', type: 'done', summary: 'Implemented tests' },
+            expect.objectContaining({
+                headers: expect.objectContaining({ Authorization: 'Bearer cli-token' }),
+                timeout: 15_000
+            })
+        )
     })
 })

@@ -288,7 +288,8 @@ export class SyncEngine {
     reportToTeam(input: {
         namespace: string
         teamChatId: string
-        authorParticipantId: string
+        authorParticipantId?: string
+        sourceSessionId?: string
         type: NonNullable<StoredTeamMessage['reportType']>
         summary: string
         details?: string
