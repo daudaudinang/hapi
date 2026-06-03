@@ -117,6 +117,15 @@ function getSessionStatus(session: SessionSummary): {
     }
 }
 
+function getSessionDetails(session: SessionSummary): string {
+    return [
+        session.model,
+        session.effort ? `${session.effort} effort` : null,
+        session.todoProgress ? `${session.todoProgress.completed}/${session.todoProgress.total} todo` : null,
+        session.pendingRequestsCount > 0 ? `${session.pendingRequestsCount} request${session.pendingRequestsCount === 1 ? '' : 's'}` : null
+    ].filter((item): item is string => Boolean(item)).join(' · ')
+}
+
 function sortSessionsForPicker(sessions: SessionSummary[]): SessionSummary[] {
     return [...sessions].sort((a, b) => {
         const statusA = getSessionStatus(a)
@@ -247,6 +256,7 @@ export function TeamChatRightPanel(props: {
     mentionRequests?: TeamMentionRequest[]
     availableSessions?: SessionSummary[]
     onAddSession?: (session: SessionSummary, alias: string) => void
+    onOpenSession?: (participant: TeamParticipant) => void
     className?: string
 }) {
     const [isAddingMember, setIsAddingMember] = useState(false)
@@ -398,13 +408,52 @@ export function TeamChatRightPanel(props: {
                     const backingSession = participant.sessionId ? sessionsById.get(participant.sessionId) : null
                     const backingName = backingSession ? getSessionDisplayName(backingSession) : null
                     const secondary = backingName && backingName !== participant.displayName ? backingName : participant.role
-                    return (
-                        <div key={participant.id} className="flex items-center gap-2 rounded-xl border border-[var(--app-border)] p-2">
-                            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: getParticipantAccent(participant.color) }} />
-                            <div className="min-w-0 flex-1">
-                                <div className="truncate text-sm font-medium">@{participant.displayName}</div>
-                                <div className="truncate text-xs text-[var(--app-hint)]">{secondary}</div>
+                    const status = backingSession ? getSessionStatus(backingSession) : null
+                    const details = backingSession ? getSessionDetails(backingSession) : ''
+                    const canOpenSession = participant.type === 'session' && Boolean(participant.sessionId && props.onOpenSession)
+                    const content = (
+                        <>
+                            <div className="relative shrink-0">
+                                <span className="block h-3 w-3 rounded-full" style={{ backgroundColor: getParticipantAccent(participant.color) }} />
+                                {status ? (
+                                    <span
+                                        aria-hidden="true"
+                                        className={cn(
+                                            'absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full ring-2 ring-[var(--app-card-bg,var(--app-bg))]',
+                                            status.dotClassName,
+                                            backingSession?.thinking ? 'animate-pulse' : ''
+                                        )}
+                                    />
+                                ) : null}
                             </div>
+                            <div className="min-w-0 flex-1">
+                                <div className="truncate text-sm font-medium text-[var(--app-fg)]">@{participant.displayName}</div>
+                                <div className="truncate text-xs text-[var(--app-hint)]">{secondary}</div>
+                                {details ? <div className="truncate text-[11px] text-[var(--app-hint)]">{details}</div> : null}
+                            </div>
+                            {status ? (
+                                <span className={cn('shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-medium', status.pillClassName)}>
+                                    {status.label}
+                                </span>
+                            ) : null}
+                        </>
+                    )
+                    if (canOpenSession) {
+                        return (
+                            <button
+                                key={participant.id}
+                                type="button"
+                                aria-label={`Open @${participant.displayName} direct chat${status ? ` ${status.label}` : ''}`}
+                                onClick={() => props.onOpenSession?.(participant)}
+                                className="flex w-full items-center gap-2 rounded-xl border border-[var(--app-border)] bg-[var(--app-card-bg,var(--app-bg))] p-2 text-left transition-colors hover:border-[var(--app-link)] hover:bg-[var(--app-secondary-bg)] focus:outline-none focus:ring-2 focus:ring-[var(--app-link)]/40"
+                            >
+                                {content}
+                            </button>
+                        )
+                    }
+                    return (
+                        <div key={participant.id} className="flex items-center gap-2 rounded-xl border border-[var(--app-border)] bg-[var(--app-card-bg,var(--app-bg))] p-2">
+                            {content}
                         </div>
                     )
                 })}

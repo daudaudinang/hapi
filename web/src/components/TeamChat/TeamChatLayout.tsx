@@ -17,6 +17,7 @@ export function TeamChatLayout(props: {
     onOpenEditorMode?: () => void
     availableSessions?: SessionSummary[]
     onAddSession?: (session: SessionSummary, alias: string) => void
+    onOpenSession?: (participant: TeamParticipant) => void
 }) {
     const composer = (
         <TeamChatComposer
@@ -32,6 +33,7 @@ export function TeamChatLayout(props: {
         mentionRequests={props.mentionRequests}
         availableSessions={props.availableSessions}
         onAddSession={props.onAddSession}
+        onOpenSession={props.onOpenSession}
     />
     const mobileMemberList = <TeamChatRightPanel
         participants={props.participants}
@@ -39,6 +41,7 @@ export function TeamChatLayout(props: {
         mentionRequests={props.mentionRequests}
         availableSessions={props.availableSessions}
         onAddSession={props.onAddSession}
+        onOpenSession={props.onOpenSession}
         className="block h-full w-full border-0 lg:hidden"
     />
     const contextPanel = (

@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, type ReactNode } from 'react'
 
 type ActiveChatSessionContextValue = {
     setActiveEditorSessionId: (sessionId: string | null) => void
+    setActiveOverlaySessionId?: (sessionId: string | null) => void
 }
 
 const noop = () => {}
@@ -29,4 +30,15 @@ export function useRegisterActiveEditorSession(sessionId: string | null): void {
             setActiveEditorSessionId(null)
         }
     }, [sessionId, setActiveEditorSessionId])
+}
+
+export function useRegisterActiveOverlaySession(sessionId: string | null): void {
+    const { setActiveOverlaySessionId } = useContext(ActiveChatSessionContext)
+
+    useEffect(() => {
+        setActiveOverlaySessionId?.(sessionId)
+        return () => {
+            setActiveOverlaySessionId?.(null)
+        }
+    }, [sessionId, setActiveOverlaySessionId])
 }

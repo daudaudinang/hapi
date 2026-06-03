@@ -63,3 +63,36 @@ it('prevents duplicate aliases in the Team Chat picker', () => {
     expect(screen.getByText('Alias already used in this Team Chat.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Add to Team/i })).toBeDisabled()
 })
+
+it('shows live session status in members and opens the direct chat for a member', () => {
+    const onOpenSession = vi.fn()
+    render(<TeamChatRightPanel
+        participants={[{ id: 'p2', teamChatId: 'team-1', type: 'session', sessionId: 's2', displayName: 'UI', role: 'frontend', color: '#a78bfa', joinedAt: 1 }]}
+        availableSessions={[
+            {
+                id: 's2',
+                active: true,
+                thinking: true,
+                activeAt: 2,
+                updatedAt: 4,
+                metadata: { path: '/repo/hapi', machineId: 'machine-a', name: 'Frontend polish' },
+                todoProgress: { completed: 2, total: 5 },
+                pendingRequestsCount: 0,
+                model: 'gpt-5.4',
+                effort: 'high'
+            }
+        ]}
+        onOpenSession={onOpenSession}
+    />)
+
+    const memberButton = screen.getByRole('button', { name: /Open @UI direct chat.*Working/i })
+    expect(memberButton).toHaveTextContent('@UI')
+    expect(memberButton).toHaveTextContent('Frontend polish')
+    expect(memberButton).toHaveTextContent('Working')
+    expect(memberButton).toHaveTextContent('gpt-5.4')
+    expect(memberButton).toHaveTextContent('2/5 todo')
+
+    fireEvent.click(memberButton)
+
+    expect(onOpenSession).toHaveBeenCalledWith(expect.objectContaining({ id: 'p2', sessionId: 's2', displayName: 'UI' }))
+})

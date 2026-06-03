@@ -122,7 +122,8 @@ function AppInner() {
     const sessionMatch = matchRoute({ to: '/sessions/$sessionId' })
     const selectedSessionId = sessionMatch && sessionMatch.sessionId !== 'new' ? sessionMatch.sessionId : null
     const [activeEditorSessionId, setActiveEditorSessionId] = useState<string | null>(null)
-    const activeChatSessionId = selectedSessionId ?? (pathname === '/editor' ? activeEditorSessionId : null)
+    const [activeOverlaySessionId, setActiveOverlaySessionId] = useState<string | null>(null)
+    const activeChatSessionId = selectedSessionId ?? activeOverlaySessionId ?? (pathname === '/editor' ? activeEditorSessionId : null)
     const { isSyncing, startSync, endSync } = useSyncingState()
     const [sseDisconnected, setSseDisconnected] = useState(false)
     const [sseDisconnectReason, setSseDisconnectReason] = useState<string | null>(null)
@@ -376,7 +377,7 @@ function AppInner() {
 
     return (
         <AppContextProvider value={{ api, token, baseUrl }}>
-            <ActiveChatSessionProvider value={{ setActiveEditorSessionId }}>
+            <ActiveChatSessionProvider value={{ setActiveEditorSessionId, setActiveOverlaySessionId }}>
                 <VoiceProvider>
                     <SyncingBanner isSyncing={isSyncing} />
                     <ReconnectingBanner
