@@ -88,4 +88,46 @@ describe('TeamChatStore', () => {
             hopDepth: 1
         })).toThrow()
     })
+
+    it('rejects cross-namespace writes for participants, messages, and mention requests', () => {
+        const store = new Store(':memory:')
+        const sessionA = store.sessions.getOrCreateSession('session-a', { path: '/repo-a' }, null, 'ns-a')
+        const sessionB = store.sessions.getOrCreateSession('session-b', { path: '/repo-b' }, null, 'ns-b')
+        const chatA = store.teamChats.createTeamChat({ namespace: 'ns-a', name: 'A' })
+        const userA = store.teamChats.addParticipant({ namespace: 'ns-a', teamChatId: chatA.id, type: 'user', displayName: 'A', color: '#34d399', role: 'general' })
+        const messageA = store.teamChats.addMessage({ namespace: 'ns-a', teamChatId: chatA.id, authorParticipantId: userA.id, text: 'hello', mentions: [] })
+
+        expect(() => store.teamChats.addParticipant({ namespace: 'ns-b', teamChatId: chatA.id, type: 'session', sessionId: sessionB.id, displayName: 'B', color: '#60a5fa', role: 'backend' })).toThrow('TEAM_CHAT_NOT_FOUND')
+        expect(() => store.teamChats.addMessage({ namespace: 'ns-b', teamChatId: chatA.id, authorParticipantId: userA.id, text: 'leak', mentions: [] })).toThrow('TEAM_CHAT_NOT_FOUND')
+        expect(() => store.teamChats.addMentionRequest({
+            namespace: 'ns-b',
+            teamChatId: chatA.id,
+            sourceMessageId: messageA.id,
+            targetSessionId: sessionB.id,
+            contextSnapshot: {
+                originalText: messageA.text,
+                sharedContext: { decisions: [], openQuestions: [], relevantFiles: [] },
+                attachedFiles: [],
+                recentUpdates: []
+            },
+            hopDepth: 1
+        })).toThrow('TEAM_CHAT_NOT_FOUND')
+        expect(() => store.teamChats.addMentionRequest({
+            namespace: 'ns-a',
+            teamChatId: chatA.id,
+            sourceMessageId: messageA.id,
+            targetSessionId: sessionB.id,
+            contextSnapshot: {
+                originalText: messageA.text,
+                sharedContext: { decisions: [], openQuestions: [], relevantFiles: [] },
+                attachedFiles: [],
+                recentUpdates: []
+            },
+            hopDepth: 1
+        })).toThrow('TEAM_SESSION_NOT_FOUND')
+        expect(store.teamChats.listTeamChats('ns-b')).toHaveLength(0)
+        expect(store.teamChats.getMessages('ns-b', chatA.id, 10)).toEqual([])
+        expect(sessionA.namespace).toBe('ns-a')
+    })
+
 })

@@ -105,6 +105,10 @@ export class TeamChatStore {
         role: StoredTeamParticipant['role']
         color: string
     }): StoredTeamParticipant {
+        this.requireTeamChat(input.namespace, input.teamChatId)
+        if (input.sessionId) {
+            this.requireSession(input.namespace, input.sessionId)
+        }
         const id = randomUUID()
         const now = Date.now()
         this.db.prepare(`
@@ -150,6 +154,11 @@ export class TeamChatStore {
         mentions: unknown[]
         files?: string[]
     }): StoredTeamMessage {
+        this.requireTeamChat(input.namespace, input.teamChatId)
+        this.requireParticipant(input.namespace, input.teamChatId, input.authorParticipantId)
+        if (input.replyToMessageId) {
+            this.requireMessage(input.namespace, input.teamChatId, input.replyToMessageId)
+        }
         const id = randomUUID()
         const now = Date.now()
         const seqRow = this.db.prepare(
@@ -220,6 +229,12 @@ export class TeamChatStore {
         hopDepth: number
         parentRequestId?: string | null
     }): StoredTeamMentionRequest {
+        this.requireTeamChat(input.namespace, input.teamChatId)
+        this.requireMessage(input.namespace, input.teamChatId, input.sourceMessageId)
+        this.requireSession(input.namespace, input.targetSessionId)
+        if (input.parentRequestId) {
+            this.requireMentionRequest(input.namespace, input.teamChatId, input.parentRequestId)
+        }
         const id = randomUUID()
         const now = Date.now()
         this.db.prepare(`
@@ -294,6 +309,40 @@ export class TeamChatStore {
     archiveParticipant(namespace: string, teamChatId: string, participantId: string): void {
         this.db.prepare('UPDATE team_participants SET archived_at = ? WHERE namespace = ? AND team_chat_id = ? AND id = ?')
             .run(Date.now(), namespace, teamChatId, participantId)
+    }
+
+    private requireTeamChat(namespace: string, teamChatId: string): void {
+        const row = this.db.prepare('SELECT id FROM team_chats WHERE namespace = ? AND id = ?').get(namespace, teamChatId) as { id: string } | undefined
+        if (!row) throw new Error('TEAM_CHAT_NOT_FOUND')
+    }
+
+    private requireParticipant(namespace: string, teamChatId: string, participantId: string): void {
+        const row = this.db.prepare(`
+            SELECT id FROM team_participants
+            WHERE namespace = ? AND team_chat_id = ? AND id = ? AND archived_at IS NULL
+        `).get(namespace, teamChatId, participantId) as { id: string } | undefined
+        if (!row) throw new Error('TEAM_PARTICIPANT_NOT_FOUND')
+    }
+
+    private requireMessage(namespace: string, teamChatId: string, messageId: string): void {
+        const row = this.db.prepare(`
+            SELECT id FROM team_messages
+            WHERE namespace = ? AND team_chat_id = ? AND id = ?
+        `).get(namespace, teamChatId, messageId) as { id: string } | undefined
+        if (!row) throw new Error('TEAM_MESSAGE_NOT_FOUND')
+    }
+
+    private requireMentionRequest(namespace: string, teamChatId: string, requestId: string): void {
+        const row = this.db.prepare(`
+            SELECT id FROM team_mention_requests
+            WHERE namespace = ? AND team_chat_id = ? AND id = ?
+        `).get(namespace, teamChatId, requestId) as { id: string } | undefined
+        if (!row) throw new Error('TEAM_MENTION_NOT_FOUND')
+    }
+
+    private requireSession(namespace: string, sessionId: string): void {
+        const row = this.db.prepare('SELECT id FROM sessions WHERE namespace = ? AND id = ?').get(namespace, sessionId) as { id: string } | undefined
+        if (!row) throw new Error('TEAM_SESSION_NOT_FOUND')
     }
 }
 
