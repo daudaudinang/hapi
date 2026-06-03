@@ -210,7 +210,7 @@ export class TeamChatStore {
 
     getMessagesAround(input: { namespace: string; teamChatId: string; messageId: string; before: number; after: number }): { messages: StoredTeamMessage[] } {
         const anchor = this.getMessage(input.namespace, input.messageId)
-        if (!anchor) return { messages: [] }
+        if (!anchor || anchor.teamChatId !== input.teamChatId) return { messages: [] }
         const rows = this.db.prepare(`
             SELECT * FROM team_messages
             WHERE namespace = ? AND team_chat_id = ? AND seq BETWEEN ? AND ?

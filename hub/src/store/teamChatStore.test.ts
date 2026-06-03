@@ -130,4 +130,17 @@ describe('TeamChatStore', () => {
         expect(sessionA.namespace).toBe('ns-a')
     })
 
+
+    it('does not use a message from another Team Chat as an around-page anchor', () => {
+        const store = new Store(':memory:')
+        const chatA = store.teamChats.createTeamChat({ namespace: 'default', name: 'A' })
+        const chatB = store.teamChats.createTeamChat({ namespace: 'default', name: 'B' })
+        const userA = store.teamChats.addParticipant({ namespace: 'default', teamChatId: chatA.id, type: 'user', displayName: 'A', color: '#34d399', role: 'general' })
+        const userB = store.teamChats.addParticipant({ namespace: 'default', teamChatId: chatB.id, type: 'user', displayName: 'B', color: '#60a5fa', role: 'general' })
+        store.teamChats.addMessage({ namespace: 'default', teamChatId: chatA.id, authorParticipantId: userA.id, text: 'local', mentions: [] })
+        const foreign = store.teamChats.addMessage({ namespace: 'default', teamChatId: chatB.id, authorParticipantId: userB.id, text: 'foreign', mentions: [] })
+
+        expect(store.teamChats.getMessagesAround({ namespace: 'default', teamChatId: chatA.id, messageId: foreign.id, before: 5, after: 5 }).messages).toEqual([])
+    })
+
 })
