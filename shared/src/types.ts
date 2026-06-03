@@ -4,6 +4,7 @@ export type {
     AgentStateRequest,
     AttachmentMetadata,
     DecryptedMessage,
+    MarkTeamMentionNoActionInput,
     Metadata,
     ReportToTeamInput,
     Session,

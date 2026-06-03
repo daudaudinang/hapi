@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { PROTOCOL_VERSION } from '@hapi/protocol'
-import { ReportToTeamInputSchema } from '@hapi/protocol/schemas'
+import { MarkTeamMentionNoActionInputSchema, ReportToTeamInputSchema } from '@hapi/protocol/schemas'
 import { configuration } from '../../configuration'
 import { constantTimeEquals } from '../../utils/crypto'
 import { parseAccessToken } from '../../utils/accessToken'
@@ -182,6 +182,39 @@ export function createCliRoutes(getSyncEngine: () => SyncEngine | null): Hono<Cl
             }
             if (error instanceof Error && error.message.startsWith('TEAM_')) {
                 return c.json({ error: 'Team Chat resource not found' }, 404)
+            }
+            throw error
+        }
+    })
+
+    app.post('/sessions/:id/team-mentions/:requestId/no-action', (c) => {
+        const engine = getSyncEngine()
+        if (!engine) {
+            return c.json({ error: 'Not ready' }, 503)
+        }
+        const sessionId = c.req.param('id')
+        const namespace = c.get('namespace')
+        const resolved = resolveSessionForNamespace(engine, sessionId, namespace)
+        if (!resolved.ok) {
+            return c.json({ error: resolved.error }, resolved.status)
+        }
+
+        const parsed = MarkTeamMentionNoActionInputSchema.safeParse({ requestId: c.req.param('requestId') })
+        if (!parsed.success) {
+            return c.json({ error: 'Invalid request id' }, 400)
+        }
+
+        try {
+            const request = engine.updateTeamMentionStatus({
+                namespace,
+                sessionId: resolved.sessionId,
+                requestId: parsed.data.requestId,
+                status: 'no_action'
+            })
+            return c.json({ request })
+        } catch (error) {
+            if (error instanceof Error && error.message.startsWith('TEAM_')) {
+                return c.json({ error: 'Team mention not found' }, 404)
             }
             throw error
         }

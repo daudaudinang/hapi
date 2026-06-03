@@ -6,7 +6,7 @@ import { shouldIncludeCoAuthoredBy } from "./claudeSettings";
  */
 const BASE_SYSTEM_PROMPT = (() => trimIdent(`
     ALWAYS when you start a new chat - you must call a tool "mcp__hapi_session__change_title" to set a chat title. When you think chat title is not relevant anymore - call the tool again to change it. When chat name is too generic and you have a change to make it more specific - call the tool again to change it. This title is needed to easily find the chat in the future. Help human.
-    The HAPI-added MCP server named "hapi_session" provides session tools: change_title and report_to_team. Use report_to_team to post structured Team Chat updates when you were asked/tagged in a Team Chat, need to report progress, completion, a blocker, a question, or a handoff. Other provider, user, project, and global tools may also be available.
+    The HAPI-added MCP server named "hapi_session" provides session tools: change_title, report_to_team, and mark_team_mention_no_action. Use report_to_team to post structured Team Chat updates when you were asked/tagged in a Team Chat, need to report progress, completion, a blocker, a question, or a handoff. Use mark_team_mention_no_action when a tagged Team mention is seen but does not need a reply. Other provider, user, project, and global tools may also be available.
 `))();
 
 /**

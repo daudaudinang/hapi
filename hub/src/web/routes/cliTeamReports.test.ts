@@ -74,3 +74,54 @@ describe('CLI Team Chat report routes', () => {
         }])
     })
 })
+
+    it('marks a Team mention no-action through the authenticated source session', async () => {
+        const calls: unknown[] = []
+        const engine = {
+            resolveSessionAccess: (sessionId: string, namespace: string) => ({
+                ok: true,
+                sessionId,
+                session: { id: sessionId, namespace }
+            }),
+            updateTeamMentionStatus: (input: unknown) => {
+                calls.push(input)
+                return {
+                    id: 'req-1',
+                    teamChatId: 'team-1',
+                    sourceMessageId: 'msg-1',
+                    targetSessionId: 'session-1',
+                    status: 'no_action',
+                    contextSnapshot: {
+                        originalText: '@Backend check this',
+                        sharedContext: { goal: '', decisions: [], openQuestions: [] },
+                        attachedFiles: []
+                    },
+                    hopDepth: 0,
+                    createdAt: 1,
+                    resolvedAt: 2
+                }
+            }
+        }
+        const app = createApp(engine)
+
+        const response = await app.request('/cli/sessions/session-1/team-mentions/req-1/no-action', {
+            method: 'POST',
+            headers: {
+                authorization: 'Bearer cli-test-token:ns-a'
+            }
+        })
+
+        expect(response.status).toBe(200)
+        expect(calls).toEqual([{
+            namespace: 'ns-a',
+            sessionId: 'session-1',
+            requestId: 'req-1',
+            status: 'no_action'
+        }])
+        await expect(response.json()).resolves.toMatchObject({
+            request: {
+                id: 'req-1',
+                status: 'no_action'
+            }
+        })
+    })

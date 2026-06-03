@@ -20,7 +20,7 @@ export function TeamChatLayout(props: {
             onSend={props.onSend}
         />
     )
-    const timeline = <TeamChatTimeline messages={props.messages} participants={props.participants} onLoadAround={props.onLoadAround} />
+    const timeline = <TeamChatTimeline messages={props.messages} participants={props.participants} mentionRequests={props.mentionRequests} onLoadAround={props.onLoadAround} />
     const memberList = <TeamChatRightPanel participants={props.participants} messages={props.messages} mentionRequests={props.mentionRequests} />
     const mobileMemberList = <TeamChatRightPanel participants={props.participants} messages={props.messages} mentionRequests={props.mentionRequests} className="block h-full w-full border-0 lg:hidden" />
     const contextPanel = (

@@ -19,16 +19,19 @@ export type AutoApprovalRuleSet = {
 const AUTO_APPROVE_TOOL_NAME_HINTS = [
     'change_title',
     'report_to_team',
+    'mark_team_mention_no_action',
     'happy__change_title',
     'happy__report_to_team',
+    'happy__mark_team_mention_no_action',
     'hapi_change_title',  // OpenCode MCP tool pattern
     'hapi_report_to_team',
+    'hapi_mark_team_mention_no_action',
     'geminireasoning',
     'codexreasoning',
     'think',
     'save_memory'
 ];
-const AUTO_APPROVE_TOOL_ID_HINTS = ['change_title', 'report_to_team', 'save_memory'];
+const AUTO_APPROVE_TOOL_ID_HINTS = ['change_title', 'report_to_team', 'mark_team_mention_no_action', 'save_memory'];
 const AUTO_APPROVE_WRITE_TOOL_HINTS = ['write', 'edit', 'create', 'delete', 'patch', 'fs-edit'];
 
 export function resolveToolAutoApprovalDecision(

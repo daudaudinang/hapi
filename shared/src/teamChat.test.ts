@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import {
+    MarkTeamMentionNoActionInputSchema,
     ReportToTeamInputSchema,
     SyncEventSchema,
     TeamChatMessageSchema,
@@ -72,6 +73,14 @@ describe('Team Chat schemas', () => {
         })
 
         expect(parsed.type).toBe('team-message-created')
+    })
+
+    it('parses mark-team-mention-no-action tool input', () => {
+        const parsed = MarkTeamMentionNoActionInputSchema.parse({
+            requestId: 'req-1'
+        })
+
+        expect(parsed).toEqual({ requestId: 'req-1' })
     })
 
     it('parses report-to-team tool input with safe defaults', () => {

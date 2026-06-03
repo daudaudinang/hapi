@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { HAPI_SESSION_TOOL_DEFINITIONS, HAPI_SESSION_TOOL_NAMES } from './hapiSessionTools'
 
 describe('HAPI session MCP tools', () => {
-    it('exposes title and ReportToTeam tools', () => {
-        expect(HAPI_SESSION_TOOL_NAMES).toEqual(['change_title', 'report_to_team'])
+    it('exposes title, ReportToTeam, and no-action tools', () => {
+        expect(HAPI_SESSION_TOOL_NAMES).toEqual(['change_title', 'report_to_team', 'mark_team_mention_no_action'])
     })
 
     it('validates ReportToTeam input with protocol defaults', () => {
@@ -24,3 +24,12 @@ describe('HAPI session MCP tools', () => {
         })
     })
 })
+
+
+    it('validates mark_team_mention_no_action input', () => {
+        const noActionTool = HAPI_SESSION_TOOL_DEFINITIONS.find((tool) => tool.name === 'mark_team_mention_no_action')
+
+        const parsed = noActionTool?.inputSchema.parse({ requestId: 'req-1' })
+
+        expect(parsed).toEqual({ requestId: 'req-1' })
+    })

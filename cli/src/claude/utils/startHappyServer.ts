@@ -102,6 +102,36 @@ export async function startHappyServer(client: ApiSessionClient) {
         }
     });
 
+    const markNoActionTool = getHapiSessionToolDefinition('mark_team_mention_no_action');
+    mcp.registerTool<any, any>('mark_team_mention_no_action', {
+        description: markNoActionTool.description,
+        title: markNoActionTool.title,
+        inputSchema: markNoActionTool.inputSchema,
+    }, async (args: Parameters<ApiSessionClient['markTeamMentionNoAction']>[0]) => {
+        try {
+            const response = await client.markTeamMentionNoAction(args);
+            return {
+                content: [
+                    {
+                        type: 'text' as const,
+                        text: `Marked Team mention ${response.request.id} as no action needed.`,
+                    },
+                ],
+                isError: false,
+            };
+        } catch (error) {
+            return {
+                content: [
+                    {
+                        type: 'text' as const,
+                        text: `Failed to mark Team mention no-action: ${error instanceof Error ? error.message : String(error)}`,
+                    },
+                ],
+                isError: true,
+            };
+        }
+    });
+
     const transport = new StreamableHTTPServerTransport({
         // NOTE: Returning session id here will result in claude
         // sdk spawn to fail with `Invalid Request: Server already initialized`

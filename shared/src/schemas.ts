@@ -295,6 +295,12 @@ export const ReportToTeamInputSchema = z.object({
 
 export type ReportToTeamInput = z.input<typeof ReportToTeamInputSchema>
 
+export const MarkTeamMentionNoActionInputSchema = z.object({
+    requestId: z.string().min(1)
+})
+
+export type MarkTeamMentionNoActionInput = z.input<typeof MarkTeamMentionNoActionInputSchema>
+
 export const AttachmentMetadataSchema = z.object({
     id: z.string(),
     filename: z.string(),

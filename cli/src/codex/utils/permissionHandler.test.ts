@@ -69,6 +69,23 @@ describe('CodexPermissionHandler', () => {
         });
     });
 
+    it('auto-approves mark_team_mention_no_action tools in default mode', async () => {
+        const { handler, getAgentState } = createHarness('default');
+
+        await expect(handler.handleToolCall('perm-1', 'mcp__hapi_session__mark_team_mention_no_action', { requestId: 'req-1' })).resolves.toEqual({
+            decision: 'approved'
+        });
+
+        expect(getAgentState().requests).toEqual({});
+        expect(getAgentState().completedRequests).toMatchObject({
+            'perm-1': {
+                tool: 'mcp__hapi_session__mark_team_mention_no_action',
+                status: 'approved',
+                decision: 'approved'
+            }
+        });
+    });
+
     it('auto-approves yolo requests for the session', async () => {
         const { handler, getAgentState } = createHarness('yolo');
 

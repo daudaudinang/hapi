@@ -66,6 +66,7 @@ export function HappyUserMessage() {
                     onPostUpdate={() => { window.location.href = `/team-chats/${encodeURIComponent(teamMention.teamChatId)}` }}
                     onViewOriginal={() => { window.location.href = `/team-chats/${encodeURIComponent(teamMention.teamChatId)}` }}
                     onNoAction={() => { void ctx.api.updateTeamMentionStatus(ctx.sessionId, teamMention.requestId, 'no_action').catch(() => undefined) }}
+                    onSeen={() => { void ctx.api.updateTeamMentionStatus(ctx.sessionId, teamMention.requestId, 'seen').catch(() => undefined) }}
                 />
             </MessagePrimitive.Root>
         )

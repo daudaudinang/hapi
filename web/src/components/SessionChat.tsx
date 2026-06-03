@@ -15,11 +15,12 @@ import type { Suggestion } from '@/hooks/useActiveSuggestions'
 import { normalizeDecryptedMessage } from '@/chat/normalize'
 import { reduceChatBlocks } from '@/chat/reducer'
 import { reconcileChatBlocks } from '@/chat/reconcile'
-import { buildConversationOutline } from '@/chat/outline'
+import { buildConversationOutline, getConversationMessageAnchorId } from '@/chat/outline'
 import { isQueuedForInvocation } from '@/lib/messages'
 import { HappyComposer } from '@/components/AssistantChat/HappyComposer'
 import { HappyThread } from '@/components/AssistantChat/HappyThread'
 import { QueuedMessagesBar } from '@/components/AssistantChat/QueuedMessagesBar'
+import { TeamMentionQueueBar } from '@/components/AssistantChat/TeamMentionQueueBar'
 import { useHappyRuntime } from '@/lib/assistant-runtime'
 import { createAttachmentAdapter } from '@/lib/attachmentAdapter'
 import { useTranslation } from '@/lib/use-translation'
@@ -311,6 +312,17 @@ export function SessionChat(props: {
         [props.session]
     )
 
+    const handleReviewTeamMention = useCallback((requestId: string) => {
+        const targetBlock = reconciled.blocks.find((block) => block.kind === 'team-mention' && block.requestId === requestId)
+        if (!targetBlock) return
+        const element = document.getElementById(getConversationMessageAnchorId(`team-mention:${targetBlock.id}`))
+        element?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, [reconciled.blocks])
+
+    const handleOpenTeamChatFromQueue = useCallback((teamChatId: string) => {
+        void navigate({ to: '/team-chats/$teamChatId', params: { teamChatId } })
+    }, [navigate])
+
     // Permission mode change handler
     const handlePermissionModeChange = useCallback(async (mode: PermissionMode) => {
         try {
@@ -532,6 +544,14 @@ export function SessionChat(props: {
                             </div>
                         </div>
                     ) : null}
+
+                    <div className="px-3">
+                        <TeamMentionQueueBar
+                            requests={teamMentionRequests}
+                            onReviewFirst={handleReviewTeamMention}
+                            onOpenTeamChat={handleOpenTeamChatFromQueue}
+                        />
+                    </div>
 
                     <div className="px-3">
                         <QueuedMessagesBar sessionId={props.session.id} />

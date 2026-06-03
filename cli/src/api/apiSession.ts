@@ -10,8 +10,8 @@ import { AsyncLock } from '@/utils/lock'
 import type { RawJSONLines } from '@/claude/types'
 import { configuration } from '@/configuration'
 import { AGENT_MESSAGE_PAYLOAD_TYPE } from "@hapi/protocol"
-import type { ReportToTeamInput, SessionEndReason, TeamChatMessage } from '@hapi/protocol'
-import { TeamChatMessageSchema } from '@hapi/protocol/schemas'
+import type { MarkTeamMentionNoActionInput, ReportToTeamInput, SessionEndReason, TeamChatMessage, TeamMentionRequest } from '@hapi/protocol'
+import { TeamChatMessageSchema, TeamMentionRequestSchema } from '@hapi/protocol/schemas'
 import type { ClientToServerEvents, ServerToClientEvents, Update } from '@hapi/protocol'
 import {
     TerminalClosePayloadSchema,
@@ -53,6 +53,10 @@ const SYSTEM_INJECTION_PREFIXES = [
 
 const reportToTeamResponseSchema = z.object({
     message: TeamChatMessageSchema
+})
+
+const markTeamMentionNoActionResponseSchema = z.object({
+    request: TeamMentionRequestSchema
 })
 
 /**
@@ -457,6 +461,25 @@ export class ApiSessionClient extends EventEmitter {
         const parsed = reportToTeamResponseSchema.safeParse(response.data)
         if (!parsed.success) {
             throw apiValidationError('Invalid /cli/sessions/:id/team-reports response', response)
+        }
+        return parsed.data
+    }
+
+    async markTeamMentionNoAction(input: MarkTeamMentionNoActionInput): Promise<{ request: TeamMentionRequest }> {
+        const response = await axios.post(
+            `${configuration.apiUrl}/cli/sessions/${encodeURIComponent(this.sessionId)}/team-mentions/${encodeURIComponent(input.requestId)}/no-action`,
+            {},
+            {
+                headers: buildHubRequestHeaders({
+                    Authorization: `Bearer ${this.token}`,
+                    'Content-Type': 'application/json'
+                }),
+                timeout: 15_000
+            }
+        )
+        const parsed = markTeamMentionNoActionResponseSchema.safeParse(response.data)
+        if (!parsed.success) {
+            throw apiValidationError('Invalid /cli/sessions/:id/team-mentions/:requestId/no-action response', response)
         }
         return parsed.data
     }

@@ -4,6 +4,7 @@ import type { Machine, Session } from '@/types/api'
 import type { ApiClient } from '@/api/client'
 import { isTelegramApp } from '@/hooks/useTelegram'
 import { useMachines } from '@/hooks/queries/useMachines'
+import { useTeamChats } from '@/hooks/queries/useTeamChats'
 import { useSessionActions } from '@/hooks/mutations/useSessionActions'
 import { SessionActionMenu } from '@/components/SessionActionMenu'
 import { RenameSessionDialog } from '@/components/RenameSessionDialog'
@@ -181,6 +182,8 @@ export function SessionHeader(props: {
     const [archiveOpen, setArchiveOpen] = useState(false)
     const [deleteOpen, setDeleteOpen] = useState(false)
     const [creatingTeamChat, setCreatingTeamChat] = useState(false)
+    const [teamMenuOpen, setTeamMenuOpen] = useState(false)
+    const [addingTeamChatId, setAddingTeamChatId] = useState<string | null>(null)
 
     const { archiveSession, renameSession, deleteSession, isPending } = useSessionActions(
         api,
@@ -189,6 +192,7 @@ export function SessionHeader(props: {
     )
 
     const { machines } = useMachines(api, true)
+    const { teamChats } = useTeamChats(api)
 
     const handleDelete = async () => {
         await deleteSession()
@@ -224,11 +228,35 @@ export function SessionHeader(props: {
                 role: 'general',
                 color: '#60a5fa'
             })
+            setTeamMenuOpen(false)
             navigate({ to: '/team-chats/$teamChatId', params: { teamChatId: response.teamChat.id } })
         } finally {
             setCreatingTeamChat(false)
         }
     }, [api, creatingTeamChat, navigate, session.id, session.metadata?.path, title])
+
+    const handleAddSessionToTeamChat = useCallback(async (teamChatId: string) => {
+        if (!api || addingTeamChatId) return
+        setAddingTeamChatId(teamChatId)
+        try {
+            await api.addTeamParticipant(teamChatId, {
+                type: 'session',
+                sessionId: session.id,
+                displayName: title,
+                role: 'general',
+                color: '#60a5fa'
+            })
+            setTeamMenuOpen(false)
+            navigate({ to: '/team-chats/$teamChatId', params: { teamChatId } })
+        } finally {
+            setAddingTeamChatId(null)
+        }
+    }, [addingTeamChatId, api, navigate, session.id, title])
+
+    const handleOpenTeamChats = useCallback(() => {
+        setTeamMenuOpen(false)
+        navigate({ to: '/team-chats' })
+    }, [navigate])
 
     // In Telegram, don't render header (Telegram provides its own)
     if (isTelegramApp()) {
@@ -402,17 +430,71 @@ export function SessionHeader(props: {
                     ) : null}
 
                     {api ? (
-                        <button
-                            type="button"
-                            className="flex h-8 items-center gap-1 rounded-full px-2 text-xs font-medium text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)] disabled:opacity-50"
-                            title="Create Team Chat with this session"
-                            aria-label="Create Team Chat with this session"
-                            disabled={creatingTeamChat}
-                            onClick={() => { void handleCreateTeamChatWithSession() }}
-                        >
-                            <span aria-hidden="true">💬</span>
-                            <span className="hidden sm:inline">Team</span>
-                        </button>
+                        <div className="relative">
+                            <button
+                                type="button"
+                                className="flex h-8 items-center gap-1 rounded-full px-2 text-xs font-medium text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)] disabled:opacity-50"
+                                title="Open Team Chat menu"
+                                aria-label="Open Team Chat menu"
+                                aria-haspopup="menu"
+                                aria-expanded={teamMenuOpen}
+                                disabled={creatingTeamChat}
+                                onClick={() => setTeamMenuOpen((open) => !open)}
+                            >
+                                <span aria-hidden="true">💬</span>
+                                <span className="hidden sm:inline">Team</span>
+                            </button>
+                            {teamMenuOpen ? (
+                                <div
+                                    role="menu"
+                                    className="absolute right-0 top-9 z-50 w-72 rounded-xl border border-[var(--app-border)] bg-[var(--app-card-bg,var(--app-bg))] p-2 text-sm shadow-xl"
+                                >
+                                    <button
+                                        type="button"
+                                        className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[var(--app-fg)] hover:bg-[var(--app-secondary-bg)]"
+                                        aria-label="Open Team Chats"
+                                        onClick={handleOpenTeamChats}
+                                    >
+                                        <span>Open Team Chats</span>
+                                        <span className="text-[var(--app-hint)]">↗</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="mt-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[var(--app-fg)] hover:bg-[var(--app-secondary-bg)] disabled:opacity-50"
+                                        aria-label="Create Team Chat with this session"
+                                        disabled={creatingTeamChat}
+                                        onClick={() => { void handleCreateTeamChatWithSession() }}
+                                    >
+                                        <span>Create Team Chat with this session</span>
+                                        <span className="text-[var(--app-hint)]">＋</span>
+                                    </button>
+                                    <div className="my-2 h-px bg-[var(--app-border)]" />
+                                    <div className="px-3 pb-1 text-[11px] font-medium uppercase tracking-wide text-[var(--app-hint)]">Add to existing</div>
+                                    {teamChats.length === 0 ? (
+                                        <div className="px-3 py-2 text-xs text-[var(--app-hint)]">No existing Team Chats</div>
+                                    ) : (
+                                        <div className="max-h-56 overflow-y-auto">
+                                            {teamChats.map((teamChat) => (
+                                                <button
+                                                    key={teamChat.id}
+                                                    type="button"
+                                                    className="flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left hover:bg-[var(--app-secondary-bg)] disabled:opacity-50"
+                                                    aria-label={`Add to ${teamChat.name}`}
+                                                    disabled={addingTeamChatId === teamChat.id}
+                                                    onClick={() => { void handleAddSessionToTeamChat(teamChat.id) }}
+                                                >
+                                                    <span className="mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full bg-[#60a5fa]" />
+                                                    <span className="min-w-0 flex-1">
+                                                        <span className="block truncate text-[var(--app-fg)]">Add to {teamChat.name}</span>
+                                                        {teamChat.projectPath ? <span className="block truncate text-xs text-[var(--app-hint)]">{teamChat.projectPath}</span> : null}
+                                                    </span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            ) : null}
+                        </div>
                     ) : null}
 
                     <button

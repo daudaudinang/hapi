@@ -1,10 +1,11 @@
 import { useMemo, useRef } from 'react'
-import type { TeamChatMessage, TeamParticipant } from '@/types/api'
+import type { TeamChatMessage, TeamMentionRequest, TeamParticipant } from '@/types/api'
 import { TeamMessageCard } from './TeamMessageCard'
 
 export function TeamChatTimeline(props: {
     messages: TeamChatMessage[]
     participants: TeamParticipant[]
+    mentionRequests?: TeamMentionRequest[]
     onLoadAround: (messageId?: string) => Promise<unknown> | void
 }) {
     const refs = useRef(new Map<string, HTMLDivElement>())
@@ -54,6 +55,8 @@ export function TeamChatTimeline(props: {
                     <TeamMessageCard
                         message={message}
                         author={participantById.get(message.authorParticipantId) ?? null}
+                        participants={props.participants}
+                        mentionRequests={props.mentionRequests}
                         onReplyPreviewClick={handleReplyClick}
                     />
                 </div>

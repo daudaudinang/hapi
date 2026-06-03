@@ -1,7 +1,7 @@
 import { z } from 'zod'
-import { ReportToTeamInputSchema } from '@hapi/protocol/schemas'
+import { MarkTeamMentionNoActionInputSchema, ReportToTeamInputSchema } from '@hapi/protocol/schemas'
 
-export const HAPI_SESSION_TOOL_NAMES = ['change_title', 'report_to_team'] as const
+export const HAPI_SESSION_TOOL_NAMES = ['change_title', 'report_to_team', 'mark_team_mention_no_action'] as const
 
 export type HapiSessionToolName = typeof HAPI_SESSION_TOOL_NAMES[number]
 
@@ -26,6 +26,12 @@ export const HAPI_SESSION_TOOL_DEFINITIONS: HapiSessionToolDefinition[] = [
         title: 'Report To Team Chat',
         description: 'Post a structured status update, answer, blocker, question, or handoff into a HAPI Team Chat from the current agent session',
         inputSchema: ReportToTeamInputSchema
+    },
+    {
+        name: 'mark_team_mention_no_action',
+        title: 'Mark Team Mention No Action',
+        description: 'Mark a Team Chat mention request as seen with no reply needed from the current agent session',
+        inputSchema: MarkTeamMentionNoActionInputSchema
     }
 ]
 

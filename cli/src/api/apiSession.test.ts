@@ -201,6 +201,47 @@ describe('ApiSessionClient.updateMetadata', () => {
         expect(fakeSocket.emitWithAck).not.toHaveBeenCalled()
     })
 
+
+
+    it('marks a Team mention no-action through the CLI session-scoped route', async () => {
+        const fakeSocket = makeSocket()
+        ioMock.mockReturnValue(fakeSocket)
+        configuration._setApiUrl('http://hub.test')
+        configuration._setCliApiToken('cli-token')
+        axiosPostMock.mockResolvedValue({
+            data: {
+                request: {
+                    id: 'req/1',
+                    teamChatId: 'team/1',
+                    sourceMessageId: 'msg/1',
+                    targetSessionId: 'session-1',
+                    status: 'no_action',
+                    contextSnapshot: {
+                        originalText: '@Backend check this',
+                        sharedContext: { goal: '', decisions: [], openQuestions: [] },
+                        attachedFiles: []
+                    },
+                    hopDepth: 0,
+                    createdAt: 1,
+                    resolvedAt: 2
+                }
+            }
+        })
+        const client = new ApiSessionClient('cli-token', makeSession({ path: '/tmp/project', host: 'test-host' }))
+
+        const result = await client.markTeamMentionNoAction({ requestId: 'req/1' })
+
+        expect(result.request.id).toBe('req/1')
+        expect(axiosPostMock).toHaveBeenCalledWith(
+            'http://hub.test/cli/sessions/session-1/team-mentions/req%2F1/no-action',
+            {},
+            expect.objectContaining({
+                headers: expect.objectContaining({ Authorization: 'Bearer cli-token' }),
+                timeout: 15_000
+            })
+        )
+    })
+
     it('posts ReportToTeam through the CLI session-scoped route', async () => {
         const fakeSocket = makeSocket()
         ioMock.mockReturnValue(fakeSocket)
