@@ -246,6 +246,7 @@ function AppInner() {
         }
         if (event.type === 'team-participant-updated') {
             void queryClient.invalidateQueries({ queryKey: queryKeys.teamParticipants(event.teamChatId) })
+            void queryClient.invalidateQueries({ queryKey: queryKeys.sessionTeamMembershipsBase })
             return
         }
         if (event.type === 'team-chat-updated') {

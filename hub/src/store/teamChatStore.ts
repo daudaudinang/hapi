@@ -121,6 +121,8 @@ export class TeamChatStore {
         color: string
     }): StoredTeamParticipant {
         this.requireTeamChat(input.namespace, input.teamChatId)
+        const displayName = input.displayName.trim()
+        if (!displayName) throw new Error('TEAM_PARTICIPANT_DISPLAY_NAME_INVALID')
         if (input.sessionId) {
             this.requireSession(input.namespace, input.sessionId)
             if (input.type === 'session') {
@@ -128,6 +130,12 @@ export class TeamChatStore {
                 if (existing) return existing
             }
         }
+        const duplicate = this.db.prepare(`
+            SELECT id FROM team_participants
+            WHERE namespace = ? AND team_chat_id = ? AND archived_at IS NULL AND lower(display_name) = lower(?)
+            LIMIT 1
+        `).get(input.namespace, input.teamChatId, displayName) as { id: string } | undefined
+        if (duplicate) throw new Error('TEAM_PARTICIPANT_DISPLAY_NAME_EXISTS')
         const id = randomUUID()
         const now = Date.now()
         this.db.prepare(`
@@ -140,7 +148,7 @@ export class TeamChatStore {
             input.type,
             input.userId ?? null,
             input.sessionId ?? null,
-            input.displayName,
+            displayName,
             input.role,
             input.color,
             now
@@ -170,6 +178,25 @@ export class TeamChatStore {
             ORDER BY joined_at ASC
         `).all(namespace, teamChatId) as TeamParticipantRow[]
         return rows.map(toParticipant)
+    }
+
+    listSessionTeamMemberships(namespace: string, sessionId: string): Array<{ teamChat: StoredTeamChat; participant: StoredTeamParticipant }> {
+        const participantRows = this.db.prepare(`
+            SELECT p.* FROM team_participants p
+            INNER JOIN team_chats c ON c.namespace = p.namespace AND c.id = p.team_chat_id
+            WHERE p.namespace = ?
+              AND p.session_id = ?
+              AND p.type = 'session'
+              AND p.archived_at IS NULL
+              AND c.archived_at IS NULL
+            ORDER BY c.updated_at DESC, p.joined_at ASC
+        `).all(namespace, sessionId) as TeamParticipantRow[]
+
+        return participantRows.flatMap((row) => {
+            const teamChat = this.getTeamChat(namespace, row.team_chat_id)
+            if (!teamChat) return []
+            return [{ teamChat, participant: toParticipant(row) }]
+        })
     }
 
     addMessage(input: {

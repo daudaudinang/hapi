@@ -10,6 +10,8 @@ export const queryKeys = {
     teamMentionRequestsBase: ['team-mention-requests'] as const,
     teamMentionRequests: (teamChatId: string, sessionIds: string[]) => ['team-mention-requests', teamChatId, ...sessionIds] as const,
     sessionTeamMentions: (sessionId: string) => ['session-team-mentions', sessionId] as const,
+    sessionTeamMembershipsBase: ['session-team-memberships'] as const,
+    sessionTeamMemberships: (sessionId: string) => ['session-team-memberships', sessionId] as const,
     machines: ['machines'] as const,
     machineCodexModels: (machineId: string) => ['machine-codex-models', machineId] as const,
     gitStatus: (sessionId: string) => ['git-status', sessionId] as const,

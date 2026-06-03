@@ -16,7 +16,7 @@ export function TeamChatLayout(props: {
     onOpenAgentMode?: () => void
     onOpenEditorMode?: () => void
     availableSessions?: SessionSummary[]
-    onAddSession?: (session: SessionSummary) => void
+    onAddSession?: (session: SessionSummary, alias: string) => void
 }) {
     const composer = (
         <TeamChatComposer

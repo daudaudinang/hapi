@@ -255,6 +255,10 @@ export class SyncEngine {
         return this.teamChatService.listParticipants(namespace, teamChatId)
     }
 
+    listSessionTeamMemberships(namespace: string, sessionId: string) {
+        return this.teamChatService.listSessionTeamMemberships(namespace, sessionId)
+    }
+
     addTeamParticipant(input: {
         namespace: string
         teamChatId: string

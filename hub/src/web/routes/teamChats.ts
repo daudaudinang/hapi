@@ -21,7 +21,7 @@ const addParticipantSchema = z.object({
     type: z.enum(['user', 'session']),
     userId: z.string().optional().nullable(),
     sessionId: z.string().optional().nullable(),
-    displayName: z.string().min(1),
+    displayName: z.string().trim().min(1).max(32),
     role: z.enum(['backend', 'frontend', 'tests', 'reviewer', 'docs', 'general']).default('general'),
     color: z.string().regex(/^#[0-9a-f]{6}$/i)
 })
@@ -50,6 +50,9 @@ const reportToTeamRequestSchema = z.object({
 })
 
 function teamChatErrorResponse(c: Context<WebAppEnv>, error: unknown): Response {
+    if (error instanceof Error && error.message === 'TEAM_PARTICIPANT_DISPLAY_NAME_EXISTS') {
+        return c.json({ error: error.message }, 409)
+    }
     if (error instanceof Error && (error.message === 'TEAM_REPORT_TOO_LOW_SIGNAL' || error.message === 'TEAM_MENTION_HOP_LIMIT')) {
         return c.json({ error: error.message }, 400)
     }
@@ -196,6 +199,18 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
         if (sessionResult instanceof Response) return sessionResult
         try {
             return c.json({ requests: engine.listSessionTeamMentions(c.get('namespace'), sessionResult.sessionId) })
+        } catch (error) {
+            return teamChatErrorResponse(c, error)
+        }
+    })
+
+    app.get('/sessions/:id/team-memberships', (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) return engine
+        const sessionResult = requireSessionFromParam(c, engine)
+        if (sessionResult instanceof Response) return sessionResult
+        try {
+            return c.json({ memberships: engine.listSessionTeamMemberships(c.get('namespace'), sessionResult.sessionId) })
         } catch (error) {
             return teamChatErrorResponse(c, error)
         }

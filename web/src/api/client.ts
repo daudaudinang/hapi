@@ -30,6 +30,7 @@ import type {
     UploadFileResponse,
     VisibilityPayload,
     SessionResponse,
+    SessionTeamMembershipsResponse,
     SessionsResponse,
     TeamChatResponse,
     TeamChatsResponse,
@@ -306,6 +307,10 @@ export class ApiClient {
 
     async getSessionTeamMentions(sessionId: string): Promise<{ requests: TeamMentionRequest[] }> {
         return await this.request<{ requests: TeamMentionRequest[] }>(`/api/sessions/${encodeURIComponent(sessionId)}/team-mentions`)
+    }
+
+    async getSessionTeamMemberships(sessionId: string): Promise<SessionTeamMembershipsResponse> {
+        return await this.request<SessionTeamMembershipsResponse>(`/api/sessions/${encodeURIComponent(sessionId)}/team-memberships`)
     }
 
     async updateTeamMentionStatus(

@@ -1,6 +1,10 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TeamChatRightPanel } from './TeamChatRightPanel'
+
+afterEach(() => {
+    cleanup()
+})
 
 it('renders needs attention items from blocked reports and pending mentions', () => {
     render(<TeamChatRightPanel
@@ -37,7 +41,25 @@ it('lets the user add an existing session from a grouped status tree', () => {
     expect(within(tree).getByRole('button', { name: /Old review.*Idle/i })).toBeInTheDocument()
 
     fireEvent.click(within(tree).getByRole('button', { name: /Frontend polish.*Working/i }))
+    fireEvent.change(screen.getByRole('textbox', { name: /Team alias/i }), { target: { value: 'UI' } })
     fireEvent.click(screen.getByRole('button', { name: /Add to Team/i }))
 
-    expect(onAddSession).toHaveBeenCalledWith(expect.objectContaining({ id: 's2' }))
+    expect(onAddSession).toHaveBeenCalledWith(expect.objectContaining({ id: 's2' }), 'UI')
+})
+
+it('prevents duplicate aliases in the Team Chat picker', () => {
+    const onAddSession = vi.fn()
+    render(<TeamChatRightPanel
+        participants={[{ id: 'p1', teamChatId: 'team-1', type: 'session', sessionId: 's1', displayName: 'Backend', role: 'backend', color: '#60a5fa', joinedAt: 1 }]}
+        availableSessions={[
+            { id: 's2', active: true, thinking: false, activeAt: 1, updatedAt: 2, metadata: { path: '/repo/hapi', name: 'Frontend polish' }, todoProgress: null, pendingRequestsCount: 0, model: null, effort: null }
+        ]}
+        onAddSession={onAddSession}
+    />)
+
+    fireEvent.click(screen.getByRole('button', { name: /Add member/i }))
+    fireEvent.change(screen.getByRole('textbox', { name: /Team alias/i }), { target: { value: 'backend' } })
+
+    expect(screen.getByText('Alias already used in this Team Chat.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Add to Team/i })).toBeDisabled()
 })

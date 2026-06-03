@@ -42,6 +42,10 @@ export class TeamChatService {
         return this.store.teamChats.listParticipants(namespace, teamChatId)
     }
 
+    listSessionTeamMemberships(namespace: string, sessionId: string) {
+        return this.store.teamChats.listSessionTeamMemberships(namespace, sessionId)
+    }
+
     addParticipant(input: {
         namespace: string
         teamChatId: string

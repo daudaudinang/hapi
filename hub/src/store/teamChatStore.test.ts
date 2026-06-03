@@ -97,6 +97,33 @@ describe('TeamChatStore', () => {
         expect(store.teamChats.getActiveSessionParticipant('default', chat.id, session.id)?.role).toBe('backend')
     })
 
+    it('rejects duplicate active participant aliases case-insensitively', () => {
+        const store = new Store(':memory:')
+        const sessionA = store.sessions.getOrCreateSession('session-a', { path: '/repo' }, null, 'default')
+        const sessionB = store.sessions.getOrCreateSession('session-b', { path: '/repo' }, null, 'default')
+        const chat = store.teamChats.createTeamChat({ namespace: 'default', name: 'Chat' })
+
+        store.teamChats.addParticipant({
+            namespace: 'default',
+            teamChatId: chat.id,
+            type: 'session',
+            sessionId: sessionA.id,
+            displayName: 'Backend',
+            color: '#60a5fa',
+            role: 'backend'
+        })
+
+        expect(() => store.teamChats.addParticipant({
+            namespace: 'default',
+            teamChatId: chat.id,
+            type: 'session',
+            sessionId: sessionB.id,
+            displayName: 'backend',
+            color: '#34d399',
+            role: 'general'
+        })).toThrow('TEAM_PARTICIPANT_DISPLAY_NAME_EXISTS')
+    })
+
     it('requires mention target sessions to exist', () => {
         const store = new Store(':memory:')
         const chat = store.teamChats.createTeamChat({ namespace: 'default', name: 'Chat' })

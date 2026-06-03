@@ -45,13 +45,16 @@ export function useTeamChatActions(api: ApiClient | null, teamChatId: string | n
             if (!api || !teamChatId) throw new Error('Team Chat unavailable')
             await api.addTeamParticipant(teamChatId, input)
         },
-        onSuccess: async () => {
+        onSuccess: async (_data, input) => {
             if (teamChatId) {
                 await Promise.all([
                     queryClient.invalidateQueries({ queryKey: queryKeys.teamParticipants(teamChatId) }),
                     queryClient.invalidateQueries({ queryKey: queryKeys.teamChat(teamChatId) }),
                     queryClient.invalidateQueries({ queryKey: queryKeys.teamMentionRequestsBase })
                 ])
+                if (input.sessionId) {
+                    await queryClient.invalidateQueries({ queryKey: queryKeys.sessionTeamMemberships(input.sessionId) })
+                }
             }
         }
     })

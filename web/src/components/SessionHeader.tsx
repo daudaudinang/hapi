@@ -1,10 +1,11 @@
-import { useCallback, useId, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import type { Machine, Session } from '@/types/api'
 import type { ApiClient } from '@/api/client'
 import { isTelegramApp } from '@/hooks/useTelegram'
 import { useMachines } from '@/hooks/queries/useMachines'
 import { useTeamChats } from '@/hooks/queries/useTeamChats'
+import { useSessionTeamMemberships } from '@/hooks/queries/useSessionTeamMemberships'
 import { useSessionActions } from '@/hooks/mutations/useSessionActions'
 import { SessionActionMenu } from '@/components/SessionActionMenu'
 import { RenameSessionDialog } from '@/components/RenameSessionDialog'
@@ -24,6 +25,10 @@ function getSessionTitle(session: Session): string {
         return parts.length > 0 ? parts[parts.length - 1] : session.id.slice(0, 8)
     }
     return session.id.slice(0, 8)
+}
+
+function normalizeTeamAlias(alias: string): string {
+    return alias.trim().replace(/\s+/g, ' ')
 }
 
 function FilesIcon(props: { className?: string }) {
@@ -184,6 +189,17 @@ export function SessionHeader(props: {
     const [creatingTeamChat, setCreatingTeamChat] = useState(false)
     const [teamMenuOpen, setTeamMenuOpen] = useState(false)
     const [addingTeamChatId, setAddingTeamChatId] = useState<string | null>(null)
+    const [teamAlias, setTeamAlias] = useState(title)
+    const normalizedTeamAlias = normalizeTeamAlias(teamAlias)
+    const teamAliasError = !normalizedTeamAlias
+        ? 'Alias is required.'
+        : normalizedTeamAlias.length > 32
+            ? 'Alias must be 32 characters or fewer.'
+            : null
+
+    useEffect(() => {
+        setTeamAlias(title.length > 32 ? title.slice(0, 32).trim() : title)
+    }, [title])
 
     const { archiveSession, renameSession, deleteSession, isPending } = useSessionActions(
         api,
@@ -193,6 +209,7 @@ export function SessionHeader(props: {
 
     const { machines } = useMachines(api, true)
     const { teamChats } = useTeamChats(api)
+    const { memberships: teamMemberships } = useSessionTeamMemberships(api, session.id)
 
     const handleDelete = async () => {
         await deleteSession()
@@ -214,7 +231,7 @@ export function SessionHeader(props: {
     }, [navigate])
 
     const handleCreateTeamChatWithSession = useCallback(async () => {
-        if (!api || creatingTeamChat) return
+        if (!api || creatingTeamChat || teamAliasError) return
         setCreatingTeamChat(true)
         try {
             const response = await api.createTeamChat({
@@ -224,7 +241,7 @@ export function SessionHeader(props: {
             await api.addTeamParticipant(response.teamChat.id, {
                 type: 'session',
                 sessionId: session.id,
-                displayName: title,
+                displayName: normalizedTeamAlias,
                 role: 'general',
                 color: '#60a5fa'
             })
@@ -233,16 +250,16 @@ export function SessionHeader(props: {
         } finally {
             setCreatingTeamChat(false)
         }
-    }, [api, creatingTeamChat, navigate, session.id, session.metadata?.path, title])
+    }, [api, creatingTeamChat, navigate, normalizedTeamAlias, session.id, session.metadata?.path, teamAliasError, title])
 
     const handleAddSessionToTeamChat = useCallback(async (teamChatId: string) => {
-        if (!api || addingTeamChatId) return
+        if (!api || addingTeamChatId || teamAliasError) return
         setAddingTeamChatId(teamChatId)
         try {
             await api.addTeamParticipant(teamChatId, {
                 type: 'session',
                 sessionId: session.id,
-                displayName: title,
+                displayName: normalizedTeamAlias,
                 role: 'general',
                 color: '#60a5fa'
             })
@@ -251,7 +268,7 @@ export function SessionHeader(props: {
         } finally {
             setAddingTeamChatId(null)
         }
-    }, [addingTeamChatId, api, navigate, session.id, title])
+    }, [addingTeamChatId, api, navigate, normalizedTeamAlias, session.id, teamAliasError])
 
     const handleOpenTeamChats = useCallback(() => {
         setTeamMenuOpen(false)
@@ -272,6 +289,15 @@ export function SessionHeader(props: {
                         <span className={`db-card__dot db-card__dot--${sessionStatus}`} />
                         <span className="db-pinned__compact-title">{title}</span>
                         <span className={`db-card__agent db-card__agent--${agentFlavor}`}>{agentFlavor}</span>
+                        {teamMemberships.slice(0, 1).map((membership) => (
+                            <span
+                                key={membership.participant.id}
+                                className="max-w-[140px] truncate rounded-full border border-[var(--app-border)] px-2 py-0.5 text-[11px] text-[var(--app-hint)]"
+                                title={`${membership.teamChat.name}: @${membership.participant.displayName}`}
+                            >
+                                {membership.teamChat.name}: @{membership.participant.displayName}
+                            </span>
+                        ))}
                         
                         <div className="db-pinned__compact-actions flex items-center gap-1 ml-auto">
                             {editorSearch ? (
@@ -331,6 +357,15 @@ export function SessionHeader(props: {
                             {session.metadata.path.split('/').filter(Boolean).slice(-2).join('/')}
                         </div>
                     )}
+                    {teamMemberships.length > 1 ? (
+                        <div className="db-pinned__compact-path">
+                            {teamMemberships.slice(1, 3).map((membership) => (
+                                <span key={membership.participant.id} className="mr-2">
+                                    {membership.teamChat.name}: @{membership.participant.displayName}
+                                </span>
+                            ))}
+                        </div>
+                    ) : null}
                 </div>
 
                 <SessionActionMenu
@@ -381,6 +416,22 @@ export function SessionHeader(props: {
                         <div className="truncate font-semibold">
                             {title}
                         </div>
+                        {teamMemberships.length > 0 ? (
+                            <div className="mt-1 flex flex-wrap items-center gap-1">
+                                {teamMemberships.slice(0, 3).map((membership) => (
+                                    <span
+                                        key={membership.participant.id}
+                                        className="inline-flex max-w-[220px] items-center gap-1 rounded-full border border-[var(--app-border)] bg-[var(--app-secondary-bg)] px-2 py-0.5 text-[11px] text-[var(--app-hint)]"
+                                        title={`${membership.teamChat.name}: @${membership.participant.displayName}`}
+                                    >
+                                        <span className="truncate">{membership.teamChat.name}: @{membership.participant.displayName}</span>
+                                    </span>
+                                ))}
+                                {teamMemberships.length > 3 ? (
+                                    <span className="text-[11px] text-[var(--app-hint)]">+{teamMemberships.length - 3}</span>
+                                ) : null}
+                            </div>
+                        ) : null}
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-[var(--app-hint)]">
                             <span className="inline-flex items-center gap-1">
                                 <span aria-hidden="true">❖</span>
@@ -458,11 +509,29 @@ export function SessionHeader(props: {
                                         <span>Open Team Chats</span>
                                         <span className="text-[var(--app-hint)]">↗</span>
                                     </button>
+                                    <div className="mt-2 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg)] p-2">
+                                        <label htmlFor="session-header-team-alias" className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-[var(--app-hint)]">
+                                            Team alias
+                                        </label>
+                                        <input
+                                            id="session-header-team-alias"
+                                            aria-label="Team alias"
+                                            value={teamAlias}
+                                            onChange={(event) => setTeamAlias(event.target.value)}
+                                            className="w-full rounded-md border border-[var(--app-border)] bg-[var(--app-card-bg,var(--app-bg))] px-2 py-1.5 text-sm text-[var(--app-fg)] outline-none focus:border-[var(--app-link)]"
+                                            placeholder="Backend, UI, Tester…"
+                                        />
+                                        <div className="mt-1 flex items-center justify-between gap-2 text-[11px]">
+                                            <span className="truncate text-[var(--app-hint)]">Tag preview: <span className="font-mono">@{normalizedTeamAlias || 'alias'}</span></span>
+                                            <span className="text-[var(--app-hint)]">{normalizedTeamAlias.length}/32</span>
+                                        </div>
+                                        {teamAliasError ? <div className="mt-1 text-xs text-red-600">{teamAliasError}</div> : null}
+                                    </div>
                                     <button
                                         type="button"
                                         className="mt-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[var(--app-fg)] hover:bg-[var(--app-secondary-bg)] disabled:opacity-50"
                                         aria-label="Create Team Chat with this session"
-                                        disabled={creatingTeamChat}
+                                        disabled={creatingTeamChat || Boolean(teamAliasError)}
                                         onClick={() => { void handleCreateTeamChatWithSession() }}
                                     >
                                         <span>Create Team Chat with this session</span>
@@ -480,7 +549,7 @@ export function SessionHeader(props: {
                                                     type="button"
                                                     className="flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left hover:bg-[var(--app-secondary-bg)] disabled:opacity-50"
                                                     aria-label={`Add to ${teamChat.name}`}
-                                                    disabled={addingTeamChatId === teamChat.id}
+                                                    disabled={addingTeamChatId === teamChat.id || Boolean(teamAliasError)}
                                                     onClick={() => { void handleAddSessionToTeamChat(teamChat.id) }}
                                                 >
                                                     <span className="mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full bg-[#60a5fa]" />

@@ -1,11 +1,17 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Session, TeamChat } from '@/types/api'
+import type { Session, TeamChat, TeamParticipant } from '@/types/api'
 import { SessionHeader } from './SessionHeader'
 
 const navigateMock = vi.fn()
 const useTeamChatsMock = vi.fn<() => { teamChats: TeamChat[]; isLoading: boolean; error: string | null; refetch: () => Promise<unknown> | unknown }>(() => ({ teamChats: [], isLoading: false, error: null, refetch: vi.fn() }))
+const useSessionTeamMembershipsMock = vi.fn<() => {
+    memberships: Array<{ teamChat: TeamChat; participant: TeamParticipant }>
+    isLoading: boolean
+    error: string | null
+    refetch: () => Promise<unknown> | unknown
+}>(() => ({ memberships: [], isLoading: false, error: null, refetch: vi.fn() }))
 
 vi.mock('@tanstack/react-router', () => ({
     useNavigate: () => navigateMock
@@ -21,6 +27,10 @@ vi.mock('@/hooks/queries/useMachines', () => ({
 
 vi.mock('@/hooks/queries/useTeamChats', () => ({
     useTeamChats: () => useTeamChatsMock()
+}))
+
+vi.mock('@/hooks/queries/useSessionTeamMemberships', () => ({
+    useSessionTeamMemberships: () => useSessionTeamMembershipsMock()
 }))
 
 vi.mock('@/hooks/mutations/useSessionActions', () => ({
@@ -79,6 +89,7 @@ describe('SessionHeader editor entry point', () => {
     beforeEach(() => {
         vi.clearAllMocks()
         useTeamChatsMock.mockReturnValue({ teamChats: [], isLoading: false, error: null, refetch: vi.fn() })
+        useSessionTeamMembershipsMock.mockReturnValue({ memberships: [], isLoading: false, error: null, refetch: vi.fn() })
     })
 
     afterEach(() => {
@@ -102,6 +113,23 @@ describe('SessionHeader editor entry point', () => {
         render(<QueryClientProvider client={qc}><SessionHeader session={makeSession({ metadata: { path: '/repo', host: 'host' } })} onBack={vi.fn()} api={null} /></QueryClientProvider>)
 
         expect(screen.queryByRole('button', { name: 'Open in Editor' })).not.toBeInTheDocument()
+    })
+
+    it('shows this sessions Team Chat aliases near the session title', () => {
+        useSessionTeamMembershipsMock.mockReturnValue({
+            memberships: [{
+                teamChat: { id: 'team-1', namespace: 'default', name: 'Frontend Team', projectPath: '/repo', createdAt: 1, updatedAt: 2 },
+                participant: { id: 'p1', teamChatId: 'team-1', type: 'session', sessionId: 'session-1', displayName: 'UI', role: 'frontend', color: '#60a5fa', joinedAt: 3 }
+            }],
+            isLoading: false,
+            error: null,
+            refetch: vi.fn()
+        })
+        const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+        render(<QueryClientProvider client={qc}><SessionHeader session={makeSession()} onBack={vi.fn()} api={{} as never} /></QueryClientProvider>)
+
+        expect(screen.getByText('Frontend Team: @UI')).toBeInTheDocument()
     })
 
     it('creates a Team Chat with the current session', async () => {
@@ -160,5 +188,30 @@ describe('SessionHeader editor entry point', () => {
             to: '/team-chats/$teamChatId',
             params: { teamChatId: 'team-2' }
         }))
+    })
+
+    it('uses the requested alias when adding the current session from the header menu', async () => {
+        useTeamChatsMock.mockReturnValue({
+            teamChats: [
+                { id: 'team-2', namespace: 'default', name: 'Frontend Team', projectPath: '/repo', createdAt: 1, updatedAt: 2 }
+            ],
+            isLoading: false,
+            error: null,
+            refetch: vi.fn()
+        })
+        const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        const api = {
+            createTeamChat: vi.fn(),
+            addTeamParticipant: vi.fn(async () => ({ participant: { id: 'participant-1' } }))
+        }
+        render(<QueryClientProvider client={qc}><SessionHeader session={makeSession()} onBack={vi.fn()} api={api as never} /></QueryClientProvider>)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open Team Chat menu' }))
+        fireEvent.change(screen.getByRole('textbox', { name: 'Team alias' }), { target: { value: 'UI' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Add to Frontend Team' }))
+
+        await waitFor(() => expect(api.addTeamParticipant).toHaveBeenCalledWith('team-2', expect.objectContaining({
+            displayName: 'UI'
+        })))
     })
 })

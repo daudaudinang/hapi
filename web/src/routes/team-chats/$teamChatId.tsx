@@ -8,7 +8,7 @@ import { useTeamChatActions } from '@/hooks/mutations/useTeamChatActions'
 import { useTeamChatMessages } from '@/hooks/queries/useTeamChatMessages'
 import { useTeamChatParticipants } from '@/hooks/queries/useTeamChatParticipants'
 import { useTeamChatMentionRequests } from '@/hooks/queries/useTeamChatMentionRequests'
-import type { SessionSummary, TeamChatMessage, TeamParticipant } from '@/types/api'
+import type { TeamChatMessage, TeamParticipant } from '@/types/api'
 
 const PARTICIPANT_COLORS = ['#60a5fa', '#a78bfa', '#34d399', '#fbbf24', '#f87171', '#22d3ee', '#fb7185', '#818cf8']
 
@@ -17,19 +17,6 @@ function mergeMessages(base: TeamChatMessage[], extra: TeamChatMessage[]): TeamC
     for (const message of base) byId.set(message.id, message)
     for (const message of extra) byId.set(message.id, message)
     return Array.from(byId.values()).sort((a, b) => a.seq - b.seq)
-}
-
-function getPathBasename(path?: string | null): string | null {
-    if (!path) return null
-    const parts = path.split(/[\\/]/).filter(Boolean)
-    return parts.at(-1) ?? path
-}
-
-function getSessionDisplayName(session: SessionSummary): string {
-    return session.metadata?.name
-        ?? session.metadata?.summary?.text
-        ?? getPathBasename(session.metadata?.path)
-        ?? session.id.slice(0, 8)
 }
 
 function getNextParticipantColor(participants: TeamParticipant[]): string {
@@ -88,12 +75,12 @@ export default function TeamChatDetailPage() {
                 } as never
             })}
             availableSessions={sessions}
-            onAddSession={(session) => {
+            onAddSession={(session, alias) => {
                 if (!teamChatId) return
                 void addTeamParticipant({
                     type: 'session',
                     sessionId: session.id,
-                    displayName: getSessionDisplayName(session),
+                    displayName: alias,
                     role: 'general',
                     color: getNextParticipantColor(participants)
                 })

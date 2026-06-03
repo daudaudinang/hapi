@@ -136,6 +136,11 @@ export type TeamChatMessage = {
 
 export type TeamChatsResponse = { teamChats: TeamChat[] }
 export type TeamChatResponse = { teamChat: TeamChat }
+export type SessionTeamMembership = {
+    teamChat: TeamChat
+    participant: TeamParticipant
+}
+export type SessionTeamMembershipsResponse = { memberships: SessionTeamMembership[] }
 export type TeamMentionRequest = {
     id: string
     teamChatId: string

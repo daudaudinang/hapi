@@ -63,6 +63,18 @@ function getSessionDisplayName(session: SessionSummary): string {
         ?? session.id.slice(0, 8)
 }
 
+function suggestSessionAlias(session: SessionSummary): string {
+    const displayName = getSessionDisplayName(session).trim()
+    if (displayName.length <= 32) return displayName
+    const pathName = getPathBasename(session.metadata?.path)?.trim()
+    if (pathName && pathName.length <= 32) return pathName
+    return displayName.slice(0, 32).trim()
+}
+
+function normalizeAlias(alias: string): string {
+    return alias.trim().replace(/\s+/g, ' ')
+}
+
 function getSessionProjectPath(session: SessionSummary): string {
     return session.metadata?.worktree?.basePath ?? session.metadata?.path ?? 'Other'
 }
@@ -234,12 +246,14 @@ export function TeamChatRightPanel(props: {
     messages?: TeamChatMessage[]
     mentionRequests?: TeamMentionRequest[]
     availableSessions?: SessionSummary[]
-    onAddSession?: (session: SessionSummary) => void
+    onAddSession?: (session: SessionSummary, alias: string) => void
     className?: string
 }) {
     const [isAddingMember, setIsAddingMember] = useState(false)
     const [selectedSessionId, setSelectedSessionId] = useState('')
+    const [alias, setAlias] = useState('')
     const attentionItems = getAttentionItems(props.messages ?? [], props.mentionRequests ?? [])
+    const sessionsById = useMemo(() => new Map((props.availableSessions ?? []).map((session) => [session.id, session])), [props.availableSessions])
     const addableSessions = useMemo(() => {
         const existingSessionIds = new Set(
             props.participants
@@ -252,17 +266,35 @@ export function TeamChatRightPanel(props: {
     const sortedAddableSessions = useMemo(() => sessionGroups.flatMap((group) => group.sessions), [sessionGroups])
 
     const selectedSession = sortedAddableSessions.find((session) => session.id === selectedSessionId) ?? sortedAddableSessions[0] ?? null
+    const normalizedAlias = normalizeAlias(alias)
+    const aliasExists = props.participants.some((participant) => participant.displayName.toLowerCase() === normalizedAlias.toLowerCase())
+    const aliasError = !normalizedAlias
+        ? 'Alias is required.'
+        : normalizedAlias.length > 32
+            ? 'Alias must be 32 characters or fewer.'
+            : aliasExists
+                ? 'Alias already used in this Team Chat.'
+                : null
 
     const handleStartAdding = () => {
-        setSelectedSessionId(sortedAddableSessions[0]?.id ?? '')
+        const firstSession = sortedAddableSessions[0] ?? null
+        setSelectedSessionId(firstSession?.id ?? '')
+        setAlias(firstSession ? suggestSessionAlias(firstSession) : '')
         setIsAddingMember(true)
     }
 
+    const handleSelectSession = (sessionId: string) => {
+        setSelectedSessionId(sessionId)
+        const session = sortedAddableSessions.find((item) => item.id === sessionId)
+        setAlias(session ? suggestSessionAlias(session) : '')
+    }
+
     const handleAddSelectedSession = () => {
-        if (!selectedSession) return
-        props.onAddSession?.(selectedSession)
+        if (!selectedSession || aliasError) return
+        props.onAddSession?.(selectedSession, normalizedAlias)
         setIsAddingMember(false)
         setSelectedSessionId('')
+        setAlias('')
     }
 
     return (
@@ -316,13 +348,34 @@ export function TeamChatRightPanel(props: {
                         <SessionPickerTree
                             groups={sessionGroups}
                             selectedSessionId={selectedSession?.id ?? ''}
-                            onSelectSession={setSelectedSessionId}
+                            onSelectSession={handleSelectSession}
                         />
                     ) : (
                         <div className="rounded-lg border border-dashed border-[var(--app-border)] p-3 text-xs text-[var(--app-hint)]">
                             No sessions available to add.
                         </div>
                     )}
+                    <div className="mt-2">
+                        <label htmlFor="team-chat-member-alias" className="mb-1 block text-xs font-medium text-[var(--app-hint)]">
+                            Team alias
+                        </label>
+                        <input
+                            id="team-chat-member-alias"
+                            aria-label="Team alias"
+                            value={alias}
+                            maxLength={64}
+                            onChange={(event) => setAlias(event.target.value)}
+                            className="w-full rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-2 py-1.5 text-sm text-[var(--app-fg)] outline-none focus:border-[var(--app-link)]"
+                            placeholder="Backend, UI, Tester…"
+                        />
+                        <div className="mt-1 flex items-center justify-between gap-2 text-[11px]">
+                            <span className="truncate text-[var(--app-hint)]">
+                                Tag preview: <span className="font-mono">@{normalizedAlias || 'alias'}</span>
+                            </span>
+                            <span className="text-[var(--app-hint)]">{normalizedAlias.length}/32</span>
+                        </div>
+                        {aliasError ? <div className="mt-1 text-xs text-red-600">{aliasError}</div> : null}
+                    </div>
                     <div className="mt-2 flex items-center justify-between gap-2">
                         <div className="min-w-0 truncate text-xs text-[var(--app-hint)]">
                             {selectedSession ? `Selected: ${getSessionDisplayName(selectedSession)}` : 'Pick a session'}
@@ -330,7 +383,7 @@ export function TeamChatRightPanel(props: {
                         <button
                             type="button"
                             onClick={handleAddSelectedSession}
-                            disabled={!selectedSession}
+                            disabled={!selectedSession || Boolean(aliasError)}
                             className="rounded-md bg-[var(--app-button)] px-2 py-1 text-xs font-medium text-[var(--app-button-text)] transition-opacity hover:opacity-90 disabled:opacity-50"
                         >
                             Add to Team
@@ -341,15 +394,20 @@ export function TeamChatRightPanel(props: {
                 <div className="mt-2 text-xs text-[var(--app-hint)]">All available sessions are already in this Team Chat.</div>
             ) : null}
             <div className="mt-3 space-y-2">
-                {props.participants.map((participant) => (
-                    <div key={participant.id} className="flex items-center gap-2 rounded-xl border border-[var(--app-border)] p-2">
-                        <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: getParticipantAccent(participant.color) }} />
-                        <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-medium">{participant.displayName}</div>
-                            <div className="text-xs capitalize text-[var(--app-hint)]">{participant.role}</div>
+                {props.participants.map((participant) => {
+                    const backingSession = participant.sessionId ? sessionsById.get(participant.sessionId) : null
+                    const backingName = backingSession ? getSessionDisplayName(backingSession) : null
+                    const secondary = backingName && backingName !== participant.displayName ? backingName : participant.role
+                    return (
+                        <div key={participant.id} className="flex items-center gap-2 rounded-xl border border-[var(--app-border)] p-2">
+                            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: getParticipantAccent(participant.color) }} />
+                            <div className="min-w-0 flex-1">
+                                <div className="truncate text-sm font-medium">@{participant.displayName}</div>
+                                <div className="truncate text-xs text-[var(--app-hint)]">{secondary}</div>
+                            </div>
                         </div>
-                    </div>
-                ))}
+                    )
+                })}
             </div>
         </aside>
     )
