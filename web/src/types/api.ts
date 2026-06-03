@@ -95,6 +95,67 @@ export type MessagesResponse = {
     }
 }
 
+export type TeamChat = {
+    id: string
+    namespace: string
+    name: string
+    projectPath?: string | null
+    createdAt: number
+    updatedAt: number
+}
+
+export type TeamParticipantRole = 'backend' | 'frontend' | 'tests' | 'reviewer' | 'docs' | 'general'
+
+export type TeamParticipant = {
+    id: string
+    teamChatId: string
+    type: 'user' | 'session'
+    userId?: string | null
+    sessionId?: string | null
+    displayName: string
+    role: TeamParticipantRole
+    color: string
+    joinedAt: number
+}
+
+export type TeamReportType = 'reply' | 'progress' | 'done' | 'blocked' | 'question' | 'handoff'
+
+export type TeamChatMessage = {
+    id: string
+    teamChatId: string
+    seq: number
+    authorParticipantId: string
+    text: string
+    reportType?: TeamReportType | null
+    replyToMessageId?: string | null
+    replyPreview?: { authorName: string; excerpt: string } | null
+    mentions: Array<{ participantId: string; sessionId: string }>
+    files: string[]
+    createdAt: number
+}
+
+export type TeamChatsResponse = { teamChats: TeamChat[] }
+export type TeamChatResponse = { teamChat: TeamChat }
+export type TeamMentionRequest = {
+    id: string
+    teamChatId: string
+    sourceMessageId: string
+    targetSessionId: string
+    status: 'pending' | 'delivered' | 'seen' | 'processing' | 'responded' | 'no_action' | 'superseded' | 'failed'
+    createdAt: number
+    seenAt?: number | null
+    resolvedAt?: number | null
+}
+
+export type TeamMessagesResponse = {
+    messages: TeamChatMessage[]
+    page: {
+        limit: number
+        nextBeforeSeq: number | null
+        hasMore: boolean
+    }
+}
+
 export type MachinesResponse = { machines: Machine[] }
 export type MachinePathsExistsResponse = { exists: Record<string, boolean> }
 
@@ -363,4 +424,3 @@ export type EditorGitStashListResponse = {
     stashes: EditorGitStashEntry[]
     error?: string
 }
-

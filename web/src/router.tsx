@@ -36,6 +36,8 @@ import TerminalPage from '@/routes/sessions/terminal'
 import SettingsPage from '@/routes/settings'
 import DashboardPage from '@/routes/dashboard'
 import EditorPage from '@/routes/editor'
+import TeamChatsPage from '@/routes/team-chats'
+import TeamChatDetailPage from '@/routes/team-chats/$teamChatId'
 
 
 function BackIcon(props: { className?: string }) {
@@ -529,6 +531,18 @@ const settingsRoute = createRoute({
     component: SettingsPage,
 })
 
+const teamChatsRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/team-chats',
+    component: TeamChatsPage,
+})
+
+const teamChatDetailRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/team-chats/$teamChatId',
+    component: TeamChatDetailPage,
+})
+
 
 export const routeTree = rootRoute.addChildren([
     indexRoute,
@@ -543,6 +557,8 @@ export const routeTree = rootRoute.addChildren([
     ]),
     browseRoute,
     editorRoute,
+    teamChatsRoute,
+    teamChatDetailRoute,
     settingsRoute,
 ])
 

@@ -30,7 +30,13 @@ import type {
     UploadFileResponse,
     VisibilityPayload,
     SessionResponse,
-    SessionsResponse
+    SessionsResponse,
+    TeamChatResponse,
+    TeamChatsResponse,
+    TeamMessagesResponse,
+    TeamParticipant,
+    TeamMentionRequest,
+    TeamChatMessage
 } from '@/types/api'
 
 type ApiClientOptions = {
@@ -214,6 +220,17 @@ export class ApiClient {
         return await this.request<SessionsResponse>('/api/sessions')
     }
 
+    async getTeamChats(): Promise<TeamChatsResponse> {
+        return await this.request<TeamChatsResponse>('/api/team-chats')
+    }
+
+    async createTeamChat(input: { name: string; projectPath?: string | null }): Promise<TeamChatResponse> {
+        return await this.request<TeamChatResponse>('/api/team-chats', {
+            method: 'POST',
+            body: JSON.stringify(input)
+        })
+    }
+
     async getPushVapidPublicKey(): Promise<PushVapidPublicKeyResponse> {
         return await this.request<PushVapidPublicKeyResponse>('/api/push/vapid-public-key')
     }
@@ -241,6 +258,33 @@ export class ApiClient {
 
     async getSession(sessionId: string): Promise<SessionResponse> {
         return await this.request<SessionResponse>(`/api/sessions/${encodeURIComponent(sessionId)}`)
+    }
+
+    async getTeamMessages(teamChatId: string, opts?: { limit?: number; beforeSeq?: number | null }): Promise<TeamMessagesResponse> {
+        const params = new URLSearchParams()
+        if (opts?.limit) params.set('limit', String(opts.limit))
+        if (opts?.beforeSeq) params.set('beforeSeq', String(opts.beforeSeq))
+        const qs = params.toString()
+        return await this.request<TeamMessagesResponse>(`/api/team-chats/${encodeURIComponent(teamChatId)}/messages${qs ? `?${qs}` : ''}`)
+    }
+
+    async sendTeamMessage(teamChatId: string, input: { authorParticipantId: string; text: string; replyToMessageId?: string | null }): Promise<{ message: TeamChatMessage }> {
+        return await this.request<{ message: TeamChatMessage }>(`/api/team-chats/${encodeURIComponent(teamChatId)}/messages`, {
+            method: 'POST',
+            body: JSON.stringify(input)
+        })
+    }
+
+    async getTeamMessagesAround(teamChatId: string, messageId: string): Promise<TeamMessagesResponse> {
+        return await this.request<TeamMessagesResponse>(`/api/team-chats/${encodeURIComponent(teamChatId)}/messages/${encodeURIComponent(messageId)}/context`)
+    }
+
+    async getTeamParticipants(teamChatId: string): Promise<{ participants: TeamParticipant[] }> {
+        return await this.request<{ participants: TeamParticipant[] }>(`/api/team-chats/${encodeURIComponent(teamChatId)}/participants`)
+    }
+
+    async getSessionTeamMentions(sessionId: string): Promise<{ requests: TeamMentionRequest[] }> {
+        return await this.request<{ requests: TeamMentionRequest[] }>(`/api/sessions/${encodeURIComponent(sessionId)}/team-mentions`)
     }
 
     async getMessages(
