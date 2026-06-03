@@ -166,6 +166,91 @@ export class TeamChatService {
         return this.requireTeamMentionRequest(namespace, requestId, expectedSessionId)
     }
 
+    reportToTeam(input: {
+        namespace: string
+        teamChatId: string
+        authorParticipantId: string
+        type: NonNullable<StoredTeamMessage['reportType']>
+        summary: string
+        details?: string
+        replyToMessageId?: string | null
+        replyToRequestId?: string | null
+        mentions?: string[]
+        files?: string[]
+    }) {
+        this.requireTeamChat(input.namespace, input.teamChatId)
+        this.requireTeamParticipant(input.namespace, input.teamChatId, input.authorParticipantId)
+        const text = input.details ? `${input.summary}\n\n${input.details}` : input.summary
+        if (/^(ok|okay|noted|thanks|done)$/i.test(text.trim()) && !input.replyToRequestId) {
+            throw new Error('TEAM_REPORT_TOO_LOW_SIGNAL')
+        }
+        const parentRequest = input.replyToRequestId ? this.requireTeamMentionRequest(input.namespace, input.replyToRequestId) : null
+        if (parentRequest && parentRequest.teamChatId !== input.teamChatId) {
+            throw new Error('TEAM_MENTION_NOT_FOUND')
+        }
+        const hopDepth = parentRequest ? parentRequest.hopDepth + 1 : 0
+        if (hopDepth > 3) throw new Error('TEAM_MENTION_HOP_LIMIT')
+        const replyToMessageId = input.replyToMessageId ?? parentRequest?.sourceMessageId ?? null
+        const message = this.store.teamChats.addMessage({
+            namespace: input.namespace,
+            teamChatId: input.teamChatId,
+            authorParticipantId: input.authorParticipantId,
+            text,
+            reportType: input.type,
+            replyToMessageId,
+            replyPreview: replyToMessageId ? this.buildReplyPreview(input.namespace, input.teamChatId, replyToMessageId) : null,
+            mentions: parseTeamMentions(text, this.store.teamChats.listParticipants(input.namespace, input.teamChatId)).map((mention) => ({
+                participantId: mention.participantId,
+                sessionId: mention.sessionId
+            })),
+            files: input.files ?? []
+        })
+
+        const parsedMentions = parseTeamMentions(text, this.store.teamChats.listParticipants(input.namespace, input.teamChatId))
+        for (const mention of parsedMentions) {
+            const contextSnapshot = this.buildMentionContextSnapshot(input.namespace, input.teamChatId, message.id, text)
+            const request = this.store.teamChats.addMentionRequest({
+                namespace: input.namespace,
+                teamChatId: input.teamChatId,
+                sourceMessageId: message.id,
+                targetSessionId: mention.sessionId,
+                contextSnapshot,
+                hopDepth,
+                parentRequestId: input.replyToRequestId ?? null
+            })
+            const session = this.resolveSession?.(input.namespace, mention.sessionId)
+            if (this.mentionDelivery && session) {
+                this.mentionDelivery.deliver({
+                    namespace: input.namespace,
+                    request,
+                    envelope: this.buildMentionEnvelope(request, text, contextSnapshot),
+                    mode: getMentionDeliveryMode(session)
+                })
+            }
+        }
+
+        if (input.replyToRequestId) {
+            const updated = this.store.teamChats.updateMentionStatus({
+                namespace: input.namespace,
+                requestId: input.replyToRequestId,
+                status: 'responded',
+                resolvedAt: Date.now()
+            })
+            if (updated) this.emitMentionUpdated(input.namespace, updated)
+        }
+        this.publisher.emit({ type: 'team-message-created', namespace: input.namespace, teamChatId: input.teamChatId, messageId: message.id })
+        return { message }
+    }
+
+    markMentionNoAction(input: { namespace: string; sessionId: string; requestId: string }): StoredTeamMentionRequest {
+        return this.updateMentionStatus({
+            namespace: input.namespace,
+            sessionId: input.sessionId,
+            requestId: input.requestId,
+            status: 'no_action'
+        })
+    }
+
     listSessionMentionRequests(namespace: string, sessionId: string): StoredTeamMentionRequest[] {
         return this.store.teamChats.listSessionMentionRequests(namespace, sessionId)
     }
@@ -187,15 +272,19 @@ export class TeamChatService {
             resolvedAt: ['responded', 'no_action', 'superseded', 'failed'].includes(input.status) ? now : undefined
         })
         if (!updated) throw new Error('TEAM_MENTION_NOT_FOUND')
+        this.emitMentionUpdated(input.namespace, updated)
+        return updated
+    }
+
+    private emitMentionUpdated(namespace: string, request: StoredTeamMentionRequest): void {
         this.publisher.emit({
             type: 'team-mention-updated',
-            namespace: input.namespace,
-            teamChatId: updated.teamChatId,
-            requestId: updated.id,
-            sessionId: updated.targetSessionId,
-            targetSessionId: updated.targetSessionId
+            namespace,
+            teamChatId: request.teamChatId,
+            requestId: request.id,
+            sessionId: request.targetSessionId,
+            targetSessionId: request.targetSessionId
         })
-        return updated
     }
 
     private buildReplyPreview(namespace: string, teamChatId: string, messageId: string): { authorName: string; excerpt: string } {

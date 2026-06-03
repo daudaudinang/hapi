@@ -22,9 +22,20 @@ export function TeamMessageCard(props: {
                         : props.message.reportType === 'handoff'
                             ? 'Handoff'
                             : null
+    const toneClass = props.message.reportType === 'done'
+        ? 'border-emerald-500/60'
+        : props.message.reportType === 'blocked'
+            ? 'border-red-500/60'
+            : props.message.reportType === 'question'
+                ? 'border-amber-500/60'
+                : props.message.reportType === 'progress'
+                    ? 'border-blue-500/60'
+                    : props.message.reportType === 'handoff'
+                        ? 'border-purple-500/60'
+                        : 'border-[var(--app-border)]'
 
     return (
-        <Card className="border border-[var(--app-border)] bg-[var(--app-bg)] p-3 shadow-sm" style={{ borderLeft: `3px solid ${accent}` }}>
+        <Card className={`border ${toneClass} bg-[var(--app-bg)] p-3 shadow-sm`} style={{ borderLeft: `3px solid ${accent}` }}>
             <div className="mb-1 flex items-center gap-2 text-xs text-[var(--app-hint)]">
                 <span className="font-medium text-[var(--app-fg)]">{props.author?.displayName ?? 'Unknown'}</span>
                 {reportLabel ? <Badge>{reportLabel}</Badge> : null}

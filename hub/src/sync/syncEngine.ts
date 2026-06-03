@@ -285,6 +285,21 @@ export class SyncEngine {
         return this.teamChatService.postMessage(input)
     }
 
+    reportToTeam(input: {
+        namespace: string
+        teamChatId: string
+        authorParticipantId: string
+        type: NonNullable<StoredTeamMessage['reportType']>
+        summary: string
+        details?: string
+        replyToMessageId?: string | null
+        replyToRequestId?: string | null
+        mentions?: string[]
+        files?: string[]
+    }) {
+        return this.teamChatService.reportToTeam(input)
+    }
+
     listSessionTeamMentions(namespace: string, sessionId: string) {
         return this.teamChatService.listSessionMentionRequests(namespace, sessionId)
     }

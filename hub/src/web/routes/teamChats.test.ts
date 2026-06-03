@@ -173,4 +173,24 @@ describe('team chat routes', () => {
         expect(calls).toEqual([{ namespace: 'ns-a', sessionId: 'session-1', requestId: 'req-1', status: 'no_action' }])
     })
 
+    it('posts structured Team Chat reports', async () => {
+        const calls: unknown[] = []
+        const engine = {
+            reportToTeam: (input: unknown) => {
+                calls.push(input)
+                return { message: { id: 'msg-report', namespace: 'default', teamChatId: 'team-1', seq: 1, authorParticipantId: 'p1', text: 'Blocked', reportType: 'blocked', replyToMessageId: null, replyPreview: null, mentions: [], files: [], createdAt: 1 } }
+            }
+        }
+        const app = createApp('default', engine)
+
+        const response = await app.request('/api/team-chats/team-1/reports', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ authorParticipantId: 'p1', type: 'blocked', summary: 'Blocked on schema' })
+        })
+
+        expect(response.status).toBe(201)
+        expect(calls).toEqual([{ namespace: 'default', teamChatId: 'team-1', authorParticipantId: 'p1', type: 'blocked', summary: 'Blocked on schema', mentions: [], files: [] }])
+    })
+
 })

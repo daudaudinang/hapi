@@ -20,8 +20,8 @@ export function TeamChatLayout(props: {
         />
     )
     const timeline = <TeamChatTimeline messages={props.messages} participants={props.participants} onLoadAround={props.onLoadAround} />
-    const memberList = <TeamChatRightPanel participants={props.participants} />
-    const mobileMemberList = <TeamChatRightPanel participants={props.participants} className="block h-full w-full border-0 lg:hidden" />
+    const memberList = <TeamChatRightPanel participants={props.participants} messages={props.messages} />
+    const mobileMemberList = <TeamChatRightPanel participants={props.participants} messages={props.messages} className="block h-full w-full border-0 lg:hidden" />
     const contextPanel = (
         <div className="p-3 text-sm text-[var(--app-hint)]">
             Default context includes goal, decisions, recent updates, reply preview, and files.

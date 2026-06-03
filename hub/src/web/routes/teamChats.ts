@@ -35,7 +35,21 @@ const updateMentionStatusSchema = z.object({
     status: z.enum(['seen', 'processing', 'no_action'])
 })
 
+const reportToTeamRequestSchema = z.object({
+    authorParticipantId: z.string().min(1),
+    type: z.enum(['reply', 'progress', 'done', 'blocked', 'question', 'handoff']),
+    summary: z.string().trim().min(3).max(4_000),
+    details: z.string().trim().max(20_000).optional(),
+    replyToMessageId: z.string().optional().nullable(),
+    replyToRequestId: z.string().optional().nullable(),
+    mentions: z.array(z.string().min(1)).default([]),
+    files: z.array(z.string().min(1)).default([])
+})
+
 function teamChatErrorResponse(c: Context<WebAppEnv>, error: unknown): Response {
+    if (error instanceof Error && (error.message === 'TEAM_REPORT_TOO_LOW_SIGNAL' || error.message === 'TEAM_MENTION_HOP_LIMIT')) {
+        return c.json({ error: error.message }, 400)
+    }
     if (error instanceof Error && error.message.startsWith('TEAM_')) {
         return c.json({ error: 'Team Chat resource not found' }, 404)
     }
@@ -104,6 +118,23 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
         if (!parsed.success) return c.json({ error: 'Invalid body' }, 400)
         try {
             return c.json(engine.postTeamMessage({
+                namespace: c.get('namespace'),
+                teamChatId: c.req.param('id'),
+                ...parsed.data
+            }), 201)
+        } catch (error) {
+            return teamChatErrorResponse(c, error)
+        }
+    })
+
+    app.post('/team-chats/:id/reports', async (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) return engine
+        const body = await c.req.json().catch(() => null)
+        const parsed = reportToTeamRequestSchema.safeParse(body)
+        if (!parsed.success) return c.json({ error: 'Invalid body' }, 400)
+        try {
+            return c.json(engine.reportToTeam({
                 namespace: c.get('namespace'),
                 teamChatId: c.req.param('id'),
                 ...parsed.data
