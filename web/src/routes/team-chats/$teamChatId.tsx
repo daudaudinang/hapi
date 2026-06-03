@@ -1,8 +1,19 @@
+import { useState } from 'react'
 import { useParams } from '@tanstack/react-router'
+import { TeamChatLayout } from '@/components/TeamChat/TeamChatLayout'
 import { useAppContext } from '@/lib/app-context'
 import { useTeamChat } from '@/hooks/queries/useTeamChat'
+import { useTeamChatActions } from '@/hooks/mutations/useTeamChatActions'
 import { useTeamChatMessages } from '@/hooks/queries/useTeamChatMessages'
 import { useTeamChatParticipants } from '@/hooks/queries/useTeamChatParticipants'
+import type { TeamChatMessage } from '@/types/api'
+
+function mergeMessages(base: TeamChatMessage[], extra: TeamChatMessage[]): TeamChatMessage[] {
+    const byId = new Map<string, TeamChatMessage>()
+    for (const message of base) byId.set(message.id, message)
+    for (const message of extra) byId.set(message.id, message)
+    return Array.from(byId.values()).sort((a, b) => a.seq - b.seq)
+}
 
 export default function TeamChatDetailPage() {
     const { api } = useAppContext()
@@ -11,33 +22,31 @@ export default function TeamChatDetailPage() {
     const { teamChat, isLoading } = useTeamChat(api, teamChatId)
     const { messages } = useTeamChatMessages(api, teamChatId)
     const { participants } = useTeamChatParticipants(api, teamChatId)
-    const participantById = new Map(participants.map((participant) => [participant.id, participant]))
+    const [aroundMessages, setAroundMessages] = useState<TeamChatMessage[]>([])
+    const currentParticipant = participants.find((participant) => participant.type === 'user') ?? participants[0] ?? null
+    const { sendTeamMessage } = useTeamChatActions(api, teamChatId)
 
     if (isLoading) {
         return <div className="p-3 text-sm text-[var(--app-hint)]">Loading Team Chat…</div>
     }
 
+    const mergedMessages = mergeMessages(messages, aroundMessages)
+
     return (
-        <div className="flex h-full min-h-0 flex-col bg-[var(--app-bg)] text-[var(--app-fg)]">
-            <div className="border-b border-[var(--app-border)] p-3">
-                <div className="text-base font-semibold">{teamChat?.name ?? 'Team Chat'}</div>
-                <div className="text-xs text-[var(--app-hint)]">{participants.length} members · {messages.length} messages</div>
-            </div>
-            <div className="app-scroll-y flex-1 min-h-0 space-y-2 p-3">
-                {messages.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-[var(--app-border)] p-4 text-sm text-[var(--app-hint)]">
-                        No messages yet.
-                    </div>
-                ) : messages.map((message) => {
-                    const author = participantById.get(message.authorParticipantId)
-                    return (
-                        <div key={message.id} className="rounded-xl border border-[var(--app-border)] p-3 text-sm">
-                            <div className="mb-1 text-xs font-medium text-[var(--app-hint)]">{author?.displayName ?? 'Unknown'}</div>
-                            <div className="whitespace-pre-wrap">{message.text}</div>
-                        </div>
-                    )
-                })}
-            </div>
-        </div>
+        <TeamChatLayout
+            teamChat={teamChat}
+            messages={mergedMessages}
+            participants={participants}
+            currentParticipantId={currentParticipant?.id ?? null}
+            onSend={(text) => {
+                if (!currentParticipant) return
+                void sendTeamMessage({ authorParticipantId: currentParticipant.id, text })
+            }}
+            onLoadAround={async (messageId) => {
+                if (!api || !teamChatId || !messageId) return
+                const response = await api.getTeamMessagesAround(teamChatId, messageId)
+                setAroundMessages((current) => mergeMessages(current, response.messages))
+            }}
+        />
     )
 }
