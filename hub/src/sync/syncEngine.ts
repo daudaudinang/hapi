@@ -9,7 +9,7 @@
 
 import type { CodexCollaborationMode, DecryptedMessage, PermissionMode, Session, SyncEvent } from '@hapi/protocol/types'
 import type { Server } from 'socket.io'
-import type { Store } from '../store'
+import type { Store, StoredTeamMessage, StoredTeamParticipant } from '../store'
 import type { RpcRegistry } from '../socket/rpcRegistry'
 import type { SSEManager } from '../sse/sseManager'
 import { EventPublisher, type SyncEventListener } from './eventPublisher'
@@ -34,6 +34,7 @@ import {
 } from './rpcGateway'
 import { buildRecoveryContext } from './recoveryContext'
 import { SessionCache } from './sessionCache'
+import { TeamChatService } from './teamChatService'
 
 export type { Session, SyncEvent } from '@hapi/protocol/types'
 export type { Machine } from './machineCache'
@@ -85,6 +86,7 @@ export class SyncEngine {
     private readonly sessionCache: SessionCache
     private readonly machineCache: MachineCache
     private readonly messageService: MessageService
+    private readonly teamChatService: TeamChatService
     private readonly rpcGateway: RpcGateway
     private inactivityTimer: NodeJS.Timeout | null = null
     private readonly resumeAttempts = new Map<string, number>()
@@ -106,6 +108,7 @@ export class SyncEngine {
             this.eventPublisher,
             (sessionId, updatedAt) => this.recordSessionActivity(sessionId, updatedAt)
         )
+        this.teamChatService = new TeamChatService(store, this.eventPublisher)
         this.rpcGateway = new RpcGateway(io, rpcRegistry)
         this.reloadAll()
         this.inactivityTimer = setInterval(() => this.expireInactive(), 5_000)
@@ -220,6 +223,60 @@ export class SyncEngine {
 
     getMessagesAfter(sessionId: string, options: { afterSeq: number; limit: number }): DecryptedMessage[] {
         return this.messageService.getMessagesAfter(sessionId, options)
+    }
+
+    createTeamChat(input: { namespace: string; name: string; projectPath?: string | null }) {
+        return this.teamChatService.createTeamChat(input)
+    }
+
+    listTeamChats(namespace: string) {
+        return this.teamChatService.listTeamChats(namespace)
+    }
+
+    getTeamChat(namespace: string, id: string) {
+        return this.teamChatService.getTeamChat(namespace, id)
+    }
+
+    getTeamMessages(namespace: string, teamChatId: string, options: { limit: number; beforeSeq: number | null }) {
+        return this.teamChatService.getMessages(namespace, teamChatId, options)
+    }
+
+    getTeamMessagesAround(namespace: string, teamChatId: string, messageId: string, options: { before: number; after: number }) {
+        return this.teamChatService.getMessagesAround(namespace, teamChatId, messageId, options)
+    }
+
+    listTeamParticipants(namespace: string, teamChatId: string) {
+        return this.teamChatService.listParticipants(namespace, teamChatId)
+    }
+
+    addTeamParticipant(input: {
+        namespace: string
+        teamChatId: string
+        type: 'user' | 'session'
+        userId?: string | null
+        sessionId?: string | null
+        displayName: string
+        role: StoredTeamParticipant['role']
+        color: string
+    }) {
+        return this.teamChatService.addParticipant(input)
+    }
+
+    archiveTeamParticipant(namespace: string, teamChatId: string, participantId: string): void {
+        this.teamChatService.archiveParticipant(namespace, teamChatId, participantId)
+    }
+
+    postTeamMessage(input: {
+        namespace: string
+        teamChatId: string
+        authorParticipantId: string
+        text: string
+        reportType?: StoredTeamMessage['reportType']
+        replyToMessageId?: string | null
+        mentions?: unknown[]
+        files?: string[]
+    }) {
+        return this.teamChatService.postMessage(input)
     }
 
     handleRealtimeEvent(event: SyncEvent): void {
