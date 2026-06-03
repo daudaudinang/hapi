@@ -24,6 +24,7 @@ MVP principle:
 - Keep private session chats intact for deep execution.
 - Avoid new user-facing jargon.
 - Fit existing HAPI visual system: `--app-bg`, `--app-secondary-bg`, `--app-border`, light/dark.
+- Make daily dev use frictionless: quick create, clear jump links, context preview, attention-first status.
 
 ## Non-goals
 
@@ -67,23 +68,26 @@ Private session chat remains the working surface for each agent.
 
 ## Primary workflow
 
-1. User creates or opens Team Chat.
+1. User quickly creates or opens Team Chat from Mission Control, a session, or Editor.
 2. User adds existing sessions or starts new sessions.
-3. User writes naturally and mentions sessions:
+3. User optionally assigns lightweight roles to sessions: Backend, Frontend, Tests, Reviewer, Docs, General.
+4. User writes naturally and mentions sessions:
 
    ```txt
    @Backend API confirm final TeamMessage fields
    @Team Chat UI use the fields Backend posts
    ```
 
-4. HAPI creates Team mention requests for mentioned sessions.
-5. Target session shows Team mention card in its private session chat.
-6. Agent decides:
+5. Composer shows an included-context preview before sending routed mentions.
+6. HAPI creates Team mention requests for mentioned sessions.
+7. Target session shows Team mention card in its private session chat.
+8. Agent decides:
    - reply via Team Chat
    - act in private session
    - post progress/result/blocker
    - mark no-action silently
-7. Team Chat shows delivery/seen/replied/no-action state.
+9. Team Chat shows delivered/seen/processing/replied/no-action state.
+10. User watches Needs attention, Running, Done, and Blocked panels instead of scanning every timeline message.
 
 ## Navigation
 
@@ -98,8 +102,11 @@ Agent | Team Chat | Editor
 Entry points:
 
 - Mission Control topbar: open Team Chat mode.
+- Mission Control selection: create Team Chat from selected sessions.
 - Session header/menu: Add to Team Chat / Open Team Chat.
+- Session header/menu: Start Team Chat with this session.
 - Editor header: Team Chat button for current project/path.
+- Editor header/menu: Start Team Chat for current project/path.
 - Mobile: bottom/tab switcher:
 
   ```txt
@@ -114,7 +121,7 @@ Desktop layout:
 
 - Left: Team chats + sessions in current chat.
 - Center: timeline + composer.
-- Right: shared context + tasks/status + member colors.
+- Right: Needs attention + shared context + tasks/status + member colors.
 
 Mobile layout:
 
@@ -122,6 +129,13 @@ Mobile layout:
   - Chat
   - Sessions
   - Context
+
+Right panel prioritization:
+
+1. Needs attention: blockers, questions, failed deliveries, mentions requiring user input.
+2. Running: active sessions/tasks.
+3. Done: recent completed reports.
+4. Idle: available sessions.
 
 ## Visual direction
 
@@ -193,6 +207,37 @@ Examples:
 
 All are delivered to target session. Target agent decides response/action/no-action.
 
+## Included context preview
+
+Because mentions are routed into private session chats, the user must be able to see what context will be sent.
+
+When a Team Chat message contains `@session`, the composer shows a collapsed preview:
+
+```txt
+Included context
+- Original Team Chat message
+- Reply chain: 1 message
+- Shared goal
+- Decisions
+- Recent relevant updates
+```
+
+Actions:
+
+```txt
+[Edit context] [Attach file/diff] [Use default]
+```
+
+Default context packet:
+
+- original Team Chat message
+- reply preview if replying
+- shared context: goal + decisions + open questions
+- recent relevant Team Chat updates, bounded
+- manually attached files/diffs, if any
+
+Do not dump the entire Team Chat transcript by default.
+
 ## Team mention request
 
 When a session is mentioned, HAPI creates a Team mention request:
@@ -205,9 +250,11 @@ type TeamMentionRequest = {
     sourceSessionId?: string
     sourceUserId?: string
     targetSessionId: string
-    status: 'pending' | 'seen' | 'responded' | 'no_action' | 'superseded' | 'failed'
+    status: 'pending' | 'delivered' | 'seen' | 'processing' | 'responded' | 'no_action' | 'superseded' | 'failed'
     createdAt: number
+    deliveredAt?: number
     seenAt?: number
+    processingStartedAt?: number
     resolvedAt?: number
 }
 ```
@@ -222,6 +269,7 @@ Team Chat: <name>
 Message: <original message>
 Reply context: <optional replied-to excerpt>
 Shared context: <compact goal/decisions/open questions>
+Attached context: <optional files/diffs/user-selected context>
 
 Instruction:
 You were mentioned in a Team Chat.
@@ -268,6 +316,19 @@ Seen · No action needed
 
 No Team Chat reply is posted by default.
 
+Compact queue behavior:
+
+- show one compact bar by default:
+
+  ```txt
+  3 team mentions pending
+  [Review]
+  ```
+
+- expand only when clicked
+- do not fill the private session timeline with many full cards
+- include jump links: Open Team Chat, View original message, Reply to Team
+
 ## Team Chat-side mention state
 
 Original Team Chat message shows per-target state.
@@ -275,10 +336,12 @@ Original Team Chat message shows per-target state.
 Examples:
 
 ```txt
-👁 Backend API seen · no reply yet
-👁 Backend API seen · no action
-↩ Backend API replied
-⚠ Backend API failed to receive
+Backend API delivered
+Backend API seen · no reply yet
+Backend API processing
+Backend API seen · no action
+Backend API replied
+Backend API failed to receive
 ```
 
 If multiple targets:
@@ -287,7 +350,7 @@ If multiple targets:
 Seen by Backend API, Team Chat UI · Tests pending
 ```
 
-The eye icon communicates silent seen/no-action without adding noisy messages.
+The eye icon communicates silent seen/no-action without adding noisy messages. `Seen` means the request was viewed or supplied to the agent context; `processing` means an agent turn is actively handling it.
 
 ## Multiple simultaneous mentions
 
@@ -301,8 +364,13 @@ If a session is tagged by multiple sessions/users at once:
 Queue example in session chat:
 
 ```txt
-Team mentions queue (2)
+2 team mentions pending
+[Review]
+```
 
+Expanded view:
+
+```txt
 1. UI asks final schema
 2. Tests asks route to verify
 ```
@@ -398,6 +466,25 @@ type ReportToTeamInput = {
 }
 ```
 
+Report templates:
+
+| Type | UI title | Required content |
+|---|---|---|
+| `reply` | Replied | answer summary |
+| `progress` | Progress update | what changed + next step |
+| `done` | Done | result + changed files if available |
+| `blocked` | Blocked | blocker + who/what is needed |
+| `question` | Needs input | question + recommended options if available |
+| `handoff` | Handoff | target session + context summary |
+
+Timeline cards should be scannable:
+
+- green for done
+- red for blocked
+- amber for question/needs input
+- neutral/blue for progress
+- always include source session and related task/request
+
 Example Team Chat render:
 
 ```txt
@@ -442,6 +529,16 @@ Shows:
 - status
 - last update
 - linked Team message / mention request
+
+Needs attention appears above ordinary tasks.
+
+Items included:
+
+- blocked reports
+- questions from agents
+- failed mention delivery
+- mentions waiting for user decision
+- tasks idle because dependency is missing
 
 UI labels:
 
@@ -491,6 +588,7 @@ type TeamParticipant = {
     userId?: string
     sessionId?: string
     displayName: string
+    role?: 'backend' | 'frontend' | 'tests' | 'reviewer' | 'docs' | 'general'
     color: string
     joinedAt: number
 }
@@ -517,9 +615,11 @@ type TeamMentionRequest = {
     teamChatId: string
     sourceMessageId: string
     targetSessionId: string
-    status: 'pending' | 'seen' | 'responded' | 'no_action' | 'superseded' | 'failed'
+    status: 'pending' | 'delivered' | 'seen' | 'processing' | 'responded' | 'no_action' | 'superseded' | 'failed'
     createdAt: number
+    deliveredAt?: number
     seenAt?: number
+    processingStartedAt?: number
     resolvedAt?: number
 }
 ```
@@ -572,15 +672,22 @@ MarkTeamMentionNoAction
 MVP is successful when:
 
 - user can create Team Chat
+- user can quick-create Team Chat from selected sessions, current session, or current project
 - user can add sessions
+- user can assign lightweight roles to sessions
 - user can post Team messages
 - `@session` mention creates request in target session
+- composer shows included-context preview for routed mentions
 - target session shows Team mention card
-- Team Chat message shows pending/seen/replied/no-action state
+- session chat shows compact pending mention queue when multiple mentions arrive
+- Team Chat message shows pending/delivered/seen/processing/replied/no-action state
 - agent can post update via ReportToTeam
+- ReportToTeam renders structured templates for reply/progress/done/blocked/question/handoff
 - inline reply works
 - clicking reply preview scrolls to original message
 - multiple mentions queue in target session
+- right panel shows Needs attention above ordinary tasks
+- jump links exist between Team Chat messages, target session cards, reports, and original messages
 - member colors render consistently
 - light/dark mode match HAPI style
 
@@ -589,6 +696,11 @@ MVP is successful when:
 - Auto-processing: idle remote sessions may process a mention batch after `mentionBatchWindowMs`; thinking/local/user-controlled sessions only queue.
 - Shared context: manually editable sections in MVP; auto-summary can update suggestions but must not overwrite user-pinned decisions.
 - Team Chat creation: default project-scoped when launched from a session/editor/project; allow free-form Team Chat from Team Chat home.
+- Quick create: selected sessions inherit project path; if multiple paths are selected, ask user to choose target project before creating.
+- Roles: optional; default role is `general`; user can change role/color from participant menu.
+- Included context preview: collapsed by default; always visible when a message has a `@session` mention.
+- Mention state: set `processing` when a target agent turn begins handling one or more Team mentions.
+- Needs attention: sort by blocked/question/failed first, then newest.
 - Guardrail defaults:
   - `maxMentionHopDepth = 3`
   - `mentionBatchWindowMs = 3000`
