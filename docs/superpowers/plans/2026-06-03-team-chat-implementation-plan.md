@@ -54,6 +54,7 @@ If using a single branch/worktree, execute tasks sequentially. Use parallel suba
 - `team-mention-updated` events include `sessionId: targetSessionId` and `targetSessionId`.
 - Query invalidation for session messages must update `message-window-store`; invalidating a non-existent `queryKeys.messages` entry is insufficient.
 - Every route/service/store method must enforce namespace and participant/request ownership.
+- Existing Agent Mode and Editor Mode are regression surfaces: Team Chat adds navigation/actions but must not change current `/sessions`, Session Chat send/retry, `/editor`, file editing, terminal, or `← Agent Mode` behavior.
 
 ---
 
@@ -2143,7 +2144,8 @@ git commit -m "feat: add team chat reports"
 - Modify: `web/src/components/editor/EditorHeader.tsx`
 - Test: `hub/src/sse/sseManager.test.ts`
 - Test: `web/src/hooks/useSSE.test.tsx` or nearest existing SSE/App event tests
-- Test: `web/src/components/SessionHeader.test.tsx`, `web/src/components/editor/EditorHeader.test.tsx`, dashboard nav test
+- Test: `web/src/components/SessionHeader.test.tsx`, `web/src/components/SessionChat`/router regression tests if present
+- Test: `web/src/components/editor/EditorHeader.test.tsx`, `web/src/components/editor/EditorLayout.test.tsx`, dashboard nav test
 
 - [ ] **Step 1: Fix SSE delivery and invalidation for Team Chat events**
 
@@ -2214,7 +2216,7 @@ Behavior:
 - `Add to existing Team Chat`: open a small picker of active Team Chats, then call `addTeamParticipant`.
 - `Create Team Chat with this session`: call `createTeamChat({ name: getSessionTitle(session), projectPath: session.metadata?.path })`, add current session as participant, navigate to `/team-chats/$teamChatId`.
 
-Test all three labels and the create-with-session happy path.
+Test all three labels and the create-with-session happy path. Also keep existing Agent Mode tests passing: ordinary session send/retry, action menu open/close, file/terminal links, and pinned dashboard behavior.
 
 - [ ] **Step 4: Add EditorHeader action**
 
@@ -2231,13 +2233,13 @@ In `EditorHeader.tsx`, add a Team Chat action using existing button styling/toke
 </Button>
 ```
 
-Update `/team-chats` route search validation to accept `project` and `machine`; when present, prefill create/open flow for that project + machine.
+Update `/team-chats` route search validation to accept `project` and `machine`; when present, prefill create/open flow for that project + machine. Keep the existing `← Agent Mode` button behavior unchanged and covered by `EditorHeader.test.tsx` / `EditorLayout.test.tsx`.
 
 - [ ] **Step 5: Run tests/typecheck**
 
 ```bash
 bun --cwd hub test src/sse/sseManager.test.ts
-bun --cwd web test src/hooks/useSSE.test.tsx src/components/SessionHeader.test.tsx src/components/editor/EditorHeader.test.tsx
+bun --cwd web test src/hooks/useSSE.test.tsx src/components/SessionHeader.test.tsx src/components/editor/EditorHeader.test.tsx src/components/editor/EditorLayout.test.tsx
 bun --cwd web typecheck
 ```
 
@@ -2289,6 +2291,8 @@ Manual checks:
 - Dark mode contrast: member colors readable; status badges distinguishable.
 - Mobile: Team Chat shows Chat / Sessions / Context tabs; composer stays above keyboard.
 - Multiple simultaneous mentions to the same session show compact pending queue older-first.
+- Agent Mode regression: open `/sessions`, send a normal message, retry failed message if available, open Files/Terminal; behavior unchanged.
+- Editor Mode regression: open `/editor`, browse project, open/save file, open terminal, click `← Agent Mode`; behavior unchanged.
 - Refresh browser; state persists.
 
 - [ ] **Step 3: Update docs if feature is exposed**
