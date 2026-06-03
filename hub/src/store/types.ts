@@ -62,6 +62,64 @@ export type StoredPushSubscription = {
     createdAt: number
 }
 
+export type StoredTeamChat = {
+    id: string
+    namespace: string
+    name: string
+    projectPath: string | null
+    sharedContext: unknown | null
+    archivedAt: number | null
+    createdAt: number
+    updatedAt: number
+}
+
+export type StoredTeamParticipant = {
+    id: string
+    namespace: string
+    teamChatId: string
+    type: 'user' | 'session'
+    userId: string | null
+    sessionId: string | null
+    displayName: string
+    role: 'backend' | 'frontend' | 'tests' | 'reviewer' | 'docs' | 'general'
+    color: string
+    archivedAt: number | null
+    joinedAt: number
+}
+
+export type StoredTeamMessage = {
+    id: string
+    namespace: string
+    teamChatId: string
+    seq: number
+    authorParticipantId: string
+    text: string
+    reportType: 'reply' | 'progress' | 'done' | 'blocked' | 'question' | 'handoff' | null
+    replyToMessageId: string | null
+    replyPreview: unknown | null
+    mentions: unknown
+    files: unknown
+    createdAt: number
+}
+
+export type StoredTeamMentionRequest = {
+    id: string
+    namespace: string
+    teamChatId: string
+    sourceMessageId: string
+    targetSessionId: string
+    status: 'pending' | 'delivered' | 'seen' | 'processing' | 'responded' | 'no_action' | 'superseded' | 'failed'
+    contextSnapshot: unknown
+    hopDepth: number
+    parentRequestId: string | null
+    error: string | null
+    createdAt: number
+    deliveredAt: number | null
+    seenAt: number | null
+    processingStartedAt: number | null
+    resolvedAt: number | null
+}
+
 export type VersionedUpdateResult<T> =
     | { result: 'success'; version: number; value: T }
     | { result: 'version-mismatch'; version: number; value: T }

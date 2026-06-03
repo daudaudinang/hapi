@@ -6,6 +6,7 @@ import { MachineStore } from './machineStore'
 import { MessageStore } from './messageStore'
 import { PushStore } from './pushStore'
 import { SessionStore } from './sessionStore'
+import { TeamChatStore } from './teamChatStore'
 import { UserStore } from './userStore'
 
 export type {
@@ -13,6 +14,10 @@ export type {
     StoredMessage,
     StoredPushSubscription,
     StoredSession,
+    StoredTeamChat,
+    StoredTeamMentionRequest,
+    StoredTeamMessage,
+    StoredTeamParticipant,
     StoredUser,
     VersionedUpdateResult
 } from './types'
@@ -20,15 +25,20 @@ export { MachineStore } from './machineStore'
 export { MessageStore } from './messageStore'
 export { PushStore } from './pushStore'
 export { SessionStore } from './sessionStore'
+export { TeamChatStore } from './teamChatStore'
 export { UserStore } from './userStore'
 
-const SCHEMA_VERSION: number = 9
+const SCHEMA_VERSION: number = 10
 const REQUIRED_TABLES = [
     'sessions',
     'machines',
     'messages',
     'users',
-    'push_subscriptions'
+    'push_subscriptions',
+    'team_chats',
+    'team_participants',
+    'team_messages',
+    'team_mention_requests'
 ] as const
 
 export class Store {
@@ -40,6 +50,7 @@ export class Store {
     readonly messages: MessageStore
     readonly users: UserStore
     readonly push: PushStore
+    readonly teamChats: TeamChatStore
 
     constructor(dbPath: string) {
         this.dbPath = dbPath
@@ -81,6 +92,7 @@ export class Store {
         this.messages = new MessageStore(this.db)
         this.users = new UserStore(this.db)
         this.push = new PushStore(this.db)
+        this.teamChats = new TeamChatStore(this.db)
     }
 
     private initSchema(): void {
@@ -98,6 +110,7 @@ export class Store {
             6: () => this.migrateFromV6ToV7(),
             7: () => this.migrateFromV7ToV8(),
             8: () => this.migrateFromV8ToV9(),
+            9: () => this.migrateFromV9ToV10(),
         })
 
         if (currentVersion === 0) {
@@ -222,6 +235,91 @@ export class Store {
                 UNIQUE(namespace, endpoint)
             );
             CREATE INDEX IF NOT EXISTS idx_push_subscriptions_namespace ON push_subscriptions(namespace);
+        `)
+        this.createTeamChatSchema()
+    }
+
+    private createTeamChatSchema(): void {
+        this.db.exec(`
+            CREATE TABLE IF NOT EXISTS team_chats (
+                id TEXT PRIMARY KEY,
+                namespace TEXT NOT NULL,
+                name TEXT NOT NULL,
+                project_path TEXT,
+                shared_context TEXT,
+                archived_at INTEGER,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_team_chats_namespace_updated
+                ON team_chats(namespace, updated_at DESC);
+
+            CREATE TABLE IF NOT EXISTS team_participants (
+                id TEXT PRIMARY KEY,
+                namespace TEXT NOT NULL,
+                team_chat_id TEXT NOT NULL,
+                type TEXT NOT NULL,
+                user_id TEXT,
+                session_id TEXT,
+                display_name TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'general',
+                color TEXT NOT NULL,
+                archived_at INTEGER,
+                joined_at INTEGER NOT NULL,
+                FOREIGN KEY (team_chat_id) REFERENCES team_chats(id) ON DELETE CASCADE,
+                FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE SET NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_team_participants_chat
+                ON team_participants(team_chat_id, archived_at);
+            CREATE INDEX IF NOT EXISTS idx_team_participants_session
+                ON team_participants(namespace, session_id);
+
+            CREATE TABLE IF NOT EXISTS team_messages (
+                id TEXT PRIMARY KEY,
+                namespace TEXT NOT NULL,
+                team_chat_id TEXT NOT NULL,
+                seq INTEGER NOT NULL,
+                author_participant_id TEXT NOT NULL,
+                text TEXT NOT NULL,
+                report_type TEXT,
+                reply_to_message_id TEXT,
+                reply_preview TEXT,
+                mentions TEXT NOT NULL DEFAULT '[]',
+                files TEXT NOT NULL DEFAULT '[]',
+                created_at INTEGER NOT NULL,
+                FOREIGN KEY (team_chat_id) REFERENCES team_chats(id) ON DELETE CASCADE,
+                FOREIGN KEY (author_participant_id) REFERENCES team_participants(id) ON DELETE RESTRICT,
+                FOREIGN KEY (reply_to_message_id) REFERENCES team_messages(id) ON DELETE SET NULL,
+                UNIQUE(team_chat_id, seq)
+            );
+            CREATE INDEX IF NOT EXISTS idx_team_messages_chat_seq
+                ON team_messages(team_chat_id, seq DESC);
+
+            CREATE TABLE IF NOT EXISTS team_mention_requests (
+                id TEXT PRIMARY KEY,
+                namespace TEXT NOT NULL,
+                team_chat_id TEXT NOT NULL,
+                source_message_id TEXT NOT NULL,
+                target_session_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                context_snapshot TEXT NOT NULL,
+                hop_depth INTEGER NOT NULL DEFAULT 0,
+                parent_request_id TEXT,
+                error TEXT,
+                created_at INTEGER NOT NULL,
+                delivered_at INTEGER,
+                seen_at INTEGER,
+                processing_started_at INTEGER,
+                resolved_at INTEGER,
+                FOREIGN KEY (team_chat_id) REFERENCES team_chats(id) ON DELETE CASCADE,
+                FOREIGN KEY (source_message_id) REFERENCES team_messages(id) ON DELETE CASCADE,
+                FOREIGN KEY (target_session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+                FOREIGN KEY (parent_request_id) REFERENCES team_mention_requests(id) ON DELETE SET NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_team_mentions_session_status
+                ON team_mention_requests(namespace, target_session_id, status, created_at);
+            CREATE INDEX IF NOT EXISTS idx_team_mentions_message
+                ON team_mention_requests(source_message_id);
         `)
     }
 
@@ -366,6 +464,10 @@ export class Store {
         if (!columns.has('collapse_reasoning')) {
             this.db.exec('ALTER TABLE sessions ADD COLUMN collapse_reasoning INTEGER DEFAULT 0')
         }
+    }
+
+    private migrateFromV9ToV10(): void {
+        this.createTeamChatSchema()
     }
 
     private migrateFromV7ToV8(): void {
