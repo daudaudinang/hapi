@@ -44,6 +44,21 @@ type TeamMessageRow = {
     created_at: number
 }
 
+const TEAM_MENTION_STATUS_TRANSITIONS: Record<StoredTeamMentionRequest['status'], readonly StoredTeamMentionRequest['status'][]> = {
+    pending: ['pending', 'delivered', 'seen', 'processing', 'responded', 'no_action', 'failed', 'superseded'],
+    delivered: ['delivered', 'seen', 'processing', 'responded', 'no_action', 'failed', 'superseded'],
+    seen: ['seen', 'processing', 'responded', 'no_action', 'failed', 'superseded'],
+    processing: ['processing', 'responded', 'no_action', 'failed', 'superseded'],
+    no_action: ['no_action', 'responded'],
+    responded: ['responded'],
+    failed: ['failed'],
+    superseded: ['superseded']
+}
+
+function canTransitionMentionStatus(from: StoredTeamMentionRequest['status'], to: StoredTeamMentionRequest['status']): boolean {
+    return TEAM_MENTION_STATUS_TRANSITIONS[from].includes(to)
+}
+
 type TeamMentionRequestRow = {
     id: string
     namespace: string
@@ -108,6 +123,10 @@ export class TeamChatStore {
         this.requireTeamChat(input.namespace, input.teamChatId)
         if (input.sessionId) {
             this.requireSession(input.namespace, input.sessionId)
+            if (input.type === 'session') {
+                const existing = this.getActiveSessionParticipant(input.namespace, input.teamChatId, input.sessionId)
+                if (existing) return existing
+            }
         }
         const id = randomUUID()
         const now = Date.now()
@@ -303,6 +322,10 @@ export class TeamChatStore {
         resolvedAt?: number | null
         error?: string | null
     }): StoredTeamMentionRequest | null {
+        const current = this.getMentionRequest(input.namespace, input.requestId)
+        if (!current) return null
+        if (!canTransitionMentionStatus(current.status, input.status)) return current
+
         this.db.prepare(`
             UPDATE team_mention_requests
             SET status = ?,

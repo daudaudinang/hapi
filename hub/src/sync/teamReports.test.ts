@@ -82,6 +82,32 @@ describe('Team Chat reports', () => {
         expect(store.teamChats.getMessages('default', chat.id, 10).map((message) => message.reportType)).not.toContain('reply')
     })
 
+    it('does not let stale mention status updates regress resolved states', () => {
+        const { store, service, chat, backend, user, backendSession } = createContext()
+        service.postMessage({ namespace: 'default', teamChatId: chat.id, authorParticipantId: user.id, text: '@Backend FYI' })
+        const noActionRequest = store.teamChats.listPendingMentionRequests('default', backendSession.id)[0]
+
+        service.markMentionNoAction({ namespace: 'default', sessionId: backendSession.id, requestId: noActionRequest.id })
+        service.updateMentionStatus({ namespace: 'default', sessionId: backendSession.id, requestId: noActionRequest.id, status: 'seen' })
+
+        expect(store.teamChats.getMentionRequest('default', noActionRequest.id)?.status).toBe('no_action')
+
+        service.postMessage({ namespace: 'default', teamChatId: chat.id, authorParticipantId: user.id, text: '@Backend please reply' })
+        const responseRequest = store.teamChats.listPendingMentionRequests('default', backendSession.id)[0]
+        service.reportToTeam({
+            namespace: 'default',
+            teamChatId: chat.id,
+            authorParticipantId: backend.id,
+            type: 'reply',
+            summary: 'Reply is posted',
+            replyToRequestId: responseRequest.id
+        })
+
+        service.markMentionNoAction({ namespace: 'default', sessionId: backendSession.id, requestId: responseRequest.id })
+
+        expect(store.teamChats.getMentionRequest('default', responseRequest.id)?.status).toBe('responded')
+    })
+
     it('rejects low-signal reports that are not replying to a request', () => {
         const { service, chat, backend } = createContext()
 

@@ -68,6 +68,35 @@ describe('TeamChatStore', () => {
         expect(store.teamChats.getMentionRequest('other-ns', request.id)).toBeNull()
     })
 
+    it('reuses the active participant when adding the same session twice', () => {
+        const store = new Store(':memory:')
+        const session = store.sessions.getOrCreateSession('session-backend', { path: '/repo' }, null, 'default')
+        const chat = store.teamChats.createTeamChat({ namespace: 'default', name: 'Chat' })
+
+        const first = store.teamChats.addParticipant({
+            namespace: 'default',
+            teamChatId: chat.id,
+            type: 'session',
+            sessionId: session.id,
+            displayName: 'Backend',
+            color: '#60a5fa',
+            role: 'backend'
+        })
+        const second = store.teamChats.addParticipant({
+            namespace: 'default',
+            teamChatId: chat.id,
+            type: 'session',
+            sessionId: session.id,
+            displayName: 'Backend duplicate',
+            color: '#f87171',
+            role: 'general'
+        })
+
+        expect(second.id).toBe(first.id)
+        expect(store.teamChats.listParticipants('default', chat.id)).toHaveLength(1)
+        expect(store.teamChats.getActiveSessionParticipant('default', chat.id, session.id)?.role).toBe('backend')
+    })
+
     it('requires mention target sessions to exist', () => {
         const store = new Store(':memory:')
         const chat = store.teamChats.createTeamChat({ namespace: 'default', name: 'Chat' })
@@ -129,7 +158,6 @@ describe('TeamChatStore', () => {
         expect(store.teamChats.getMessages('ns-b', chatA.id, 10)).toEqual([])
         expect(sessionA.namespace).toBe('ns-a')
     })
-
 
     it('does not use a message from another Team Chat as an around-page anchor', () => {
         const store = new Store(':memory:')
