@@ -55,6 +55,7 @@ If using a single branch/worktree, execute tasks sequentially. Use parallel suba
 - Query invalidation for session messages must update `message-window-store`; invalidating a non-existent `queryKeys.messages` entry is insufficient.
 - Every route/service/store method must enforce namespace and participant/request ownership.
 - Existing Agent Mode and Editor Mode are regression surfaces: Team Chat adds navigation/actions but must not change current `/sessions`, Session Chat send/retry, `/editor`, file editing, terminal, or `← Agent Mode` behavior.
+- Mention delivery policy is explicit: auto-invoke only remote/uncontrolled/idle sessions; thinking or local/user-controlled sessions receive a visible Team card/queue but no CLI `new-message` invocation until the user or a future auto-processing feature acts.
 
 ---
 
@@ -1852,15 +1853,36 @@ const syntheticContent = {
 }
 ```
 
+Do **not** blindly call the normal `sendMessage()` path for every mention: current CLI treats `new-message` as a user message and enqueues it for the agent.
+
+Delivery policy:
+
+```ts
+type TeamMentionDeliveryMode = 'invoke-agent' | 'card-only'
+
+function getMentionDeliveryMode(session: Session): TeamMentionDeliveryMode {
+    if (session.thinking) return 'card-only'
+    if (session.agentState?.controlledByUser === true) return 'card-only' // local/user-controlled
+    return 'invoke-agent'
+}
+```
+
+- `invoke-agent`: store the Team mention session message, emit CLI `new-message`, emit SSE `message-received`, status `delivered`.
+- `card-only`: store the same Team mention session message and emit SSE `message-received`, but **do not** emit CLI `new-message`; status `delivered`/`seen` is UI-visible, but the agent is not interrupted.
+- Future follow-up may auto-process card-only queued mentions when the session becomes idle/remote.
+
 Implement `TeamMentionDeliveryService` instead of writing session rows inline in `TeamChatService`:
 
 ```ts
+export type TeamMentionDeliveryMode = 'invoke-agent' | 'card-only'
+
 export class TeamMentionDeliveryService {
     constructor(private readonly messageService: MessageService, private readonly store: Store, private readonly publisher: Pick<EventPublisher, 'emit'>) {}
 
-    async deliver(input: { namespace: string; request: StoredTeamMentionRequest; envelope: string }): Promise<void> {
+    async deliver(input: { namespace: string; request: StoredTeamMentionRequest; envelope: string; mode: TeamMentionDeliveryMode }): Promise<void> {
         await this.messageService.sendTeamMentionMessage(input.request.targetSessionId, {
             text: input.envelope,
+            invokeAgent: input.mode === 'invoke-agent',
             meta: {
                 sentFrom: 'team-chat',
                 teamMentionRequestId: input.request.id,
@@ -1882,7 +1904,7 @@ export class TeamMentionDeliveryService {
 }
 ```
 
-Add `MessageService.sendTeamMentionMessage()` by copying the current `sendMessage()` flow, but allow `meta.sentFrom: 'team-chat'` and include `teamMentionRequestId`, `teamChatId`, `sourceMessageId`. It must still emit the existing CLI `update` and `message-received` event so active Session Chat windows update.
+Add `MessageService.sendTeamMentionMessage()` by copying the current `sendMessage()` storage/SSE flow, but allow `meta.sentFrom: 'team-chat'` and include `teamMentionRequestId`, `teamChatId`, `sourceMessageId`. It must always emit `message-received` for web Session Chat. It must emit the CLI `update` only when `invokeAgent === true`; this protects Agent Mode/local sessions from surprise agent turns.
 
 - [ ] **Step 4: Web normalize synthetic message**
 
@@ -2284,7 +2306,8 @@ Manual checks:
 - Create Team Chat.
 - Add two sessions.
 - Post message without mention; appears in Team Chat only.
-- Post `@Session Name hello`; target session receives Team mention card.
+- Post `@Session Name hello`; idle remote target session receives Team mention card and may process it.
+- Mention a thinking or local/user-controlled session; Team mention card appears but no surprise agent turn starts.
 - Mark no-action; Team Chat message shows no-action state.
 - Post ReportToTeam-style update; Team Chat shows structured report.
 - Reply to older message; click preview scrolls to original and highlights it.
