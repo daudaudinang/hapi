@@ -4,9 +4,9 @@
 
 **Goal:** Build Team Chat MVP: project-scoped shared chat, participants, mentions routed into session-side cards, inline replies, structured reports, attention/status panels, and HAPI-style web navigation.
 
-**Architecture:** Hub owns Team Chat state in first-class SQLite tables. Team mentions are persisted as `team_mention_requests` and delivered into target sessions as synthetic session messages rendered as Team mention cards. Agents/tools report back through Hub APIs; SSE keeps Team Chat and Session Chat caches in sync.
+**Architecture:** Hub owns Team Chat state in first-class SQLite tables. Team mentions are persisted as `team_mention_requests` and delivered by `TeamMentionDeliveryService` into target sessions as existing-compatible `user`/`text` session messages with Team metadata; the web renders those messages as Team mention cards. `ReportToTeam` is MVP Hub API + session-side action; provider-native tool injection is explicitly follow-up. SSE events include namespace and `sessionId`/`targetSessionId` so Team Chat and Session Chat caches stay in sync.
 
-**Tech Stack:** Bun workspaces, TypeScript strict, Hono routes, SQLite via `bun:sqlite`, Socket.IO/SSE, React 19, TanStack Router/Query, Vitest/Bun test.
+**Tech Stack:** Bun workspaces, TypeScript strict, Hono routes, SQLite via `bun:sqlite`, Socket.IO/SSE, React 19, TanStack Router/Query, `bun:test` for shared/hub tests, Vitest for web tests.
 
 ---
 
@@ -19,9 +19,41 @@ Important architecture decisions for implementation:
 - Team Chat is first-class domain; do not extend `sessions.team_state` for source-of-truth.
 - Team messages need `seq` for pagination and reply scroll stability.
 - Mention requests need `contextSnapshot`, `hopDepth`, and `parentRequestId` for debugging and loop guards.
-- MVP mention delivery uses synthetic session messages rendered as Team mention cards.
-- ReportToTeam begins as Hub API + session-side action; provider-native tools are a follow-up after MVP.
+- MVP mention delivery uses existing-compatible synthetic `user`/`text` session messages plus metadata; never insert `role: 'system'` / custom `content.type` messages into the CLI delivery path.
+- ReportToTeam begins as Hub API + session-side action. Provider-native agent tools for Claude/Codex/Gemini/OpenCode are a follow-up after MVP, not part of this plan.
 - Participants should be archived/removed from active participant lists without deleting historical message authors.
+
+
+## Superpowers execution model
+
+Default execution is **Superpowers subagent-driven development**, not blind parallel implementation:
+
+1. Create an isolated worktree first with `superpowers:using-git-worktrees`.
+2. The controller reads this plan once, extracts each task, and dispatches one fresh implementer subagent per task.
+3. After each task: run spec-compliance review, then code-quality review, then verification, then commit.
+4. Do **not** dispatch multiple implementation subagents against the same worktree when they touch shared contracts, migrations, routes, or web chat pipeline files.
+
+Parallel-safe execution requires separate worktrees and contract locks:
+
+| Wave | Parallel? | Tasks | Why |
+|------|-----------|-------|-----|
+| 0 | No | Task 1 | Shared protocol contracts unblock all other work. |
+| 1 | Yes, separate worktrees | Task 2 and Task 4 tests/client shell | Storage and web API client/types can proceed after protocol names are locked; merge Task 2 before service implementation. |
+| 2 | Mostly sequential | Task 3 then Task 6 | Service/routes create mention delivery contracts; session card pipeline depends on synthetic message metadata. |
+| 3 | Yes, separate worktrees after Task 3 | Task 5 and parts of Task 7 UI | Team Chat UI components and report card styling touch mostly separate files; reconcile after shared web types. |
+| 4 | No | Task 8 and Task 9 | Realtime/nav/full verification integrate all previous work. |
+
+If using a single branch/worktree, execute tasks sequentially. Use parallel subagents for read-only reviews at every checkpoint.
+
+## Contract locks from reviewer pass
+
+- New protocol names are `TeamChatSchema`, `TeamChatMessageSchema`, `TeamParticipantSchema`, `TeamMentionRequestSchema`; do not use legacy `TeamMessageSchema` for Team Chat.
+- Hub/shared tests import from `bun:test`; web tests import from `vitest`.
+- Team mention session delivery must use a normal user text payload plus metadata: `role: 'user'`, `content: { type: 'text', text: envelope }`, `meta.sentFrom = 'team-chat'`.
+- Team mention UI blocks use `kind: 'team-mention'` because `ChatBlock` is kind-based.
+- `team-mention-updated` events include `sessionId: targetSessionId` and `targetSessionId`.
+- Query invalidation for session messages must update `message-window-store`; invalidating a non-existent `queryKeys.messages` entry is insufficient.
+- Every route/service/store method must enforce namespace and participant/request ownership.
 
 ---
 
@@ -53,6 +85,10 @@ Important architecture decisions for implementation:
 
 - Create: `hub/src/sync/teamChatService.ts`
   - Domain orchestration: create chat, add participant, post message, parse mentions, build context snapshot, create mention requests, update mention status, report to team.
+- Create: `hub/src/sync/teamMentionDeliveryService.ts`
+  - Bridge Team mentions into the existing session message delivery path using `user`/`text` payloads and Team metadata.
+- Create: `hub/src/sync/teamMentions.ts`
+  - Mention parser and dedupe/boundary rules.
 - Modify: `hub/src/sync/syncEngine.ts`
   - Instantiate/expose `TeamChatService`.
 - Create: `hub/src/web/routes/teamChats.ts`
@@ -73,7 +109,11 @@ Important architecture decisions for implementation:
 - Modify: `web/src/lib/query-keys.ts`
   - Add query keys.
 - Create: `web/src/hooks/queries/useTeamChats.ts`
+- Create: `web/src/hooks/queries/useTeamChat.ts`
+- Create: `web/src/hooks/queries/useTeamChatParticipants.ts`
 - Create: `web/src/hooks/queries/useTeamChatMessages.ts`
+- Create: `web/src/hooks/queries/useTeamChatMessagesAround.ts`
+- Create: `web/src/hooks/queries/useSessionTeamMentions.ts`
 - Create: `web/src/hooks/mutations/useTeamChatActions.ts`
 - Modify: `web/src/hooks/useSSE.ts`
   - Handle Team Chat event invalidation/cache updates.
@@ -88,6 +128,8 @@ Important architecture decisions for implementation:
 - Create: `web/src/components/TeamChat/TeamChatList.tsx`
 - Create: `web/src/components/TeamChat/TeamChatTimeline.tsx`
 - Create: `web/src/components/TeamChat/TeamChatComposer.tsx`
+- Create: `web/src/components/TeamChat/TeamMentionAutocomplete.tsx`
+- Create: `web/src/components/TeamChat/TeamChatMobileLayout.tsx`
 - Create: `web/src/components/TeamChat/TeamChatRightPanel.tsx`
 - Create: `web/src/components/TeamChat/TeamMessageCard.tsx`
 - Create: `web/src/components/TeamChat/IncludedContextPreview.tsx`
@@ -105,8 +147,12 @@ Important architecture decisions for implementation:
   - Preserve synthetic Team mention message shape.
 - Modify: `web/src/chat/types.ts`
   - Add Team mention block type.
-- Modify: `web/src/chat/reducer.ts`
-  - Convert synthetic messages into card blocks.
+- Modify: `web/src/chat/reducer.ts`, `web/src/chat/reducerTimeline.ts`, `web/src/chat/reconcile.ts`
+  - Convert synthetic messages into `kind: 'team-mention'` card blocks and keep realtime updates stable.
+- Modify: `web/src/lib/assistant-runtime.ts`
+  - Convert Team mention blocks into assistant-ui compatible metadata.
+- Modify: `web/src/components/AssistantChat/HappyThread.tsx`
+  - Render Team mention cards and compact queues.
 - Create: `web/src/components/AssistantChat/messages/TeamMentionMessage.tsx`
 - Modify: `web/src/components/AssistantChat/messages/*` or `HappyThread.tsx`
   - Render Team mention cards and compact queue.
@@ -126,11 +172,11 @@ Important architecture decisions for implementation:
 Create `shared/src/teamChat.test.ts`:
 
 ```ts
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import {
     TeamChatSchema,
     TeamMentionRequestSchema,
-    TeamMessageSchema,
+    TeamChatMessageSchema,
     TeamParticipantSchema,
     SyncEventSchema
 } from './schemas'
@@ -172,15 +218,16 @@ describe('Team Chat schemas', () => {
 })
 ```
 
+
 - [ ] **Step 2: Run test to verify it fails**
 
 Run:
 
 ```bash
-bun --cwd shared test teamChat.test.ts
+bun test shared/src/teamChat.test.ts
 ```
 
-Expected: FAIL because `TeamChatSchema`, `TeamMentionRequestSchema`, `TeamMessageSchema`, and Team Chat SyncEvent variants are missing.
+Expected: FAIL because `TeamChatSchema`, `TeamMentionRequestSchema`, `TeamChatMessageSchema`, and Team Chat SyncEvent variants are missing.
 
 - [ ] **Step 3: Add schemas**
 
@@ -245,7 +292,7 @@ export const TeamParticipantSchema = z.object({
     joinedAt: z.number()
 })
 
-export const TeamMessageSchemaV2 = z.object({
+export const TeamChatMessageSchema = z.object({
     id: z.string(),
     teamChatId: z.string(),
     seq: z.number(),
@@ -281,6 +328,14 @@ export const TeamMentionRequestSchema = z.object({
     processingStartedAt: z.number().nullable().optional(),
     resolvedAt: z.number().nullable().optional()
 })
+
+export type TeamParticipantRole = z.infer<typeof TeamParticipantRoleSchema>
+export type TeamMentionStatus = z.infer<typeof TeamMentionStatusSchema>
+export type TeamReportType = z.infer<typeof TeamReportTypeSchema>
+export type TeamChat = z.infer<typeof TeamChatSchema>
+export type TeamParticipant = z.infer<typeof TeamParticipantSchema>
+export type TeamChatMessage = z.infer<typeof TeamChatMessageSchema>
+export type TeamMentionRequest = z.infer<typeof TeamMentionRequestSchema>
 ```
 
 Add SyncEvent variants to `SyncEventSchema`:
@@ -299,6 +354,7 @@ SessionEventBaseSchema.extend({
     type: z.literal('team-mention-updated'),
     teamChatId: z.string(),
     requestId: z.string(),
+    sessionId: z.string(), // set to targetSessionId so session-scoped SSE subscribers receive the event
     targetSessionId: z.string()
 }),
 SessionEventBaseSchema.extend({
@@ -330,7 +386,7 @@ Use the name `TeamChatMessageSchema` for the new Team Chat message schema so it 
 Run:
 
 ```bash
-bun --cwd shared test teamChat.test.ts
+bun test shared/src/teamChat.test.ts
 bun typecheck
 ```
 
@@ -358,7 +414,7 @@ git commit -m "feat: add team chat protocol schemas"
 Create `hub/src/store/teamChatStore.test.ts`:
 
 ```ts
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import { Store } from './index'
 
 describe('TeamChatStore', () => {
@@ -396,8 +452,33 @@ describe('TeamChatStore', () => {
         const around = store.teamChats.getMessagesAround({ namespace: 'default', teamChatId: chat.id, messageId: first.id, before: 5, after: 5 })
         expect(around.messages.map(m => m.text)).toEqual(['first', 'second'])
     })
+
+    it('stores mention requests and lifecycle timestamps', () => {
+        const store = new Store(':memory:')
+        const chat = store.teamChats.createTeamChat({ namespace: 'default', name: 'Chat' })
+        const user = store.teamChats.addParticipant({ namespace: 'default', teamChatId: chat.id, type: 'user', displayName: 'You', color: '#34d399', role: 'general' })
+        const message = store.teamChats.addMessage({ namespace: 'default', teamChatId: chat.id, authorParticipantId: user.id, text: '@Backend confirm', mentions: [] })
+        const request = store.teamChats.addMentionRequest({
+            namespace: 'default',
+            teamChatId: chat.id,
+            sourceMessageId: message.id,
+            targetSessionId: 'session-backend',
+            contextSnapshot: { originalText: message.text, sharedContext: { decisions: [], openQuestions: [], relevantFiles: [] }, attachedFiles: [], recentUpdates: [] },
+            hopDepth: 1
+        })
+
+        const seenAt = Date.now()
+        store.teamChats.updateMentionStatus({ namespace: 'default', requestId: request.id, status: 'seen', seenAt })
+
+        const updated = store.teamChats.getMentionRequest('default', request.id)
+        expect(updated?.status).toBe('seen')
+        expect(updated?.seenAt).toBe(seenAt)
+        expect(store.teamChats.listPendingMentionRequests('default', 'session-backend').map(item => item.id)).toEqual([request.id])
+        expect(store.teamChats.getMentionRequest('other-ns', request.id)).toBeNull()
+    })
 })
 ```
+
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -596,6 +677,64 @@ import type { Database } from 'bun:sqlite'
 import type { StoredTeamChat, StoredTeamMessage, StoredTeamMentionRequest, StoredTeamParticipant } from './types'
 import { safeJsonParse } from './json'
 
+type TeamChatRow = {
+    id: string
+    namespace: string
+    name: string
+    project_path: string | null
+    shared_context: string | null
+    archived_at: number | null
+    created_at: number
+    updated_at: number
+}
+
+type TeamParticipantRow = {
+    id: string
+    namespace: string
+    team_chat_id: string
+    type: StoredTeamParticipant['type']
+    user_id: string | null
+    session_id: string | null
+    display_name: string
+    role: StoredTeamParticipant['role']
+    color: string
+    archived_at: number | null
+    joined_at: number
+}
+
+type TeamMessageRow = {
+    id: string
+    namespace: string
+    team_chat_id: string
+    seq: number
+    author_participant_id: string
+    text: string
+    report_type: StoredTeamMessage['reportType']
+    reply_to_message_id: string | null
+    reply_preview: string | null
+    mentions: string
+    files: string
+    created_at: number
+}
+
+type TeamMentionRequestRow = {
+    id: string
+    namespace: string
+    team_chat_id: string
+    source_message_id: string
+    target_session_id: string
+    status: StoredTeamMentionRequest['status']
+    context_snapshot: string
+    hop_depth: number
+    parent_request_id: string | null
+    error: string | null
+    created_at: number
+    delivered_at: number | null
+    seen_at: number | null
+    processing_started_at: number | null
+    resolved_at: number | null
+}
+
 export class TeamChatStore {
     constructor(private readonly db: Database) {}
 
@@ -610,12 +749,12 @@ export class TeamChatStore {
     }
 
     getTeamChat(namespace: string, id: string): StoredTeamChat | null {
-        const row = this.db.prepare('SELECT * FROM team_chats WHERE namespace = ? AND id = ?').get(namespace, id) as any
+        const row = this.db.prepare('SELECT * FROM team_chats WHERE namespace = ? AND id = ?').get(namespace, id) as TeamChatRow | undefined
         return row ? toTeamChat(row) : null
     }
 
     listTeamChats(namespace: string): StoredTeamChat[] {
-        const rows = this.db.prepare('SELECT * FROM team_chats WHERE namespace = ? AND archived_at IS NULL ORDER BY updated_at DESC').all(namespace) as any[]
+        const rows = this.db.prepare('SELECT * FROM team_chats WHERE namespace = ? AND archived_at IS NULL ORDER BY updated_at DESC').all(namespace) as TeamChatRow[]
         return rows.map(toTeamChat)
     }
 
@@ -639,12 +778,12 @@ export class TeamChatStore {
     }
 
     getParticipant(namespace: string, id: string): StoredTeamParticipant | null {
-        const row = this.db.prepare('SELECT * FROM team_participants WHERE namespace = ? AND id = ?').get(namespace, id) as any
+        const row = this.db.prepare('SELECT * FROM team_participants WHERE namespace = ? AND id = ?').get(namespace, id) as TeamParticipantRow | undefined
         return row ? toParticipant(row) : null
     }
 
     listParticipants(namespace: string, teamChatId: string): StoredTeamParticipant[] {
-        const rows = this.db.prepare('SELECT * FROM team_participants WHERE namespace = ? AND team_chat_id = ? AND archived_at IS NULL ORDER BY joined_at ASC').all(namespace, teamChatId) as any[]
+        const rows = this.db.prepare('SELECT * FROM team_participants WHERE namespace = ? AND team_chat_id = ? AND archived_at IS NULL ORDER BY joined_at ASC').all(namespace, teamChatId) as TeamParticipantRow[]
         return rows.map(toParticipant)
     }
 
@@ -671,14 +810,14 @@ export class TeamChatStore {
     }
 
     getMessage(namespace: string, id: string): StoredTeamMessage | null {
-        const row = this.db.prepare('SELECT * FROM team_messages WHERE namespace = ? AND id = ?').get(namespace, id) as any
+        const row = this.db.prepare('SELECT * FROM team_messages WHERE namespace = ? AND id = ?').get(namespace, id) as TeamMessageRow | undefined
         return row ? toMessage(row) : null
     }
 
     getMessages(namespace: string, teamChatId: string, limit: number, beforeSeq?: number): StoredTeamMessage[] {
         const rows = beforeSeq
-            ? this.db.prepare('SELECT * FROM team_messages WHERE namespace = ? AND team_chat_id = ? AND seq < ? ORDER BY seq DESC LIMIT ?').all(namespace, teamChatId, beforeSeq, limit) as any[]
-            : this.db.prepare('SELECT * FROM team_messages WHERE namespace = ? AND team_chat_id = ? ORDER BY seq DESC LIMIT ?').all(namespace, teamChatId, limit) as any[]
+            ? this.db.prepare('SELECT * FROM team_messages WHERE namespace = ? AND team_chat_id = ? AND seq < ? ORDER BY seq DESC LIMIT ?').all(namespace, teamChatId, beforeSeq, limit) as TeamMessageRow[]
+            : this.db.prepare('SELECT * FROM team_messages WHERE namespace = ? AND team_chat_id = ? ORDER BY seq DESC LIMIT ?').all(namespace, teamChatId, limit) as TeamMessageRow[]
         return rows.map(toMessage).reverse()
     }
 
@@ -689,12 +828,69 @@ export class TeamChatStore {
             SELECT * FROM team_messages
             WHERE namespace = ? AND team_chat_id = ? AND seq BETWEEN ? AND ?
             ORDER BY seq ASC
-        `).all(input.namespace, input.teamChatId, anchor.seq - input.before, anchor.seq + input.after) as any[]
+        `).all(input.namespace, input.teamChatId, anchor.seq - input.before, anchor.seq + input.after) as TeamMessageRow[]
         return { messages: rows.map(toMessage) }
+    }
+
+    addMentionRequest(input: {
+        namespace: string
+        teamChatId: string
+        sourceMessageId: string
+        targetSessionId: string
+        status?: StoredTeamMentionRequest['status']
+        contextSnapshot: unknown
+        hopDepth: number
+        parentRequestId?: string | null
+    }): StoredTeamMentionRequest {
+        const id = randomUUID()
+        const now = Date.now()
+        this.db.prepare(`
+            INSERT INTO team_mention_requests (id, namespace, team_chat_id, source_message_id, target_session_id, status, context_snapshot, hop_depth, parent_request_id, error, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+        `).run(id, input.namespace, input.teamChatId, input.sourceMessageId, input.targetSessionId, input.status ?? 'pending', JSON.stringify(input.contextSnapshot), input.hopDepth, input.parentRequestId ?? null, now)
+        return this.getMentionRequest(input.namespace, id)!
+    }
+
+    getMentionRequest(namespace: string, id: string): StoredTeamMentionRequest | null {
+        const row = this.db.prepare('SELECT * FROM team_mention_requests WHERE namespace = ? AND id = ?').get(namespace, id) as TeamMentionRequestRow | undefined
+        return row ? toMentionRequest(row) : null
+    }
+
+    listPendingMentionRequests(namespace: string, targetSessionId: string): StoredTeamMentionRequest[] {
+        const rows = this.db.prepare(`
+            SELECT * FROM team_mention_requests
+            WHERE namespace = ? AND target_session_id = ? AND status IN ('pending', 'delivered', 'seen')
+            ORDER BY created_at ASC
+        `).all(namespace, targetSessionId) as TeamMentionRequestRow[]
+        return rows.map(toMentionRequest)
+    }
+
+    updateMentionStatus(input: {
+        namespace: string
+        requestId: string
+        status: StoredTeamMentionRequest['status']
+        deliveredAt?: number | null
+        seenAt?: number | null
+        processingStartedAt?: number | null
+        resolvedAt?: number | null
+        error?: string | null
+    }): StoredTeamMentionRequest | null {
+        this.db.prepare(`
+            UPDATE team_mention_requests
+            SET status = ?, delivered_at = COALESCE(?, delivered_at), seen_at = COALESCE(?, seen_at),
+                processing_started_at = COALESCE(?, processing_started_at), resolved_at = COALESCE(?, resolved_at), error = COALESCE(?, error)
+            WHERE namespace = ? AND id = ?
+        `).run(input.status, input.deliveredAt ?? null, input.seenAt ?? null, input.processingStartedAt ?? null, input.resolvedAt ?? null, input.error ?? null, input.namespace, input.requestId)
+        return this.getMentionRequest(input.namespace, input.requestId)
+    }
+
+    archiveParticipant(namespace: string, teamChatId: string, participantId: string): void {
+        this.db.prepare('UPDATE team_participants SET archived_at = ? WHERE namespace = ? AND team_chat_id = ? AND id = ?')
+            .run(Date.now(), namespace, teamChatId, participantId)
     }
 }
 
-function toTeamChat(row: any): StoredTeamChat {
+function toTeamChat(row: TeamChatRow): StoredTeamChat {
     return {
         id: row.id,
         namespace: row.namespace,
@@ -706,7 +902,7 @@ function toTeamChat(row: any): StoredTeamChat {
         updatedAt: row.updated_at
     }
 }
-function toParticipant(row: any): StoredTeamParticipant {
+function toParticipant(row: TeamParticipantRow): StoredTeamParticipant {
     return {
         id: row.id,
         namespace: row.namespace,
@@ -722,7 +918,7 @@ function toParticipant(row: any): StoredTeamParticipant {
     }
 }
 
-function toMessage(row: any): StoredTeamMessage {
+function toMessage(row: TeamMessageRow): StoredTeamMessage {
     return {
         id: row.id,
         namespace: row.namespace,
@@ -736,6 +932,26 @@ function toMessage(row: any): StoredTeamMessage {
         mentions: safeJsonParse(row.mentions) ?? [],
         files: safeJsonParse(row.files) ?? [],
         createdAt: row.created_at
+    }
+}
+
+function toMentionRequest(row: TeamMentionRequestRow): StoredTeamMentionRequest {
+    return {
+        id: row.id,
+        namespace: row.namespace,
+        teamChatId: row.team_chat_id,
+        sourceMessageId: row.source_message_id,
+        targetSessionId: row.target_session_id,
+        status: row.status,
+        contextSnapshot: safeJsonParse(row.context_snapshot),
+        hopDepth: row.hop_depth,
+        parentRequestId: row.parent_request_id,
+        error: row.error,
+        createdAt: row.created_at,
+        deliveredAt: row.delivered_at,
+        seenAt: row.seen_at,
+        processingStartedAt: row.processing_started_at,
+        resolvedAt: row.resolved_at
     }
 }
 ```
@@ -785,19 +1001,19 @@ git commit -m "feat: add team chat store"
 Create `hub/src/sync/teamChatService.test.ts`:
 
 ```ts
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, mock } from 'bun:test'
 import { Store } from '../store'
 import { TeamChatService } from './teamChatService'
 
 function createPublisher() {
-    return { emit: vi.fn() }
+    return { emit: mock(() => undefined) }
 }
 
 describe('TeamChatService', () => {
     it('posts a message and emits team-message-created', () => {
         const store = new Store(':memory:')
         const publisher = createPublisher()
-        const service = new TeamChatService(store, publisher as any)
+        const service = new TeamChatService(store, publisher)
         const chat = service.createTeamChat({ namespace: 'default', name: 'Team Chat', projectPath: '/repo' })
         const user = service.addParticipant({ namespace: 'default', teamChatId: chat.id, type: 'user', displayName: 'You', role: 'general', color: '#34d399' })
 
@@ -808,6 +1024,7 @@ describe('TeamChatService', () => {
     })
 })
 ```
+
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -924,6 +1141,11 @@ const createTeamChatSchema = z.object({
     name: z.string().min(1),
     projectPath: z.string().optional().nullable()
 })
+const postTeamChatMessageSchema = z.object({
+    authorParticipantId: z.string().min(1),
+    text: z.string().trim().min(1).max(20_000),
+    replyToMessageId: z.string().optional().nullable()
+})
 
 export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
@@ -944,11 +1166,10 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
         return c.json({ teamChat }, 201)
     })
 
-    return app
-}
+    // Continue registering handlers below.
 ```
 
-Add these route handlers in the same file:
+Add these route handlers inside `createTeamChatsRoutes` before the final `return app`:
 
 ```ts
 app.get('/team-chats/:id', (c) => {
@@ -976,7 +1197,7 @@ app.post('/team-chats/:id/messages', async (c) => {
     const engine = requireSyncEngine(c, getSyncEngine)
     if (engine instanceof Response) return engine
     const body = await c.req.json().catch(() => null)
-    const parsed = postTeamMessageSchema.safeParse(body)
+    const parsed = postTeamChatMessageSchema.safeParse(body)
     if (!parsed.success) return c.json({ error: 'Invalid body' }, 400)
     return c.json(engine.postTeamMessage({ namespace: c.get('namespace'), teamChatId: c.req.param('id'), ...parsed.data }), 201)
 })
@@ -1015,10 +1236,40 @@ app.delete('/team-chats/:id/participants/:participantId', (c) => {
     engine.archiveTeamParticipant(c.get('namespace'), c.req.param('id'), c.req.param('participantId'))
     return c.json({ ok: true })
 })
+
+return app
+}
 ```
 
 
-- [ ] **Step 6: Register route**
+
+- [ ] **Step 6: Add ownership guards before exposing routes**
+
+In `TeamChatService` use these guard methods before every mutation/read that uses IDs from the client:
+
+```ts
+private requireTeamChat(namespace: string, teamChatId: string) {
+    const chat = this.store.teamChats.getTeamChat(namespace, teamChatId)
+    if (!chat) throw new Error('TEAM_CHAT_NOT_FOUND')
+    return chat
+}
+
+private requireTeamParticipant(namespace: string, teamChatId: string, participantId: string) {
+    const participant = this.store.teamChats.getParticipant(namespace, participantId)
+    if (!participant || participant.teamChatId !== teamChatId || participant.archivedAt) throw new Error('TEAM_PARTICIPANT_NOT_FOUND')
+    return participant
+}
+
+private requireTeamMentionRequest(namespace: string, requestId: string, expectedSessionId?: string) {
+    const request = this.store.teamChats.getMentionRequest(namespace, requestId)
+    if (!request || (expectedSessionId && request.targetSessionId !== expectedSessionId)) throw new Error('TEAM_MENTION_NOT_FOUND')
+    return request
+}
+```
+
+Route tests must cover cross-namespace chat, participant, reply message, and mention request IDs.
+
+- [ ] **Step 7: Register route**
 
 In `hub/src/web/server.ts`:
 
@@ -1028,22 +1279,38 @@ import { createTeamChatsRoutes } from './routes/teamChats'
 app.route('/api', createTeamChatsRoutes(options.getSyncEngine))
 ```
 
-- [ ] **Step 7: Route tests**
+- [ ] **Step 8: Route tests**
 
 Create `hub/src/web/routes/teamChats.test.ts` with this explicit case:
 
 ```ts
+import { Hono } from 'hono'
+import type { WebAppEnv } from '../middleware/auth'
+
+function createApp(namespace: string, engine: Partial<SyncEngine>) {
+    const app = new Hono<WebAppEnv>()
+    app.use('*', async (c, next) => {
+        c.set('namespace', namespace)
+        await next()
+    })
+    app.route('/api', createTeamChatsRoutes(() => engine as SyncEngine))
+    return app
+}
+
 it('rejects team chat access across namespaces', async () => {
-    const engine = createTestSyncEngineWithTeamChatInNamespace('ns-a')
-    const app = createTeamChatsRoutes(() => engine)
-    const response = await app.request('/team-chats/team-a', {}, withNamespace('ns-b'))
+    const engine = {
+        getTeamChat: (namespace: string, id: string) => namespace === 'ns-a' && id === 'team-a' ? { id: 'team-a', namespace: 'ns-a', name: 'Team', createdAt: 1, updatedAt: 1 } : null,
+        listTeamChats: () => []
+    }
+    const app = createApp('ns-b', engine)
+    const response = await app.request('/api/team-chats/team-a')
     expect(response.status).toBe(404)
 })
 ```
 
 Use the same auth/test helpers already present in `hub/src/web/routes/sessions.test.ts`; if those helpers are local to that file, copy them into `teamChats.test.ts`.
 
-- [ ] **Step 8: Run tests**
+- [ ] **Step 9: Run tests**
 
 ```bash
 bun --cwd hub test src/sync/teamChatService.test.ts src/web/routes/teamChats.test.ts
@@ -1052,7 +1319,7 @@ bun typecheck
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 git add hub/src/sync/teamChatService.ts hub/src/sync/teamChatService.test.ts hub/src/web/routes/teamChats.ts hub/src/web/routes/teamChats.test.ts hub/src/sync/syncEngine.ts hub/src/web/server.ts
@@ -1068,7 +1335,11 @@ git commit -m "feat: add team chat API"
 - Modify: `web/src/api/client.ts`
 - Modify: `web/src/lib/query-keys.ts`
 - Create: `web/src/hooks/queries/useTeamChats.ts`
+- Create: `web/src/hooks/queries/useTeamChat.ts`
+- Create: `web/src/hooks/queries/useTeamChatParticipants.ts`
 - Create: `web/src/hooks/queries/useTeamChatMessages.ts`
+- Create: `web/src/hooks/queries/useTeamChatMessagesAround.ts`
+- Create: `web/src/hooks/queries/useSessionTeamMentions.ts`
 - Create: `web/src/hooks/mutations/useTeamChatActions.ts`
 - Create: `web/src/routes/team-chats.tsx`
 - Create: `web/src/routes/team-chats/$teamChatId.tsx`
@@ -1100,7 +1371,7 @@ export type TeamParticipant = {
     joinedAt: number
 }
 
-export type TeamMessage = {
+export type TeamChatMessage = {
     id: string
     teamChatId: string
     seq: number
@@ -1116,8 +1387,19 @@ export type TeamMessage = {
 
 export type TeamChatsResponse = { teamChats: TeamChat[] }
 export type TeamChatResponse = { teamChat: TeamChat }
+export type TeamMentionRequest = {
+    id: string
+    teamChatId: string
+    sourceMessageId: string
+    targetSessionId: string
+    status: 'pending' | 'delivered' | 'seen' | 'processing' | 'responded' | 'no_action' | 'superseded' | 'failed'
+    createdAt: number
+    seenAt?: number | null
+    resolvedAt?: number | null
+}
+
 export type TeamMessagesResponse = {
-    messages: TeamMessage[]
+    messages: TeamChatMessage[]
     page: { limit: number; nextBeforeSeq: number | null; hasMore: boolean }
 }
 ```
@@ -1146,11 +1428,23 @@ async getTeamMessages(teamChatId: string, opts?: { limit?: number; beforeSeq?: n
     return await this.request<TeamMessagesResponse>(`/api/team-chats/${encodeURIComponent(teamChatId)}/messages${qs ? `?${qs}` : ''}`)
 }
 
-async sendTeamMessage(teamChatId: string, input: { authorParticipantId: string; text: string; replyToMessageId?: string | null }): Promise<{ message: TeamMessage }> {
-    return await this.request<{ message: TeamMessage }>(`/api/team-chats/${encodeURIComponent(teamChatId)}/messages`, {
+async sendTeamMessage(teamChatId: string, input: { authorParticipantId: string; text: string; replyToMessageId?: string | null }): Promise<{ message: TeamChatMessage }> {
+    return await this.request<{ message: TeamChatMessage }>(`/api/team-chats/${encodeURIComponent(teamChatId)}/messages`, {
         method: 'POST',
         body: JSON.stringify(input)
     })
+}
+
+async getTeamMessagesAround(teamChatId: string, messageId: string): Promise<TeamMessagesResponse> {
+    return await this.request<TeamMessagesResponse>(`/api/team-chats/${encodeURIComponent(teamChatId)}/messages/${encodeURIComponent(messageId)}/context`)
+}
+
+async getTeamParticipants(teamChatId: string): Promise<{ participants: TeamParticipant[] }> {
+    return await this.request<{ participants: TeamParticipant[] }>(`/api/team-chats/${encodeURIComponent(teamChatId)}/participants`)
+}
+
+async getSessionTeamMentions(sessionId: string): Promise<{ requests: TeamMentionRequest[] }> {
+    return await this.request<{ requests: TeamMentionRequest[] }>(`/api/sessions/${encodeURIComponent(sessionId)}/team-mentions`)
 }
 ```
 
@@ -1161,10 +1455,30 @@ In `web/src/lib/query-keys.ts`:
 ```ts
 teamChats: ['team-chats'] as const,
 teamChat: (teamChatId: string) => ['team-chat', teamChatId] as const,
+teamParticipants: (teamChatId: string) => ['team-chat-participants', teamChatId] as const,
 teamMessages: (teamChatId: string) => ['team-messages', teamChatId] as const,
+teamMessagesAround: (teamChatId: string, messageId: string) => ['team-messages-around', teamChatId, messageId] as const,
+sessionTeamMentions: (sessionId: string) => ['session-team-mentions', sessionId] as const,
 ```
 
-Create hooks with TanStack Query using patterns from `useMessages.ts` and `useSessions.ts`.
+Create hooks with TanStack Query using patterns from `useMessages.ts` and `useSessions.ts`:
+
+```ts
+export function useTeamChats(api: ApiClient) {
+    const query = useQuery({ queryKey: queryKeys.teamChats, queryFn: () => api.getTeamChats() })
+    return { teamChats: query.data?.teamChats ?? [], ...query }
+}
+
+export function useTeamChatMessagesAround(api: ApiClient, teamChatId: string, messageId: string | null) {
+    return useQuery({
+        queryKey: messageId ? queryKeys.teamMessagesAround(teamChatId, messageId) : ['team-messages-around-disabled'],
+        queryFn: () => api.getTeamMessagesAround(teamChatId, messageId!),
+        enabled: Boolean(messageId)
+    })
+}
+```
+
+Also add `web/src/api/client.teamChat.test.ts` before implementation; assert exact URLs for list, `limit/beforeSeq`, `messages/:messageId/context`, and URL encoding.
 
 - [ ] **Step 4: Add route shell**
 
@@ -1208,7 +1522,7 @@ Expected: PASS.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add web/src/types/api.ts web/src/api/client.ts web/src/lib/query-keys.ts web/src/hooks/queries/useTeamChats.ts web/src/hooks/queries/useTeamChatMessages.ts web/src/hooks/mutations/useTeamChatActions.ts web/src/routes/team-chats.tsx web/src/routes/team-chats/\$teamChatId.tsx web/src/router.tsx
+git add web/src/types/api.ts web/src/api/client.ts web/src/lib/query-keys.ts web/src/api/client.teamChat.test.ts web/src/hooks/queries/useTeamChats.ts web/src/hooks/queries/useTeamChat.ts web/src/hooks/queries/useTeamChatParticipants.ts web/src/hooks/queries/useTeamChatMessages.ts web/src/hooks/queries/useTeamChatMessagesAround.ts web/src/hooks/queries/useSessionTeamMentions.ts web/src/hooks/mutations/useTeamChatActions.ts web/src/routes/team-chats.tsx web/src/routes/team-chats/\$teamChatId.tsx web/src/router.tsx
 git commit -m "feat: add team chat web data layer"
 ```
 
@@ -1220,14 +1534,18 @@ git commit -m "feat: add team chat web data layer"
 - Create: `web/src/components/TeamChat/TeamChatLayout.tsx`
 - Create: `web/src/components/TeamChat/TeamChatTimeline.tsx`
 - Create: `web/src/components/TeamChat/TeamChatComposer.tsx`
+- Create: `web/src/components/TeamChat/TeamMentionAutocomplete.tsx`
+- Create: `web/src/components/TeamChat/TeamChatMobileLayout.tsx`
 - Create: `web/src/components/TeamChat/TeamChatRightPanel.tsx`
 - Create: `web/src/components/TeamChat/TeamMessageCard.tsx`
 - Create: `web/src/components/TeamChat/IncludedContextPreview.tsx`
 - Create: `web/src/components/TeamChat/teamColors.ts`
 - Test: `web/src/components/TeamChat/TeamMessageCard.test.tsx`
+- Test: `web/src/components/TeamChat/TeamChatComposer.test.tsx`
+- Test: `web/src/components/TeamChat/TeamChatTimeline.test.tsx`
 - Modify: `web/src/routes/team-chats/$teamChatId.tsx`
 
-- [ ] **Step 1: Write TeamMessageCard tests**
+- [ ] **Step 1: Write Team Chat UI tests**
 
 Create `web/src/components/TeamChat/TeamMessageCard.test.tsx`:
 
@@ -1252,10 +1570,41 @@ it('renders reply preview and report type', () => {
 })
 ```
 
+Create `web/src/components/TeamChat/TeamChatComposer.test.tsx`:
+
+```tsx
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
+import { TeamChatComposer } from './TeamChatComposer'
+
+it('shows context preview and mention suggestions when typing @', () => {
+    render(<TeamChatComposer participants={[{ id: 'p1', displayName: 'Backend API', color: '#60a5fa', sessionId: 's1' }]} onSend={() => {}} />)
+    fireEvent.change(screen.getByPlaceholderText(/Message the team/i), { target: { value: '@Back' } })
+    expect(screen.getByText('Backend API')).toBeInTheDocument()
+    expect(screen.getByText('Included context')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Edit context/i })).toBeInTheDocument()
+})
+```
+
+Create `web/src/components/TeamChat/TeamChatTimeline.test.tsx`:
+
+```tsx
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import { TeamChatTimeline } from './TeamChatTimeline'
+
+it('loads around-page when reply target is not mounted', async () => {
+    const loadAround = vi.fn().mockResolvedValue(undefined)
+    render(<TeamChatTimeline messages={[]} participants={[]} onLoadAround={loadAround} />)
+    fireEvent.click(screen.getByRole('button', { name: /load replied message/i }))
+    expect(loadAround).toHaveBeenCalled()
+})
+```
+
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-bun --cwd web test src/components/TeamChat/TeamMessageCard.test.tsx
+bun --cwd web test src/components/TeamChat/TeamMessageCard.test.tsx src/components/TeamChat/TeamChatComposer.test.tsx src/components/TeamChat/TeamChatTimeline.test.tsx
 ```
 
 Expected: FAIL because component is missing.
@@ -1277,11 +1626,13 @@ export function getParticipantAccent(color: string | null | undefined): string {
 Create `web/src/components/TeamChat/TeamMessageCard.tsx`:
 
 ```tsx
-import type { TeamMessage, TeamParticipant } from '@/types/api'
+import { Badge } from '@/components/ui/badge'
+import { Card } from '@/components/ui/card'
+import type { TeamChatMessage, TeamParticipant } from '@/types/api'
 import { getParticipantAccent } from './teamColors'
 
 export function TeamMessageCard(props: {
-    message: TeamMessage
+    message: TeamChatMessage
     author: TeamParticipant | null
     onReplyPreviewClick: (messageId: string) => void
 }) {
@@ -1297,10 +1648,10 @@ export function TeamMessageCard(props: {
                     : null
 
     return (
-        <article className="rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)] p-3 shadow-sm" style={{ borderLeft: `3px solid ${accent}` }}>
+        <Card className="border border-[var(--app-border)] p-3" style={{ borderLeft: `3px solid ${accent}` }}>
             <div className="mb-1 flex items-center gap-2 text-xs text-[var(--app-hint)]">
                 <span className="font-medium text-[var(--app-fg)]">{props.author?.displayName ?? 'Unknown'}</span>
-                {reportLabel ? <span>{reportLabel}</span> : null}
+                {reportLabel ? <Badge>{reportLabel}</Badge> : null}
             </div>
             {props.message.replyToMessageId && props.message.replyPreview ? (
                 <button
@@ -1312,7 +1663,7 @@ export function TeamMessageCard(props: {
                 </button>
             ) : null}
             <div className="whitespace-pre-wrap text-sm text-[var(--app-fg)]">{props.message.text}</div>
-        </article>
+        </Card>
     )
 }
 ```
@@ -1323,20 +1674,27 @@ Create minimal functional components:
 
 ```tsx
 // TeamChatComposer.tsx
-export function TeamChatComposer(props: { onSend: (text: string) => void; disabled?: boolean }) {
+import { useState } from 'react'
+import { Button } from '@/components/ui/button'
+import type { TeamParticipant } from '@/types/api'
+import { IncludedContextPreview } from './IncludedContextPreview'
+import { TeamMentionAutocomplete } from './TeamMentionAutocomplete'
+
+export function TeamChatComposer(props: { participants: TeamParticipant[]; onSend: (text: string) => void; disabled?: boolean }) {
     const [text, setText] = useState('')
     const hasMention = /(^|\s)@\S/.test(text)
     return (
         <form onSubmit={(event) => { event.preventDefault(); if (text.trim()) { props.onSend(text); setText('') } }} className="border-t border-[var(--app-border)] p-3">
-            {hasMention ? <IncludedContextPreview /> : null}
+            {hasMention ? <TeamMentionAutocomplete text={text} participants={props.participants} onPick={(name) => setText(`${text}${name} `)} /> : null}
+            {hasMention ? <IncludedContextPreview onEdit={() => {}} onAttachFile={() => {}} onUseDefault={() => {}} /> : null}
             <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Message the team… use @ to mention a session" className="min-h-20 w-full rounded-lg border border-[var(--app-border)] bg-[var(--app-bg)] p-2 text-sm" />
-            <button className="mt-2 rounded-lg bg-[var(--app-button)] px-3 py-1.5 text-sm text-[var(--app-button-text)]">Send</button>
+            <Button size="sm" className="mt-2">Send</Button>
         </form>
     )
 }
 ```
 
-`IncludedContextPreview` renders collapsed default items from PRD.
+`IncludedContextPreview` renders collapsed default items from PRD and visible actions: `Edit context`, `Attach file`, `Use default`. `TeamChatMobileLayout` renders three tabs: `Chat`, `Sessions`, `Context`; do not squeeze the desktop 3-column layout on mobile.
 
 - [ ] **Step 6: Implement reply scroll**
 
@@ -1345,7 +1703,7 @@ In `TeamChatTimeline.tsx`, keep refs by `message.id`; if missing, call `api.getT
 - [ ] **Step 7: Run tests/typecheck**
 
 ```bash
-bun --cwd web test src/components/TeamChat/TeamMessageCard.test.tsx
+bun --cwd web test src/components/TeamChat/TeamMessageCard.test.tsx src/components/TeamChat/TeamChatComposer.test.tsx src/components/TeamChat/TeamChatTimeline.test.tsx
 bun --cwd web typecheck
 ```
 
@@ -1366,18 +1724,23 @@ git commit -m "feat: add team chat UI"
 - Modify: `hub/src/sync/teamChatService.ts`
 - Create: `hub/src/sync/teamMentions.ts`
 - Test: `hub/src/sync/teamMentions.test.ts`
-- Modify: `hub/src/sync/messageService.ts` or call store directly from `TeamChatService`
+- Create: `hub/src/sync/teamMentionDeliveryService.ts`
+- Test: `hub/src/sync/teamMentionDeliveryService.test.ts`
+- Modify: `hub/src/sync/messageService.ts`
 - Modify: `web/src/chat/types.ts`
 - Modify: `web/src/chat/normalize.ts`
-- Modify: `web/src/chat/reducer.ts`
+- Modify: `web/src/chat/reducer.ts`, `web/src/chat/reducerTimeline.ts`, `web/src/chat/reconcile.ts`
+- Modify: `web/src/lib/assistant-runtime.ts`
+- Modify: `web/src/components/AssistantChat/HappyThread.tsx`
 - Create: `web/src/components/AssistantChat/messages/TeamMentionMessage.tsx`
+- Test: `web/src/chat/normalize.test.ts`, `web/src/chat/reducerTimeline.test.ts`, `web/src/components/AssistantChat/HappyThread.test.tsx`
 
 - [ ] **Step 1: Write mention parser tests**
 
 Create `hub/src/sync/teamMentions.test.ts`:
 
 ```ts
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import { parseTeamMentions } from './teamMentions'
 
 it('matches display names with spaces', () => {
@@ -1390,6 +1753,20 @@ it('matches display names with spaces', () => {
         { participantId: 'p2', sessionId: 's2', displayName: 'Team Chat UI' }
     ])
 })
+
+it('uses longest match, boundaries, dedupe, and text order', () => {
+    const participants = [
+        { id: 'short', sessionId: 's1', displayName: 'Backend' },
+        { id: 'long', sessionId: 's2', displayName: 'Backend API' },
+        { id: 'tests', sessionId: 's3', displayName: 'Tests' },
+        { id: 'user', sessionId: null, displayName: 'Human' }
+    ]
+
+    expect(parseTeamMentions('@Backend API, then @Tests. @Backend API2 no match. @Human ignored.', participants)).toEqual([
+        { participantId: 'long', sessionId: 's2', displayName: 'Backend API' },
+        { participantId: 'tests', sessionId: 's3', displayName: 'Tests' }
+    ])
+})
 ```
 
 - [ ] **Step 2: Implement parser**
@@ -1397,26 +1774,41 @@ it('matches display names with spaces', () => {
 Create `hub/src/sync/teamMentions.ts`:
 
 ```ts
-export type MentionableParticipant = { id: string; sessionId: string | null; displayName: string }
+export type MentionableParticipant = { id: string; sessionId: string | null; displayName: string; archivedAt?: number | null }
+export type ParsedTeamMention = { participantId: string; sessionId: string; displayName: string }
+type ParsedTeamMentionWithIndex = ParsedTeamMention & { index: number }
 
-export function parseTeamMentions(text: string, participants: MentionableParticipant[]): Array<{ participantId: string; sessionId: string; displayName: string }> {
-    const sorted = participants
-        .filter((participant): participant is MentionableParticipant & { sessionId: string } => Boolean(participant.sessionId))
+function escapeRegex(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function overlaps(a: { start: number; end: number }, b: { start: number; end: number }): boolean {
+    return a.start < b.end && b.start < a.end
+}
+
+export function parseTeamMentions(text: string, participants: MentionableParticipant[]): ParsedTeamMention[] {
+    const ranges: Array<{ start: number; end: number }> = []
+    const seenParticipants = new Set<string>()
+    const matches: ParsedTeamMentionWithIndex[] = []
+    const candidates = participants
+        .filter((participant): participant is MentionableParticipant & { sessionId: string } => Boolean(participant.sessionId) && !participant.archivedAt)
         .sort((a, b) => b.displayName.length - a.displayName.length)
-    const found: Array<{ participantId: string; sessionId: string; displayName: string }> = []
-    const occupied = new Set<string>()
 
-    for (const participant of sorted) {
-        const needle = `@${participant.displayName}`.toLowerCase()
-        const lower = text.toLowerCase()
-        const index = lower.indexOf(needle)
-        if (index < 0) continue
-        const key = `${index}:${index + needle.length}`
-        if (occupied.has(key)) continue
-        occupied.add(key)
-        found.push({ participantId: participant.id, sessionId: participant.sessionId, displayName: participant.displayName })
+    for (const participant of candidates) {
+        const pattern = new RegExp(`(^|\\s)@${escapeRegex(participant.displayName)}(?=$|[\\s,.;:!?\\)])`, 'gi')
+        for (const match of text.matchAll(pattern)) {
+            if (seenParticipants.has(participant.id)) continue
+            const prefix = match[1] ?? ''
+            const start = match.index! + prefix.length
+            const end = start + participant.displayName.length + 1
+            if (ranges.some((range) => overlaps(range, { start, end }))) continue
+            ranges.push({ start, end })
+            seenParticipants.add(participant.id)
+            matches.push({ participantId: participant.id, sessionId: participant.sessionId, displayName: participant.displayName, index: start })
+        }
     }
-    return found
+
+    return matches.sort((a, b) => a.index - b.index).map(({ index: _index, ...mention }) => mention)
 }
 ```
 
@@ -1432,24 +1824,64 @@ In `TeamChatService.postMessage`:
 6. create synthetic session message:
 
 ```ts
+const envelope = [
+    '[HAPI_TEAM_MENTION]',
+    `requestId=${request.id}`,
+    `teamChatId=${request.teamChatId}`,
+    `sourceMessageId=${request.sourceMessageId}`,
+    '',
+    `From Team Chat: ${input.text}`,
+    '',
+    'Context:',
+    JSON.stringify(contextSnapshot)
+].join('\n')
+
 const syntheticContent = {
-    role: 'system',
+    role: 'user' as const,
     content: {
-        type: 'team-mention',
-        requestId: request.id,
-        teamChatId: request.teamChatId,
-        sourceMessageId: request.sourceMessageId,
-        text: input.text,
-        contextSnapshot
+        type: 'text' as const,
+        text: envelope
     },
     meta: {
-        sentFrom: 'team-chat',
-        teamMentionRequestId: request.id
+        sentFrom: 'team-chat' as const,
+        teamMentionRequestId: request.id,
+        teamChatId: request.teamChatId,
+        sourceMessageId: request.sourceMessageId
     }
 }
 ```
 
-Use existing message insertion path if possible so SSE/session chat updates work. If using `store.messages.addMessage`, immediately mark mention status `delivered`.
+Implement `TeamMentionDeliveryService` instead of writing session rows inline in `TeamChatService`:
+
+```ts
+export class TeamMentionDeliveryService {
+    constructor(private readonly messageService: MessageService, private readonly store: Store, private readonly publisher: Pick<EventPublisher, 'emit'>) {}
+
+    async deliver(input: { namespace: string; request: StoredTeamMentionRequest; envelope: string }): Promise<void> {
+        await this.messageService.sendTeamMentionMessage(input.request.targetSessionId, {
+            text: input.envelope,
+            meta: {
+                sentFrom: 'team-chat',
+                teamMentionRequestId: input.request.id,
+                teamChatId: input.request.teamChatId,
+                sourceMessageId: input.request.sourceMessageId
+            }
+        })
+        const deliveredAt = Date.now()
+        this.store.teamChats.updateMentionStatus({ namespace: input.namespace, requestId: input.request.id, status: 'delivered', deliveredAt })
+        this.publisher.emit({
+            type: 'team-mention-updated',
+            namespace: input.namespace,
+            teamChatId: input.request.teamChatId,
+            requestId: input.request.id,
+            sessionId: input.request.targetSessionId,
+            targetSessionId: input.request.targetSessionId
+        })
+    }
+}
+```
+
+Add `MessageService.sendTeamMentionMessage()` by copying the current `sendMessage()` flow, but allow `meta.sentFrom: 'team-chat'` and include `teamMentionRequestId`, `teamChatId`, `sourceMessageId`. It must still emit the existing CLI `update` and `message-received` event so active Session Chat windows update.
 
 - [ ] **Step 4: Web normalize synthetic message**
 
@@ -1457,7 +1889,7 @@ In `web/src/chat/types.ts`:
 
 ```ts
 export type TeamMentionBlock = {
-    type: 'team-mention'
+    kind: 'team-mention'
     id: string
     requestId: string
     teamChatId: string
@@ -1467,20 +1899,22 @@ export type TeamMentionBlock = {
 }
 ```
 
-Update normalize/reducer to produce this block when message content has `content.type === 'team-mention'`.
+Update normalize/reducer/reducerTimeline/reconcile to produce this block when `message.meta.sentFrom === 'team-chat'`; do not depend on custom `content.type === 'team-mention'` because CLI delivery uses `content.type: 'text'`.
 
 - [ ] **Step 5: Render session-side Team mention card**
 
 Create `TeamMentionMessage.tsx` with buttons:
 
 ```tsx
-export function TeamMentionMessage(props: { block: TeamMentionBlock; onOpenTeamChat: () => void; onNoAction: () => void }) {
+export function TeamMentionMessage(props: { block: TeamMentionBlock; onOpenTeamChat: () => void; onReplyToTeam: () => void; onPostUpdate: () => void; onViewOriginal: () => void; onNoAction: () => void }) {
     return (
         <div className="rounded-xl border border-[var(--app-border)] bg-[var(--app-subtle-bg)] p-3 text-sm">
             <div className="mb-2 font-medium text-[var(--app-fg)]">Team mention</div>
             <div className="whitespace-pre-wrap text-[var(--app-fg)]">{props.block.text}</div>
             <div className="mt-2 flex gap-2">
-                <button onClick={props.onOpenTeamChat}>Open Team Chat</button>
+                <button onClick={props.onReplyToTeam}>Reply to Team</button>
+                <button onClick={props.onPostUpdate}>Post update</button>
+                <button onClick={props.onViewOriginal}>View original</button>
                 <button onClick={props.onNoAction}>No action needed</button>
             </div>
         </div>
@@ -1505,7 +1939,8 @@ Body:
 - [ ] **Step 7: Run tests**
 
 ```bash
-bun --cwd hub test src/sync/teamMentions.test.ts src/sync/teamChatService.test.ts
+bun --cwd hub test src/sync/teamMentions.test.ts src/sync/teamMentionDeliveryService.test.ts src/sync/teamChatService.test.ts
+bun --cwd web test src/chat/normalize.test.ts src/chat/reducerTimeline.test.ts src/components/AssistantChat/HappyThread.test.tsx
 bun --cwd web typecheck
 bun typecheck
 ```
@@ -1515,7 +1950,7 @@ Expected: PASS.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add hub/src/sync/teamMentions.ts hub/src/sync/teamMentions.test.ts hub/src/sync/teamChatService.ts hub/src/web/routes/teamChats.ts web/src/chat/types.ts web/src/chat/normalize.ts web/src/chat/reducer.ts web/src/components/AssistantChat/messages/TeamMentionMessage.tsx
+git add hub/src/sync/teamMentions.ts hub/src/sync/teamMentions.test.ts hub/src/sync/teamMentionDeliveryService.ts hub/src/sync/teamMentionDeliveryService.test.ts hub/src/sync/teamChatService.ts hub/src/sync/messageService.ts hub/src/web/routes/teamChats.ts web/src/chat/types.ts web/src/chat/normalize.ts web/src/chat/reducer.ts web/src/chat/reducerTimeline.ts web/src/chat/reconcile.ts web/src/lib/assistant-runtime.ts web/src/components/AssistantChat/HappyThread.tsx web/src/components/AssistantChat/messages/TeamMentionMessage.tsx
 git commit -m "feat: route team mentions to sessions"
 ```
 
@@ -1535,21 +1970,39 @@ git commit -m "feat: route team mentions to sessions"
 Create `hub/src/sync/teamReports.test.ts`:
 
 ```ts
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, mock } from 'bun:test'
 import { Store } from '../store'
 import { TeamChatService } from './teamChatService'
 
 it('ReportToTeam creates structured report and marks request responded', () => {
     const store = new Store(':memory:')
-    const service = new TeamChatService(store, { emit: vi.fn() } as any)
+    const service = new TeamChatService(store, { emit: mock(() => undefined) })
     const chat = service.createTeamChat({ namespace: 'default', name: 'Team' })
     const backend = service.addParticipant({ namespace: 'default', teamChatId: chat.id, type: 'session', sessionId: 'session-backend', displayName: 'Backend', role: 'backend', color: '#60a5fa' })
+    const tests = service.addParticipant({ namespace: 'default', teamChatId: chat.id, type: 'session', sessionId: 'session-tests', displayName: 'Tests', role: 'tests', color: '#fbbf24' })
     const user = service.addParticipant({ namespace: 'default', teamChatId: chat.id, type: 'user', displayName: 'You', role: 'general', color: '#34d399' })
     const source = service.postMessage({ namespace: 'default', teamChatId: chat.id, authorParticipantId: user.id, text: '@Backend blocked?' }).message
     const request = store.teamChats.addMentionRequest({ namespace: 'default', teamChatId: chat.id, sourceMessageId: source.id, targetSessionId: 'session-backend', status: 'processing', contextSnapshot: { originalText: source.text, sharedContext: { decisions: [], openQuestions: [], relevantFiles: [] }, attachedFiles: [], recentUpdates: [] }, hopDepth: 0 })
-    const report = service.reportToTeam({ namespace: 'default', teamChatId: chat.id, authorParticipantId: backend.id, type: 'blocked', summary: 'Blocked on schema', replyToRequestId: request.id })
+
+    const report = service.reportToTeam({ namespace: 'default', teamChatId: chat.id, authorParticipantId: backend.id, type: 'blocked', summary: 'Blocked on schema. @Tests please verify route behavior', replyToRequestId: request.id })
+
     expect(report.message.reportType).toBe('blocked')
     expect(store.teamChats.getMentionRequest('default', request.id)?.status).toBe('responded')
+    expect(store.teamChats.listPendingMentionRequests('default', tests.sessionId!).map(item => item.sourceMessageId)).toEqual([report.message.id])
+})
+
+it('no-action marks mention without posting a report', () => {
+    const store = new Store(':memory:')
+    const service = new TeamChatService(store, { emit: mock(() => undefined) })
+    const chat = service.createTeamChat({ namespace: 'default', name: 'Team' })
+    const user = service.addParticipant({ namespace: 'default', teamChatId: chat.id, type: 'user', displayName: 'You', role: 'general', color: '#34d399' })
+    const source = service.postMessage({ namespace: 'default', teamChatId: chat.id, authorParticipantId: user.id, text: '@Backend FYI' }).message
+    const request = store.teamChats.addMentionRequest({ namespace: 'default', teamChatId: chat.id, sourceMessageId: source.id, targetSessionId: 'session-backend', status: 'seen', contextSnapshot: { originalText: source.text, sharedContext: { decisions: [], openQuestions: [], relevantFiles: [] }, attachedFiles: [], recentUpdates: [] }, hopDepth: 0 })
+
+    service.markMentionNoAction({ namespace: 'default', sessionId: 'session-backend', requestId: request.id })
+
+    expect(store.teamChats.getMentionRequest('default', request.id)?.status).toBe('no_action')
+    expect(store.teamChats.getMessages('default', chat.id, 10).map(message => message.reportType)).not.toContain('reply')
 })
 ```
 
@@ -1571,6 +2024,7 @@ reportToTeam(input: {
     files?: string[]
 }) {
     const text = input.details ? `${input.summary}\n\n${input.details}` : input.summary
+    if (/^(ok|okay|noted|thanks|done)$/i.test(text.trim()) && !input.replyToRequestId) throw new Error('TEAM_REPORT_TOO_LOW_SIGNAL')
     const message = this.store.teamChats.addMessage({
         namespace: input.namespace,
         teamChatId: input.teamChatId,
@@ -1582,11 +2036,34 @@ reportToTeam(input: {
         mentions: [],
         files: input.files ?? []
     })
+    const parentRequest = input.replyToRequestId ? this.requireTeamMentionRequest(input.namespace, input.replyToRequestId) : null
+    const hopDepth = parentRequest ? parentRequest.hopDepth + 1 : 0
+    if (hopDepth > 3) throw new Error('TEAM_MENTION_HOP_LIMIT')
+
+    const participants = this.store.teamChats.listParticipants(input.namespace, input.teamChatId)
+    const mentions = parseTeamMentions(text, participants)
+    for (const mention of mentions) {
+        this.store.teamChats.addMentionRequest({
+            namespace: input.namespace,
+            teamChatId: input.teamChatId,
+            sourceMessageId: message.id,
+            targetSessionId: mention.sessionId,
+            contextSnapshot: this.buildMentionContextSnapshot(input.namespace, input.teamChatId, message.id, text),
+            hopDepth,
+            parentRequestId: input.replyToRequestId ?? null
+        })
+    }
+
     if (input.replyToRequestId) {
         this.store.teamChats.updateMentionStatus({ namespace: input.namespace, requestId: input.replyToRequestId, status: 'responded', resolvedAt: Date.now() })
     }
     this.publisher.emit({ type: 'team-message-created', namespace: input.namespace, teamChatId: input.teamChatId, messageId: message.id })
     return { message }
+}
+
+markMentionNoAction(input: { namespace: string; sessionId: string; requestId: string }) {
+    this.requireTeamMentionRequest(input.namespace, input.requestId, input.sessionId)
+    return this.store.teamChats.updateMentionStatus({ namespace: input.namespace, requestId: input.requestId, status: 'no_action', resolvedAt: Date.now() })
 }
 ```
 
@@ -1620,10 +2097,21 @@ const tone = {
 In `TeamChatRightPanel`, compute:
 
 ```ts
-const needsAttention = messages.filter(message => message.reportType === 'blocked' || message.reportType === 'question')
+type AttentionItem =
+    | { kind: 'blocked' | 'question'; message: TeamChatMessage; createdAt: number }
+    | { kind: 'failed-delivery' | 'needs-user-input'; request: TeamMentionRequest; createdAt: number }
+
+const needsAttention: AttentionItem[] = [
+    ...messages
+        .filter((message) => message.reportType === 'blocked' || message.reportType === 'question')
+        .map((message) => ({ kind: message.reportType as 'blocked' | 'question', message, createdAt: message.createdAt })),
+    ...mentionRequests
+        .filter((request) => request.status === 'failed' || request.status === 'pending')
+        .map((request) => ({ kind: request.status === 'failed' ? 'failed-delivery' : 'needs-user-input', request, createdAt: request.createdAt } as AttentionItem))
+].sort((a, b) => b.createdAt - a.createdAt)
 ```
 
-Also include failed mention requests passed as `failedMentionRequests` props from the Team Chat detail query.
+Render labels exactly as PRD: `Needs attention`, `Blocked`, `Question`, `Failed delivery`, `Waiting for response`.
 
 - [ ] **Step 6: Run tests/typecheck**
 
@@ -1647,15 +2135,27 @@ git commit -m "feat: add team chat reports"
 ## Task 8: Realtime invalidation and navigation integration
 
 **Files:**
+- Modify: `hub/src/sse/sseManager.ts`
 - Modify: `web/src/hooks/useSSE.ts`
+- Modify: `web/src/App.tsx`
 - Modify: `web/src/components/Dashboard/index.tsx`
 - Modify: `web/src/components/SessionHeader.tsx`
 - Modify: `web/src/components/editor/EditorHeader.tsx`
-- Test: `web/src/components/SessionHeader.test.tsx`, `web/src/components/editor/EditorHeader.test.tsx`, `web/src/components/Dashboard/index.tsx` tests if present
+- Test: `hub/src/sse/sseManager.test.ts`
+- Test: `web/src/hooks/useSSE.test.tsx` or nearest existing SSE/App event tests
+- Test: `web/src/components/SessionHeader.test.tsx`, `web/src/components/editor/EditorHeader.test.tsx`, dashboard nav test
 
-- [ ] **Step 1: Add SSE invalidation for Team Chat events**
+- [ ] **Step 1: Fix SSE delivery and invalidation for Team Chat events**
 
-In `web/src/hooks/useSSE.ts`, add handling for event types:
+In `hub/src/sse/sseManager.ts`, ensure session-scoped Team mention events reach the target session subscriber:
+
+```ts
+if (event.type === 'team-mention-updated') {
+    return connection.all || connection.sessionId === event.sessionId || connection.sessionId === event.targetSessionId
+}
+```
+
+In `web/src/hooks/useSSE.ts`, add query invalidation for Team Chat event types:
 
 ```ts
 if (event.type === 'team-chat-updated') {
@@ -1667,13 +2167,27 @@ if (event.type === 'team-message-created') {
 }
 if (event.type === 'team-mention-updated') {
     void queryClient.invalidateQueries({ queryKey: queryKeys.teamMessages(event.teamChatId) })
-    void queryClient.invalidateQueries({ queryKey: queryKeys.messages(event.targetSessionId) })
+    void queryClient.invalidateQueries({ queryKey: queryKeys.sessionTeamMentions(event.targetSessionId) })
+}
+if (event.type === 'team-participant-updated') {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.teamParticipants(event.teamChatId) })
+    void queryClient.invalidateQueries({ queryKey: queryKeys.teamChat(event.teamChatId) })
 }
 ```
 
-- [ ] **Step 2: Add dashboard Team Chat button**
+In `web/src/App.tsx`, update the existing `handleSseEvent` session refresh path because `useSSE` does not own `api`:
 
-In `Dashboard/index.tsx` topbar actions add:
+```ts
+if (event.type === 'team-mention-updated' && api && event.sessionId === activeChatSessionId) {
+    clearMessageWindow(event.sessionId)
+    void fetchLatestMessages(api, event.sessionId, { mergeStrategy: 'visible' })
+}
+```
+
+
+- [ ] **Step 2: Add dashboard Team Chat entry and quick-create flow**
+
+In `Dashboard/index.tsx` topbar actions add a Team Chat menu, not only a plain link:
 
 ```tsx
 <button type="button" className="db__topbar-btn" title="Team Chat" onClick={() => void navigate({ to: '/team-chats' })}>
@@ -1682,34 +2196,48 @@ In `Dashboard/index.tsx` topbar actions add:
 </button>
 ```
 
+Add `useTeamChatActions.createFromSessions(sessions)` so selected sessions/project can create a Team Chat with those sessions already added. Tests: button navigates to list, selected sessions call create + add participants + navigate to detail.
+
 - [ ] **Step 3: Add SessionHeader action**
 
-In `SessionHeader.tsx`, add action menu item:
+In `SessionHeader.tsx`, add three menu actions:
 
 ```txt
 Open Team Chat
+Add to existing Team Chat
+Create Team Chat with this session
 ```
 
-For MVP, call `createTeamChat({ name: getSessionTitle(session), projectPath: session.metadata?.path })`, add the current session as a participant, then navigate to `/team-chats/$teamChatId`.
+Behavior:
+
+- `Open Team Chat`: if current session is already a participant, open the most recently updated active Team Chat for that session.
+- `Add to existing Team Chat`: open a small picker of active Team Chats, then call `addTeamParticipant`.
+- `Create Team Chat with this session`: call `createTeamChat({ name: getSessionTitle(session), projectPath: session.metadata?.path })`, add current session as participant, navigate to `/team-chats/$teamChatId`.
+
+Test all three labels and the create-with-session happy path.
 
 - [ ] **Step 4: Add EditorHeader action**
 
-In `EditorHeader.tsx`, add:
+In `EditorHeader.tsx`, add a Team Chat action using existing button styling/tokens:
 
 ```tsx
-<button
+<Button
     type="button"
+    variant="outline"
+    size="sm"
     onClick={() => navigate({ to: '/team-chats', search: { project: props.projectPath ?? undefined, machine: props.machineId ?? undefined } as never })}
-    className="px-3 py-1 rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] text-xs hover:bg-[var(--app-subtle-bg)] transition-colors"
 >
     Team Chat
-</button>
+</Button>
 ```
+
+Update `/team-chats` route search validation to accept `project` and `machine`; when present, prefill create/open flow for that project + machine.
 
 - [ ] **Step 5: Run tests/typecheck**
 
 ```bash
-bun --cwd web test src/components/SessionHeader.test.tsx src/components/editor/EditorHeader.test.tsx
+bun --cwd hub test src/sse/sseManager.test.ts
+bun --cwd web test src/hooks/useSSE.test.tsx src/components/SessionHeader.test.tsx src/components/editor/EditorHeader.test.tsx
 bun --cwd web typecheck
 ```
 
@@ -1718,7 +2246,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add web/src/hooks/useSSE.ts web/src/components/Dashboard/index.tsx web/src/components/SessionHeader.tsx web/src/components/editor/EditorHeader.tsx
+git add hub/src/sse/sseManager.ts hub/src/sse/sseManager.test.ts web/src/hooks/useSSE.ts web/src/App.tsx web/src/components/Dashboard/index.tsx web/src/components/SessionHeader.tsx web/src/components/editor/EditorHeader.tsx
 git commit -m "feat: wire team chat navigation"
 ```
 
@@ -1733,6 +2261,7 @@ git commit -m "feat: wire team chat navigation"
 - [ ] **Step 1: Run full verification**
 
 ```bash
+bun test shared/src/teamChat.test.ts
 bun typecheck
 bun run test
 bun --cwd web test
@@ -1756,7 +2285,10 @@ Manual checks:
 - Post `@Session Name hello`; target session receives Team mention card.
 - Mark no-action; Team Chat message shows no-action state.
 - Post ReportToTeam-style update; Team Chat shows structured report.
-- Reply to older message; click preview scrolls to original.
+- Reply to older message; click preview scrolls to original and highlights it.
+- Dark mode contrast: member colors readable; status badges distinguishable.
+- Mobile: Team Chat shows Chat / Sessions / Context tabs; composer stays above keyboard.
+- Multiple simultaneous mentions to the same session show compact pending queue older-first.
 - Refresh browser; state persists.
 
 - [ ] **Step 3: Update docs if feature is exposed**
@@ -1802,4 +2334,4 @@ Skip commit if no docs changed.
 - Auto-processing of queued mentions by idle remote sessions.
 - Rich attach-diff/file context from editor/git views.
 - Auto-summary suggestions for Shared context.
-- Team Chat mobile polish and offline caching.
+- Offline caching beyond normal browser reload persistence.
