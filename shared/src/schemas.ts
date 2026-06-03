@@ -167,6 +167,134 @@ export const TeamStateSchema = z.object({
 
 export type TeamState = z.infer<typeof TeamStateSchema>
 
+export const TeamParticipantRoleSchema = z.enum(['backend', 'frontend', 'tests', 'reviewer', 'docs', 'general'])
+
+export type TeamParticipantRole = z.infer<typeof TeamParticipantRoleSchema>
+
+export const TeamMentionStatusSchema = z.enum([
+    'pending',
+    'delivered',
+    'seen',
+    'processing',
+    'responded',
+    'no_action',
+    'superseded',
+    'failed'
+])
+
+export type TeamMentionStatus = z.infer<typeof TeamMentionStatusSchema>
+
+export const TeamReportTypeSchema = z.enum(['reply', 'progress', 'done', 'blocked', 'question', 'handoff'])
+
+export type TeamReportType = z.infer<typeof TeamReportTypeSchema>
+
+export const TeamSharedContextSnapshotSchema = z.object({
+    goal: z.string().optional(),
+    decisions: z.array(z.string()).default([]),
+    openQuestions: z.array(z.string()).default([]),
+    relevantFiles: z.array(z.string()).default([])
+})
+
+export type TeamSharedContextSnapshot = z.infer<typeof TeamSharedContextSnapshotSchema>
+
+export const TeamMentionContextSnapshotSchema = z.object({
+    originalText: z.string(),
+    replyPreview: z.object({
+        authorName: z.string(),
+        excerpt: z.string()
+    }).optional(),
+    sharedContext: TeamSharedContextSnapshotSchema,
+    recentUpdates: z.array(z.object({
+        messageId: z.string(),
+        authorName: z.string(),
+        excerpt: z.string()
+    })).default([]),
+    attachedFiles: z.array(z.string()).default([])
+})
+
+export type TeamMentionContextSnapshot = z.infer<typeof TeamMentionContextSnapshotSchema>
+
+export const TeamChatSchema = z.object({
+    id: z.string(),
+    namespace: z.string(),
+    name: z.string(),
+    projectPath: z.string().optional(),
+    archivedAt: z.number().nullable().optional(),
+    createdAt: z.number(),
+    updatedAt: z.number()
+})
+
+export type TeamChat = z.infer<typeof TeamChatSchema>
+
+export const TeamParticipantSchema = z.object({
+    id: z.string(),
+    teamChatId: z.string(),
+    type: z.enum(['user', 'session']),
+    userId: z.string().optional(),
+    sessionId: z.string().optional(),
+    displayName: z.string(),
+    role: TeamParticipantRoleSchema.default('general'),
+    color: z.string(),
+    archivedAt: z.number().nullable().optional(),
+    joinedAt: z.number()
+})
+
+export type TeamParticipant = z.infer<typeof TeamParticipantSchema>
+
+export const TeamChatMessageSchema = z.object({
+    id: z.string(),
+    teamChatId: z.string(),
+    seq: z.number(),
+    authorParticipantId: z.string(),
+    text: z.string(),
+    reportType: TeamReportTypeSchema.optional(),
+    replyToMessageId: z.string().nullable().optional(),
+    replyPreview: z.object({
+        authorName: z.string(),
+        excerpt: z.string()
+    }).nullable().optional(),
+    mentions: z.array(z.object({
+        participantId: z.string(),
+        sessionId: z.string()
+    })).default([]),
+    files: z.array(z.string()).default([]),
+    createdAt: z.number()
+})
+
+export type TeamChatMessage = z.infer<typeof TeamChatMessageSchema>
+
+export const TeamMentionRequestSchema = z.object({
+    id: z.string(),
+    teamChatId: z.string(),
+    sourceMessageId: z.string(),
+    targetSessionId: z.string(),
+    status: TeamMentionStatusSchema,
+    contextSnapshot: TeamMentionContextSnapshotSchema,
+    hopDepth: z.number().int().min(0).default(0),
+    parentRequestId: z.string().nullable().optional(),
+    error: z.string().nullable().optional(),
+    createdAt: z.number(),
+    deliveredAt: z.number().nullable().optional(),
+    seenAt: z.number().nullable().optional(),
+    processingStartedAt: z.number().nullable().optional(),
+    resolvedAt: z.number().nullable().optional()
+})
+
+export type TeamMentionRequest = z.infer<typeof TeamMentionRequestSchema>
+
+export const ReportToTeamInputSchema = z.object({
+    teamChatId: z.string().min(1),
+    type: TeamReportTypeSchema,
+    summary: z.string().trim().min(3).max(4_000),
+    details: z.string().trim().max(20_000).optional(),
+    replyToMessageId: z.string().nullable().optional(),
+    replyToRequestId: z.string().nullable().optional(),
+    mentions: z.array(z.string().min(1)).default([]),
+    files: z.array(z.string().min(1)).default([])
+})
+
+export type ReportToTeamInput = z.infer<typeof ReportToTeamInputSchema>
+
 export const AttachmentMetadataSchema = z.object({
     id: z.string(),
     filename: z.string(),
@@ -281,6 +409,27 @@ export const SyncEventSchema = z.discriminatedUnion('type', [
             status: z.string(),
             subscriptionId: z.string().optional()
         }).optional()
+    }),
+    SessionEventBaseSchema.extend({
+        type: z.literal('team-chat-updated'),
+        teamChatId: z.string()
+    }),
+    SessionEventBaseSchema.extend({
+        type: z.literal('team-message-created'),
+        teamChatId: z.string(),
+        messageId: z.string()
+    }),
+    SessionEventBaseSchema.extend({
+        type: z.literal('team-mention-updated'),
+        teamChatId: z.string(),
+        requestId: z.string(),
+        sessionId: z.string(),
+        targetSessionId: z.string()
+    }),
+    SessionEventBaseSchema.extend({
+        type: z.literal('team-participant-updated'),
+        teamChatId: z.string(),
+        participantId: z.string()
     })
 ])
 
