@@ -29,6 +29,17 @@ Not in this batch:
 - Search/group Team Chats.
 - Analytics or onboarding tour.
 
+## Agent/Editor UX guardrails
+
+These guardrails are mandatory for this implementation. They protect the existing Agent Mode and Editor Mode flows while Team Chat UX is polished:
+
+1. **Rename UI edits `name` only.** Backend/client may keep optional `projectPath` support for future admin tooling, but list/detail rename dialogs must send `{ name }` only. Do not expose project path in rename UI; changing it can make Editor-related navigation open the wrong project.
+2. **Archive/remove must settle active Team mentions.** Archiving a room or removing a session member must supersede active mention requests (`pending`, `delivered`, `seen`, `processing`) and emit `team-mention-updated` for each affected request. Agent Mode should not keep actionable Team cards for rooms/members that are no longer valid.
+3. **Agent Mode must never route to a Team Chat 404 from an old card.** Superseded/failed Team mention cards should show a disabled/settled state such as “Room archived or member removed,” not an enabled “Open Team Chat” action.
+4. **Member management is session-member only for this batch.** The current user participant (`You`) is not removable/editable from the member action menu in MVP; this avoids accidentally disabling the room composer.
+5. **Nested member actions must not open direct chat.** Member rows still open the full direct-session modal on row click. The `⋯` action button/menu must call `event.stopPropagation()` for click and key handlers.
+6. **Composer placeholder plumbing must be opt-in.** `SessionChat`/`HappyComposer` defaults must stay unchanged when `composerPlaceholder`/`placeholder` is omitted. Add regression tests for normal Agent Mode and Editor Mode embeds.
+
 ## File structure
 
 ### Hub store/service/routes
@@ -55,7 +66,7 @@ Not in this batch:
 - Modify: `web/src/api/client.teamChat.test.ts`
 - Modify: `web/src/hooks/mutations/useTeamChatActions.ts`
   - Add `renameTeamChat`, `updateTeamParticipant`, `removeTeamParticipant`.
-  - Invalidate `teamChats`, `teamChat(id)`, `teamParticipants(id)`, and `sessionTeamMembershipsBase`.
+  - Invalidate `teamChats`, `teamChat(id)`, `teamParticipants(id)`, `sessionTeamMembershipsBase`, `teamMentionRequestsBase`, and `sessionTeamMentions(sessionId)` when a removed participant has a `sessionId`.
 
 ### Web UI
 
@@ -73,6 +84,10 @@ Not in this batch:
   - Make placeholder/helper copy explicit.
 - Modify: `web/src/components/TeamChat/TeamSessionChatModal.tsx`
   - Pass direct-session placeholder down to `SessionChat`.
+- Modify: `web/src/components/AssistantChat/messages/TeamMentionMessage.tsx`
+  - Disable Team Chat navigation/actions for settled invalid mentions.
+- Modify: `web/src/components/AssistantChat/TeamMentionQueueBar.tsx`
+  - Keep queue limited to active mentions; regression test superseded requests are ignored.
 - Modify: `web/src/components/SessionChat.tsx`
   - Add optional `composerPlaceholder` prop.
 - Modify: `web/src/components/AssistantChat/HappyComposer.tsx`
@@ -85,9 +100,9 @@ Not in this batch:
 **Files:**
 - Modify: `hub/src/store/teamChatStore.test.ts`
 - Modify: `hub/src/store/teamChatStore.ts`
+- Modify: `hub/src/sync/teamChatService.ts`
 - Modify: `hub/src/web/routes/teamChats.test.ts`
 - Modify: `hub/src/web/routes/teamChats.ts`
-- Modify: `hub/src/sync/teamChatService.ts`
 - Modify: `hub/src/sync/syncEngine.ts`
 
 - [ ] **Step 1: Write failing store test for Team Chat rename**
@@ -95,7 +110,7 @@ Not in this batch:
 Add to `hub/src/store/teamChatStore.test.ts`:
 
 ```ts
-it('renames Team Chats and updates project path without unarchiving archived chats', () => {
+it('renames Team Chats and preserves optional project path semantics without unarchiving archived chats', () => {
     const store = new Store(':memory:')
     const chat = store.teamChats.createTeamChat({ namespace: 'default', name: 'Old name', projectPath: '/old' })
 
@@ -238,9 +253,10 @@ git commit -m "feat: update team chat metadata"
 **Files:**
 - Modify: `hub/src/store/teamChatStore.test.ts`
 - Modify: `hub/src/store/teamChatStore.ts`
+- Modify: `hub/src/sync/teamChatService.test.ts`
+- Modify: `hub/src/sync/teamChatService.ts`
 - Modify: `hub/src/web/routes/teamChats.test.ts`
 - Modify: `hub/src/web/routes/teamChats.ts`
-- Modify: `hub/src/sync/teamChatService.ts`
 - Modify: `hub/src/sync/syncEngine.ts`
 
 - [ ] **Step 1: Write failing store test for alias/color/role update**
@@ -262,6 +278,100 @@ it('updates participant alias, role, and color with duplicate alias guard', () =
     expect(updated.color).toBe('#f87171')
     expect(updated.role).toBe('reviewer')
     expect(() => store.teamChats.updateParticipant('default', chat.id, backend.id, { displayName: 'ui' })).toThrow('TEAM_PARTICIPANT_DISPLAY_NAME_EXISTS')
+})
+```
+
+- [ ] **Step 1b: Write failing store test for member removal settling active mentions**
+
+Add to `hub/src/store/teamChatStore.test.ts`:
+
+```ts
+it('archives a session participant and supersedes its active Team mentions', () => {
+    const store = new Store(':memory:')
+    const session = store.sessions.getOrCreateSession('session-a', { path: '/repo' }, null, 'default')
+    const chat = store.teamChats.createTeamChat({ namespace: 'default', name: 'Chat' })
+    const user = store.teamChats.addParticipant({ namespace: 'default', teamChatId: chat.id, type: 'user', userId: 'user-1', displayName: 'You', color: '#34d399', role: 'general' })
+    const member = store.teamChats.addParticipant({ namespace: 'default', teamChatId: chat.id, type: 'session', sessionId: session.id, displayName: 'API', color: '#60a5fa', role: 'backend' })
+    const message = store.teamChats.addMessage({ namespace: 'default', teamChatId: chat.id, authorParticipantId: user.id, text: '@API please check', mentions: [] })
+    const request = store.teamChats.addMentionRequest({
+        namespace: 'default',
+        teamChatId: chat.id,
+        sourceMessageId: message.id,
+        targetSessionId: session.id,
+        status: 'seen',
+        contextSnapshot: {},
+        hopDepth: 0
+    })
+
+    const result = store.teamChats.archiveParticipant('default', chat.id, member.id)
+
+    expect(result.participant.id).toBe(member.id)
+    expect(result.supersededRequests.map((item) => item.id)).toEqual([request.id])
+    expect(store.teamChats.getParticipant('default', member.id)?.archivedAt).toBeGreaterThan(0)
+    expect(store.teamChats.getMentionRequest('default', request.id)?.status).toBe('superseded')
+    expect(store.teamChats.listPendingMentionRequests('default', session.id)).toEqual([])
+})
+```
+
+- [ ] **Step 1c: Write failing service test for Agent Mode mention-card cleanup**
+
+Add to `hub/src/sync/teamChatService.test.ts`:
+
+```ts
+it('emits team-mention-updated when removing a mentioned session member', () => {
+    const store = new Store(':memory:')
+    const publisher = createPublisher()
+    const target = store.sessions.getOrCreateSession('backend', { path: '/repo' }, null, 'default')
+    const service = new TeamChatService(store, publisher, undefined, () => ({
+        active: true,
+        thinking: false,
+        agentState: { controlledByUser: false, requests: {}, completedRequests: {} }
+    } as never))
+    const chat = service.createTeamChat({ namespace: 'default', name: 'Team Chat' })
+    const user = service.addParticipant({ namespace: 'default', teamChatId: chat.id, type: 'user', displayName: 'You', role: 'general', color: '#34d399' })
+    const backend = service.addParticipant({ namespace: 'default', teamChatId: chat.id, type: 'session', sessionId: target.id, displayName: 'Backend', role: 'backend', color: '#60a5fa' })
+    service.postMessage({ namespace: 'default', teamChatId: chat.id, authorParticipantId: user.id, text: '@Backend please check' })
+    const request = store.teamChats.listPendingMentionRequests('default', target.id)[0]
+
+    publisher.emit.mockClear()
+    service.archiveParticipant('default', chat.id, backend.id)
+
+    expect(publisher.emit).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'team-mention-updated',
+        teamChatId: chat.id,
+        requestId: request.id,
+        targetSessionId: target.id
+    }))
+})
+```
+
+Add a second service test for full room archive:
+
+```ts
+it('emits team-mention-updated when archiving a room with active mentions', () => {
+    const store = new Store(':memory:')
+    const publisher = createPublisher()
+    const target = store.sessions.getOrCreateSession('backend', { path: '/repo' }, null, 'default')
+    const service = new TeamChatService(store, publisher, undefined, () => ({
+        active: true,
+        thinking: false,
+        agentState: { controlledByUser: false, requests: {}, completedRequests: {} }
+    } as never))
+    const chat = service.createTeamChat({ namespace: 'default', name: 'Team Chat' })
+    const user = service.addParticipant({ namespace: 'default', teamChatId: chat.id, type: 'user', displayName: 'You', role: 'general', color: '#34d399' })
+    service.addParticipant({ namespace: 'default', teamChatId: chat.id, type: 'session', sessionId: target.id, displayName: 'Backend', role: 'backend', color: '#60a5fa' })
+    service.postMessage({ namespace: 'default', teamChatId: chat.id, authorParticipantId: user.id, text: '@Backend please check' })
+    const request = store.teamChats.listPendingMentionRequests('default', target.id)[0]
+
+    publisher.emit.mockClear()
+    service.archiveTeamChat('default', chat.id)
+
+    expect(publisher.emit).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'team-mention-updated',
+        teamChatId: chat.id,
+        requestId: request.id,
+        targetSessionId: target.id
+    }))
 })
 ```
 
@@ -292,15 +402,35 @@ it('updates Team Chat participants through the namespace-scoped engine API', asy
 })
 ```
 
+Also add the remove route test:
+
+```ts
+it('removes Team Chat session participants through the namespace-scoped engine API', async () => {
+    const calls: unknown[] = []
+    const engine = {
+        archiveTeamParticipant: (namespace: string, teamChatId: string, participantId: string) => {
+            calls.push({ namespace, teamChatId, participantId })
+        }
+    }
+    const app = createApp('ns-a', engine)
+
+    const response = await app.request('/api/team-chats/team-1/participants/p1', { method: 'DELETE' })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ ok: true })
+    expect(calls).toEqual([{ namespace: 'ns-a', teamChatId: 'team-1', participantId: 'p1' }])
+})
+```
+
 - [ ] **Step 3: Run RED tests**
 
 Run:
 
 ```bash
-bun test hub/src/store/teamChatStore.test.ts hub/src/web/routes/teamChats.test.ts
+bun test hub/src/store/teamChatStore.test.ts hub/src/sync/teamChatService.test.ts hub/src/web/routes/teamChats.test.ts
 ```
 
-Expected: fail because participant update API does not exist.
+Expected: fail because participant update API and mention-settling removal behavior do not exist yet.
 
 - [ ] **Step 4: Implement store participant update**
 
@@ -337,15 +467,116 @@ updateParticipant(
 }
 ```
 
+Replace `archiveTeamChat` and `archiveParticipant` so archive/removal settles active Team mentions and returns affected requests for SSE emission:
+
+```ts
+archiveTeamChat(namespace: string, teamChatId: string): { supersededRequests: StoredTeamMentionRequest[] } {
+    this.requireTeamChat(namespace, teamChatId)
+    const now = Date.now()
+    const activeRequests = this.db.prepare(`
+        SELECT * FROM team_mention_requests
+        WHERE namespace = ?
+          AND team_chat_id = ?
+          AND status IN ('pending', 'delivered', 'seen', 'processing')
+        ORDER BY created_at ASC
+    `).all(namespace, teamChatId) as TeamMentionRequestRow[]
+    this.db.prepare(`
+        UPDATE team_chats
+        SET archived_at = COALESCE(archived_at, ?), updated_at = ?
+        WHERE namespace = ? AND id = ? AND archived_at IS NULL
+    `).run(now, now, namespace, teamChatId)
+    this.db.prepare(`
+        UPDATE team_participants
+        SET archived_at = COALESCE(archived_at, ?)
+        WHERE namespace = ? AND team_chat_id = ? AND archived_at IS NULL
+    `).run(now, namespace, teamChatId)
+    this.db.prepare(`
+        UPDATE team_mention_requests
+        SET status = 'superseded', resolved_at = COALESCE(resolved_at, ?)
+        WHERE namespace = ?
+          AND team_chat_id = ?
+          AND status IN ('pending', 'delivered', 'seen', 'processing')
+    `).run(now, namespace, teamChatId)
+    return { supersededRequests: activeRequests.map(toMentionRequest) }
+}
+
+archiveParticipant(namespace: string, teamChatId: string, participantId: string): { participant: StoredTeamParticipant; supersededRequests: StoredTeamMentionRequest[] } {
+    this.requireParticipant(namespace, teamChatId, participantId)
+    const participant = this.getParticipant(namespace, participantId)
+    if (!participant) throw new Error('TEAM_PARTICIPANT_NOT_FOUND')
+    if (participant.type !== 'session' || !participant.sessionId) {
+        throw new Error('TEAM_PARTICIPANT_REMOVE_NOT_ALLOWED')
+    }
+    const now = Date.now()
+    const activeRequests = this.db.prepare(`
+        SELECT * FROM team_mention_requests
+        WHERE namespace = ?
+          AND team_chat_id = ?
+          AND target_session_id = ?
+          AND status IN ('pending', 'delivered', 'seen', 'processing')
+        ORDER BY created_at ASC
+    `).all(namespace, teamChatId, participant.sessionId) as TeamMentionRequestRow[]
+    this.db.prepare(`
+        UPDATE team_participants
+        SET archived_at = COALESCE(archived_at, ?)
+        WHERE namespace = ? AND team_chat_id = ? AND id = ? AND archived_at IS NULL
+    `).run(now, namespace, teamChatId, participantId)
+    this.db.prepare(`
+        UPDATE team_mention_requests
+        SET status = 'superseded', resolved_at = COALESCE(resolved_at, ?)
+        WHERE namespace = ?
+          AND team_chat_id = ?
+          AND target_session_id = ?
+          AND status IN ('pending', 'delivered', 'seen', 'processing')
+    `).run(now, namespace, teamChatId, participant.sessionId)
+    return { participant, supersededRequests: activeRequests.map(toMentionRequest) }
+}
+```
+
 - [ ] **Step 5: Implement service/engine/route participant update**
 
 In `TeamChatService`:
 
 ```ts
+archiveTeamChat(namespace: string, teamChatId: string): void {
+    const participants = this.store.teamChats.listParticipants(namespace, teamChatId)
+    this.requireTeamChat(namespace, teamChatId)
+    const result = this.store.teamChats.archiveTeamChat(namespace, teamChatId)
+    this.publisher.emit({ type: 'team-chat-updated', namespace, teamChatId })
+    for (const participant of participants) {
+        this.publisher.emit({ type: 'team-participant-updated', namespace, teamChatId, participantId: participant.id })
+    }
+    for (const request of result.supersededRequests) {
+        this.publisher.emit({
+            type: 'team-mention-updated',
+            namespace,
+            teamChatId,
+            requestId: request.id,
+            sessionId: request.targetSessionId,
+            targetSessionId: request.targetSessionId
+        })
+    }
+}
+
 updateParticipant(namespace: string, teamChatId: string, participantId: string, patch: { displayName?: string; role?: StoredTeamParticipant['role']; color?: string }) {
     const participant = this.store.teamChats.updateParticipant(namespace, teamChatId, participantId, patch)
     this.publisher.emit({ type: 'team-participant-updated', namespace, teamChatId, participantId })
     return participant
+}
+
+archiveParticipant(namespace: string, teamChatId: string, participantId: string) {
+    const result = this.store.teamChats.archiveParticipant(namespace, teamChatId, participantId)
+    this.publisher.emit({ type: 'team-participant-updated', namespace, teamChatId, participantId })
+    for (const request of result.supersededRequests) {
+        this.publisher.emit({
+            type: 'team-mention-updated',
+            namespace,
+            teamChatId,
+            requestId: request.id,
+            sessionId: request.targetSessionId,
+            targetSessionId: request.targetSessionId
+        })
+    }
 }
 ```
 
@@ -354,6 +585,10 @@ In `SyncEngine`:
 ```ts
 updateTeamParticipant(namespace: string, teamChatId: string, participantId: string, patch: { displayName?: string; role?: StoredTeamParticipant['role']; color?: string }) {
     return this.teamChatService.updateParticipant(namespace, teamChatId, participantId, patch)
+}
+
+archiveTeamParticipant(namespace: string, teamChatId: string, participantId: string) {
+    return this.teamChatService.archiveParticipant(namespace, teamChatId, participantId)
 }
 ```
 
@@ -380,6 +615,25 @@ app.patch('/team-chats/:id/participants/:participantId', async (c) => {
         return teamChatErrorResponse(c, error)
     }
 })
+
+app.delete('/team-chats/:id/participants/:participantId', async (c) => {
+    const engine = requireSyncEngine(c, getSyncEngine)
+    if (engine instanceof Response) return engine
+    try {
+        engine.archiveTeamParticipant(c.get('namespace'), c.req.param('id'), c.req.param('participantId'))
+        return c.json({ ok: true })
+    } catch (error) {
+        return teamChatErrorResponse(c, error)
+    }
+})
+```
+
+Update `teamChatErrorResponse`:
+
+```ts
+if (message === 'TEAM_PARTICIPANT_REMOVE_NOT_ALLOWED') {
+    return c.json({ error: 'Only session members can be removed from a Team Chat in this version' }, 400)
+}
 ```
 
 - [ ] **Step 6: Run GREEN tests**
@@ -387,7 +641,7 @@ app.patch('/team-chats/:id/participants/:participantId', async (c) => {
 Run:
 
 ```bash
-bun test hub/src/store/teamChatStore.test.ts hub/src/web/routes/teamChats.test.ts
+bun test hub/src/store/teamChatStore.test.ts hub/src/sync/teamChatService.test.ts hub/src/web/routes/teamChats.test.ts
 ```
 
 Expected: pass.
@@ -395,7 +649,7 @@ Expected: pass.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add hub/src/store/teamChatStore.test.ts hub/src/store/teamChatStore.ts hub/src/web/routes/teamChats.test.ts hub/src/web/routes/teamChats.ts hub/src/sync/teamChatService.ts hub/src/sync/syncEngine.ts
+git add hub/src/store/teamChatStore.test.ts hub/src/store/teamChatStore.ts hub/src/sync/teamChatService.test.ts hub/src/sync/teamChatService.ts hub/src/web/routes/teamChats.test.ts hub/src/web/routes/teamChats.ts hub/src/sync/syncEngine.ts
 git commit -m "feat: update team chat members"
 ```
 
@@ -417,13 +671,13 @@ it('updates Team Chats and participants with URL encoding', async () => {
     const fetchMock = mockJson({ ok: true })
     const api = new ApiClient('token')
 
-    await api.updateTeamChat('team/1', { name: 'Planning', projectPath: '/repo' })
+    await api.updateTeamChat('team/1', { name: 'Planning' })
     await api.updateTeamParticipant('team/1', 'participant/2', { displayName: 'API', role: 'reviewer', color: '#f87171' })
     await api.removeTeamParticipant('team/1', 'participant/2')
 
     expect(fetchMock).toHaveBeenCalledWith('/api/team-chats/team%2F1', expect.objectContaining({
         method: 'PATCH',
-        body: JSON.stringify({ name: 'Planning', projectPath: '/repo' })
+        body: JSON.stringify({ name: 'Planning' })
     }))
     expect(fetchMock).toHaveBeenCalledWith('/api/team-chats/team%2F1/participants/participant%2F2', expect.objectContaining({
         method: 'PATCH',
@@ -498,6 +752,10 @@ queryClient.invalidateQueries({ queryKey: queryKeys.teamChats })
 queryClient.invalidateQueries({ queryKey: queryKeys.teamChat(teamChatId) })
 queryClient.invalidateQueries({ queryKey: queryKeys.teamParticipants(teamChatId) })
 queryClient.invalidateQueries({ queryKey: queryKeys.sessionTeamMembershipsBase })
+queryClient.invalidateQueries({ queryKey: queryKeys.teamMentionRequestsBase })
+if (sessionId) {
+    queryClient.invalidateQueries({ queryKey: queryKeys.sessionTeamMentions(sessionId) })
+}
 ```
 
 - [ ] **Step 5: Run GREEN test**
@@ -553,7 +811,7 @@ it('renames a Team Chat from the list card menu', async () => {
     fireEvent.change(screen.getByRole('textbox', { name: /Team Chat name/i }), { target: { value: 'Execution Room' } })
     fireEvent.click(screen.getByRole('button', { name: /^Save$/i }))
 
-    await waitFor(() => expect(renameTeamChat).toHaveBeenCalledWith('team-1', { name: 'Execution Room', projectPath: '/repo' }))
+    await waitFor(() => expect(renameTeamChat).toHaveBeenCalledWith('team-1', { name: 'Execution Room' }))
 })
 
 it('archives a Team Chat after confirmation without deleting sessions', async () => {
@@ -617,8 +875,26 @@ In `team-chats.tsx`:
 Menu items:
 
 ```tsx
-<button role="menuitem" type="button" onClick={() => openRenameDialog(chat)}>Rename</button>
-<button role="menuitem" type="button" onClick={() => openArchiveDialog(chat)}>Archive</button>
+<button role="menuitem" type="button" onClick={() => { setMenuOpenTeamChatId(null); openRenameDialog(chat) }}>Rename</button>
+<button role="menuitem" type="button" onClick={() => { setMenuOpenTeamChatId(null); openArchiveDialog(chat) }}>Archive</button>
+```
+
+Rename dialog fields:
+
+```tsx
+<label className="text-sm font-medium text-[var(--app-fg)]" htmlFor="team-chat-rename-name">Team Chat name</label>
+<input
+    id="team-chat-rename-name"
+    value={renameName}
+    onChange={(event) => setRenameName(event.target.value)}
+    className="mt-2 w-full rounded-lg border border-[var(--app-border)] bg-[var(--app-bg)] px-3 py-2 text-sm text-[var(--app-fg)]"
+/>
+```
+
+Save handler must not send `projectPath`:
+
+```ts
+await renameTeamChat(renameCandidate.id, { name: normalizedName })
 ```
 
 Archive dialog copy:
@@ -739,7 +1015,7 @@ When zero, render above timeline:
 In `$teamChatId.tsx`, add rename dialog state and archive dialog copy. Use:
 
 ```ts
-await renameTeamChat(teamChatId, { name: normalizedName, projectPath: normalizedProjectPath || null })
+await renameTeamChat(teamChatId, { name: normalizedName })
 await deleteTeamChat(teamChatId)
 ```
 
@@ -781,14 +1057,20 @@ Add to `TeamChatRightPanel.test.tsx`:
 it('edits a member alias and removes a session member from the Team Chat', () => {
     const onUpdateParticipant = vi.fn()
     const onRemoveParticipant = vi.fn()
+    const onOpenSession = vi.fn()
     render(<TeamChatRightPanel
-        participants={[{ id: 'p2', teamChatId: 'team-1', type: 'session', sessionId: 's2', displayName: 'UI', role: 'frontend', color: '#a78bfa', joinedAt: 1 }]}
+        participants={[
+            { id: 'p1', teamChatId: 'team-1', type: 'user', displayName: 'You', role: 'general', color: '#34d399', joinedAt: 1 },
+            { id: 'p2', teamChatId: 'team-1', type: 'session', sessionId: 's2', displayName: 'UI', role: 'frontend', color: '#a78bfa', joinedAt: 1 }
+        ]}
         availableSessions={[{ id: 's2', active: true, thinking: false, activeAt: 1, updatedAt: 2, metadata: { path: '/repo/hapi', name: 'Frontend polish' }, todoProgress: null, pendingRequestsCount: 0, model: null, effort: null }]}
         onUpdateParticipant={onUpdateParticipant}
         onRemoveParticipant={onRemoveParticipant}
+        onOpenSession={onOpenSession}
     />)
 
     fireEvent.click(screen.getByRole('button', { name: /Member actions for @UI/i }))
+    expect(onOpenSession).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('menuitem', { name: /Edit member/i }))
     fireEvent.change(screen.getByRole('textbox', { name: /Team alias/i }), { target: { value: 'Frontend' } })
     fireEvent.click(screen.getByRole('button', { name: /^Save member$/i }))
@@ -805,6 +1087,7 @@ it('edits a member alias and removes a session member from the Team Chat', () =>
     fireEvent.click(screen.getByRole('button', { name: /^Remove member$/i }))
 
     expect(onRemoveParticipant).toHaveBeenCalledWith(expect.objectContaining({ id: 'p2', sessionId: 's2' }))
+    expect(screen.queryByRole('button', { name: /Member actions for @You/i })).not.toBeInTheDocument()
 })
 ```
 
@@ -830,14 +1113,33 @@ onRemoveParticipant?: (participant: TeamParticipant) => void
 Add member row action button:
 
 ```tsx
-<button type="button" aria-label={`Member actions for @${participant.displayName}`} aria-haspopup="menu">⋯</button>
+{participant.type === 'session' ? (
+    <button
+        type="button"
+        aria-label={`Member actions for @${participant.displayName}`}
+        aria-haspopup="menu"
+        onClick={(event) => {
+            event.stopPropagation()
+            setMemberMenuParticipantId((current) => current === participant.id ? null : participant.id)
+        }}
+        onKeyDown={(event) => {
+            event.stopPropagation()
+        }}
+    >
+        ⋯
+    </button>
+) : null}
 ```
 
 Menu:
 
 ```tsx
-<button role="menuitem" type="button" onClick={() => openEditParticipant(participant)}>Edit member</button>
-<button role="menuitem" type="button" onClick={() => openRemoveParticipant(participant)}>Remove from Team Chat</button>
+{participant.type === 'session' && memberMenuParticipantId === participant.id ? (
+    <div role="menu" onClick={(event) => event.stopPropagation()}>
+        <button role="menuitem" type="button" onClick={() => openEditParticipant(participant)}>Edit member</button>
+        <button role="menuitem" type="button" onClick={() => openRemoveParticipant(participant)}>Remove from Team Chat</button>
+    </div>
+) : null}
 ```
 
 Edit dialog fields:
@@ -887,13 +1189,138 @@ git commit -m "feat: manage team chat members"
 
 ---
 
-## Task 7: Composer clarity for Team vs Direct Chat
+## Task 7: Agent Mode settled Team mention cards
+
+**Files:**
+- Modify: `web/src/components/AssistantChat/messages/TeamMentionMessage.test.tsx`
+- Modify: `web/src/components/AssistantChat/messages/TeamMentionMessage.tsx`
+- Modify: `web/src/components/AssistantChat/TeamMentionQueueBar.test.tsx`
+- Modify: `web/src/components/AssistantChat/TeamMentionQueueBar.tsx`
+
+- [ ] **Step 1: Write failing card test for superseded mentions**
+
+Add to `web/src/components/AssistantChat/messages/TeamMentionMessage.test.tsx`:
+
+```ts
+it('renders superseded Team mentions as settled without opening archived rooms', () => {
+    const onOpenTeamChat = vi.fn()
+    render(<TeamMentionMessage
+        block={{
+            kind: 'team-mention',
+            id: 'msg-1',
+            localId: null,
+            requestId: 'req-1',
+            teamChatId: 'team-1',
+            sourceMessageId: 'team-msg-1',
+            text: 'Please confirm API behavior',
+            status: 'superseded',
+            createdAt: 1
+        }}
+        onOpenTeamChat={onOpenTeamChat}
+        onReplyToTeam={vi.fn()}
+        onPostUpdate={vi.fn()}
+        onViewOriginal={vi.fn()}
+        onNoAction={vi.fn()}
+    />)
+
+    expect(screen.getByText('Room archived or member removed.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Open Team Chat/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Reply to Team/i })).not.toBeInTheDocument()
+    expect(onOpenTeamChat).not.toHaveBeenCalled()
+})
+```
+
+- [ ] **Step 2: Write queue regression test for superseded mentions**
+
+Add to `web/src/components/AssistantChat/TeamMentionQueueBar.test.tsx`:
+
+```ts
+it('ignores superseded Team mentions so Agent Mode does not route to archived rooms', () => {
+    render(<TeamMentionQueueBar
+        requests={[
+            { ...baseRequest, id: 'req-1', status: 'superseded' },
+            { ...baseRequest, id: 'req-2', status: 'failed', createdAt: 2 }
+        ]}
+        onReviewFirst={vi.fn()}
+        onOpenTeamChat={vi.fn()}
+    />)
+
+    expect(screen.queryByLabelText('Pending Team mentions')).not.toBeInTheDocument()
+})
+```
+
+- [ ] **Step 3: Run RED tests**
+
+Run:
+
+```bash
+bun run --cwd web test src/components/AssistantChat/messages/TeamMentionMessage.test.tsx src/components/AssistantChat/TeamMentionQueueBar.test.tsx
+```
+
+Expected: fail because superseded card still shows active actions.
+
+- [ ] **Step 4: Implement settled-card state**
+
+In `TeamMentionMessage.tsx`:
+
+```ts
+const settledInvalidStatuses = new Set<TeamMentionBlock['status']>(['superseded', 'failed'])
+const isSettledInvalid = settledInvalidStatuses.has(props.block.status)
+const isSeen = props.block.status === 'seen'
+    || props.block.status === 'processing'
+    || props.block.status === 'responded'
+    || props.block.status === 'no_action'
+    || isSettledInvalid
+```
+
+Render the settled help text and hide actions that would route to Team Chat:
+
+```tsx
+{isSettledInvalid ? (
+    <div className="mt-3 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg)] px-3 py-2 text-xs text-[var(--app-hint)]">
+        Room archived or member removed.
+    </div>
+) : (
+    <div className="mt-3 flex flex-wrap gap-2">
+        <button className="rounded-md bg-[var(--app-button)] px-2.5 py-1.5 text-xs font-medium text-[var(--app-button-text)]" onClick={props.onReplyToTeam}>Reply to Team</button>
+        <button className="rounded-md border border-[var(--app-border)] px-2.5 py-1.5 text-xs text-[var(--app-fg)]" onClick={props.onPostUpdate}>Post update</button>
+        <button className="rounded-md border border-[var(--app-border)] px-2.5 py-1.5 text-xs text-[var(--app-fg)]" onClick={props.onViewOriginal}>View original</button>
+        <button className="rounded-md border border-[var(--app-border)] px-2.5 py-1.5 text-xs text-[var(--app-fg)]" onClick={props.onOpenTeamChat}>Open Team Chat</button>
+        <button className="rounded-md border border-[var(--app-border)] px-2.5 py-1.5 text-xs text-[var(--app-hint)]" onClick={props.onNoAction}>No action needed</button>
+    </div>
+)}
+```
+
+`TeamMentionQueueBar` should already filter active statuses only. Keep that implementation; the new test locks the behavior.
+
+- [ ] **Step 5: Run GREEN tests**
+
+Run:
+
+```bash
+bun run --cwd web test src/components/AssistantChat/messages/TeamMentionMessage.test.tsx src/components/AssistantChat/TeamMentionQueueBar.test.tsx
+bun run typecheck:web
+```
+
+Expected: pass.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add web/src/components/AssistantChat/messages/TeamMentionMessage.test.tsx web/src/components/AssistantChat/messages/TeamMentionMessage.tsx web/src/components/AssistantChat/TeamMentionQueueBar.test.tsx web/src/components/AssistantChat/TeamMentionQueueBar.tsx
+git commit -m "fix: settle invalid team mention cards"
+```
+
+---
+
+## Task 8: Composer clarity for Team vs Direct Chat
 
 **Files:**
 - Modify: `web/src/components/TeamChat/TeamChatComposer.test.tsx`
 - Modify: `web/src/components/TeamChat/TeamChatComposer.tsx`
 - Modify: `web/src/components/TeamChat/TeamSessionChatModal.test.tsx`
 - Modify: `web/src/components/TeamChat/TeamSessionChatModal.tsx`
+- Modify: `web/src/components/editor/EditorChatPanel.test.tsx`
 - Modify: `web/src/components/SessionChat.tsx`
 - Modify: `web/src/components/AssistantChat/HappyComposer.tsx`
 
@@ -916,12 +1343,24 @@ expect(sessionChatMock).toHaveBeenCalledWith(expect.objectContaining({
 }))
 ```
 
+- [ ] **Step 2b: Write Editor Mode regression test**
+
+In `web/src/components/editor/EditorChatPanel.test.tsx`, extend `passes compact chat props to SessionChat when loaded`:
+
+```ts
+expect(sessionChatMock).toHaveBeenCalledWith(expect.not.objectContaining({
+    composerPlaceholder: expect.any(String)
+}))
+```
+
+This locks the existing Editor Mode composer copy; Team direct-modal copy must not leak into Editor Mode.
+
 - [ ] **Step 3: Run RED tests**
 
 Run:
 
 ```bash
-bun run --cwd web test src/components/TeamChat/TeamChatComposer.test.tsx src/components/TeamChat/TeamSessionChatModal.test.tsx
+bun run --cwd web test src/components/TeamChat/TeamChatComposer.test.tsx src/components/TeamChat/TeamSessionChatModal.test.tsx src/components/editor/EditorChatPanel.test.tsx
 ```
 
 Expected: fail because placeholder prop/copy is missing.
@@ -979,7 +1418,7 @@ composerPlaceholder={`Message @${props.alias} directly. This will not post to th
 Run:
 
 ```bash
-bun run --cwd web test src/components/TeamChat/TeamChatComposer.test.tsx src/components/TeamChat/TeamSessionChatModal.test.tsx
+bun run --cwd web test src/components/TeamChat/TeamChatComposer.test.tsx src/components/TeamChat/TeamSessionChatModal.test.tsx src/components/editor/EditorChatPanel.test.tsx
 bun run typecheck:web
 ```
 
@@ -988,13 +1427,13 @@ Expected: pass.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add web/src/components/TeamChat/TeamChatComposer.test.tsx web/src/components/TeamChat/TeamChatComposer.tsx web/src/components/TeamChat/TeamSessionChatModal.test.tsx web/src/components/TeamChat/TeamSessionChatModal.tsx web/src/components/SessionChat.tsx web/src/components/AssistantChat/HappyComposer.tsx
+git add web/src/components/TeamChat/TeamChatComposer.test.tsx web/src/components/TeamChat/TeamChatComposer.tsx web/src/components/TeamChat/TeamSessionChatModal.test.tsx web/src/components/TeamChat/TeamSessionChatModal.tsx web/src/components/editor/EditorChatPanel.test.tsx web/src/components/SessionChat.tsx web/src/components/AssistantChat/HappyComposer.tsx
 git commit -m "feat: clarify team chat composers"
 ```
 
 ---
 
-## Task 8: Final verification and regression checklist
+## Task 9: Final verification and regression checklist
 
 **Files:**
 - No production files expected unless fixes required.
@@ -1046,10 +1485,15 @@ Ask user to rebuild/restart manually, then verify:
 Direct modal:
 - Click member opens full direct chat.
 - Composer placeholder says direct message does not post to Team Chat.
+- Member action menu click does not open the direct modal.
+- `You` participant has no edit/remove member menu in this MVP.
 
 Regression:
 - Agent Mode opens normally.
+- Old superseded/failed Team mention card does not show `Open Team Chat`.
+- Team mention queue ignores superseded/failed requests.
 - Editor Mode opens normally.
+- Editor Mode composer keeps the existing default placeholder.
 - Existing Session Chat send still works.
 ```
 
@@ -1067,14 +1511,15 @@ git commit -m "fix: stabilize team chat ux polish"
 ## Risk checklist
 
 - **Alias race/duplicate:** backend duplicate guard remains authoritative. UI duplicate guard only improves feedback.
-- **Archived room references:** existing archived room links may 404. This is acceptable for this batch; future batch should add archived-room read state.
+- **Archived room references:** Agent Mode must not expose enabled navigation for superseded/failed Team mentions. Archive/remove flows supersede active requests and emit `team-mention-updated`; old cards render a settled disabled state instead of routing to 404.
 - **Direct chat confusion:** placeholder + modal header both state direct-only.
 - **Agent/Editor regressions:** only shared change is optional composer placeholder prop; default behavior must remain unchanged when prop omitted.
-- **Member removal:** archive participant only; do not delete sessions or session messages.
+- **Member removal:** archive session participant only; do not delete sessions or session messages. Supersede active requests for the removed session/member and invalidate Agent Mode mention queries.
+- **Member row race:** nested member action menu must stop propagation so a menu click never opens the direct chat modal.
 
 ## Self-review
 
-- Spec coverage: all agreed UX items have tasks: rename/archive/member edit/remove/empty state/placeholders.
-- Placeholder scan: no TBD/TODO markers.
-- Type consistency: `updateTeamChat`, `updateTeamParticipant`, `removeTeamParticipant`, `renameTeamChat` are introduced before UI tasks use them.
+- Spec coverage: all agreed UX items have tasks: rename/archive/member edit/remove/empty state/placeholders plus Agent/Editor regression guards.
+- Placeholder scan: no placeholder markers.
+- Type consistency: `updateTeamChat`, `updateTeamParticipant`, `removeTeamParticipant`, `renameTeamChat`, and optional `composerPlaceholder` are introduced before UI tasks use them.
 - Scope: focused UX lifecycle polish; no restore/search/unread implementation in this plan.
