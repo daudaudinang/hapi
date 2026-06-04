@@ -99,7 +99,7 @@ export class TeamChatStore {
     }
 
     getTeamChat(namespace: string, id: string): StoredTeamChat | null {
-        const row = this.db.prepare('SELECT * FROM team_chats WHERE namespace = ? AND id = ?').get(namespace, id) as TeamChatRow | undefined
+        const row = this.db.prepare('SELECT * FROM team_chats WHERE namespace = ? AND id = ? AND archived_at IS NULL').get(namespace, id) as TeamChatRow | undefined
         return row ? toTeamChat(row) : null
     }
 
@@ -108,6 +108,28 @@ export class TeamChatStore {
             'SELECT * FROM team_chats WHERE namespace = ? AND archived_at IS NULL ORDER BY updated_at DESC'
         ).all(namespace) as TeamChatRow[]
         return rows.map(toTeamChat)
+    }
+
+    archiveTeamChat(namespace: string, teamChatId: string): void {
+        this.requireTeamChat(namespace, teamChatId)
+        const now = Date.now()
+        this.db.prepare(`
+            UPDATE team_chats
+            SET archived_at = COALESCE(archived_at, ?), updated_at = ?
+            WHERE namespace = ? AND id = ? AND archived_at IS NULL
+        `).run(now, now, namespace, teamChatId)
+        this.db.prepare(`
+            UPDATE team_participants
+            SET archived_at = COALESCE(archived_at, ?)
+            WHERE namespace = ? AND team_chat_id = ? AND archived_at IS NULL
+        `).run(now, namespace, teamChatId)
+        this.db.prepare(`
+            UPDATE team_mention_requests
+            SET status = 'superseded', resolved_at = COALESCE(resolved_at, ?)
+            WHERE namespace = ?
+              AND team_chat_id = ?
+              AND status IN ('pending', 'delivered', 'seen', 'processing')
+        `).run(now, namespace, teamChatId)
     }
 
     addParticipant(input: {
@@ -173,9 +195,13 @@ export class TeamChatStore {
 
     listParticipants(namespace: string, teamChatId: string): StoredTeamParticipant[] {
         const rows = this.db.prepare(`
-            SELECT * FROM team_participants
-            WHERE namespace = ? AND team_chat_id = ? AND archived_at IS NULL
-            ORDER BY joined_at ASC
+            SELECT p.* FROM team_participants p
+            INNER JOIN team_chats c ON c.namespace = p.namespace AND c.id = p.team_chat_id
+            WHERE p.namespace = ?
+              AND p.team_chat_id = ?
+              AND p.archived_at IS NULL
+              AND c.archived_at IS NULL
+            ORDER BY p.joined_at ASC
         `).all(namespace, teamChatId) as TeamParticipantRow[]
         return rows.map(toParticipant)
     }
@@ -323,18 +349,25 @@ export class TeamChatStore {
 
     listPendingMentionRequests(namespace: string, targetSessionId: string): StoredTeamMentionRequest[] {
         const rows = this.db.prepare(`
-            SELECT * FROM team_mention_requests
-            WHERE namespace = ? AND target_session_id = ? AND status IN ('pending', 'delivered', 'seen')
-            ORDER BY created_at ASC
+            SELECT r.* FROM team_mention_requests r
+            INNER JOIN team_chats c ON c.namespace = r.namespace AND c.id = r.team_chat_id
+            WHERE r.namespace = ?
+              AND r.target_session_id = ?
+              AND r.status IN ('pending', 'delivered', 'seen')
+              AND c.archived_at IS NULL
+            ORDER BY r.created_at ASC
         `).all(namespace, targetSessionId) as TeamMentionRequestRow[]
         return rows.map(toMentionRequest)
     }
 
     listSessionMentionRequests(namespace: string, targetSessionId: string): StoredTeamMentionRequest[] {
         const rows = this.db.prepare(`
-            SELECT * FROM team_mention_requests
-            WHERE namespace = ? AND target_session_id = ?
-            ORDER BY created_at ASC
+            SELECT r.* FROM team_mention_requests r
+            INNER JOIN team_chats c ON c.namespace = r.namespace AND c.id = r.team_chat_id
+            WHERE r.namespace = ?
+              AND r.target_session_id = ?
+              AND c.archived_at IS NULL
+            ORDER BY r.created_at ASC
         `).all(namespace, targetSessionId) as TeamMentionRequestRow[]
         return rows.map(toMentionRequest)
     }
@@ -381,7 +414,7 @@ export class TeamChatStore {
     }
 
     private requireTeamChat(namespace: string, teamChatId: string): void {
-        const row = this.db.prepare('SELECT id FROM team_chats WHERE namespace = ? AND id = ?').get(namespace, teamChatId) as { id: string } | undefined
+        const row = this.db.prepare('SELECT id FROM team_chats WHERE namespace = ? AND id = ? AND archived_at IS NULL').get(namespace, teamChatId) as { id: string } | undefined
         if (!row) throw new Error('TEAM_CHAT_NOT_FOUND')
     }
 

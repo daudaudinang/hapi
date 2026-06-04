@@ -41,8 +41,10 @@ export default function TeamChatDetailPage() {
     const { requests: mentionRequests } = useTeamChatMentionRequests(api, teamChatId, participants)
     const [aroundMessages, setAroundMessages] = useState<TeamChatMessage[]>([])
     const currentParticipant = participants.find((participant) => participant.type === 'user') ?? participants[0] ?? null
-    const { sendTeamMessage, addTeamParticipant } = useTeamChatActions(api, teamChatId)
+    const { sendTeamMessage, addTeamParticipant, deleteTeamChat, isPending } = useTeamChatActions(api, teamChatId)
     const [directChatParticipant, setDirectChatParticipant] = useState<TeamParticipant | null>(null)
+    const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+    const [deleteError, setDeleteError] = useState<string | null>(null)
 
     if (isLoading) {
         return <div className="p-3 text-sm text-[var(--app-hint)]">Loading Team Chat…</div>
@@ -79,6 +81,10 @@ export default function TeamChatDetailPage() {
                         project: editorProject
                     } as never
                 })}
+                onDeleteTeamChat={teamChat ? () => {
+                    setDeleteError(null)
+                    setDeleteConfirmOpen(true)
+                } : undefined}
                 availableSessions={sessions}
                 onAddSession={(session, alias) => {
                     if (!teamChatId) return
@@ -121,6 +127,52 @@ export default function TeamChatDetailPage() {
                         }}
                     />
                 </Suspense>
+            ) : null}
+            {deleteConfirmOpen && teamChat && teamChatId ? (
+                <div role="dialog" aria-modal="true" aria-label={`Delete ${teamChat.name}`} className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
+                    <div className="w-full max-w-md rounded-2xl border border-[var(--app-border)] bg-[var(--app-bg)] p-4 text-[var(--app-fg)] shadow-2xl">
+                        <div className="text-base font-semibold">Delete Team Chat?</div>
+                        <div className="mt-2 text-sm text-[var(--app-hint)]">
+                            This archives <span className="font-medium text-[var(--app-fg)]">{teamChat.name}</span>.
+                        </div>
+                        <div className="mt-1 text-sm text-[var(--app-hint)]">Sessions in this Team Chat will not be deleted.</div>
+                        {deleteError ? <div className="mt-3 rounded-md bg-red-500/10 p-2 text-sm text-red-600 dark:text-red-400">{deleteError}</div> : null}
+                        <div className="mt-4 flex justify-end gap-2">
+                            <button
+                                type="button"
+                                disabled={isPending}
+                                onClick={() => setDeleteConfirmOpen(false)}
+                                className="rounded-md border border-[var(--app-border)] px-3 py-1.5 text-sm text-[var(--app-fg)] transition-colors hover:bg-[var(--app-secondary-bg)] disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                disabled={isPending}
+                                onClick={() => {
+                                    void (async () => {
+                                        try {
+                                            await deleteTeamChat(teamChatId)
+                                            setDeleteConfirmOpen(false)
+                                            navigate({
+                                                to: '/team-chats',
+                                                search: {
+                                                    machine: editorMachine,
+                                                    project: editorProject
+                                                } as never
+                                            })
+                                        } catch (error) {
+                                            setDeleteError(error instanceof Error ? error.message : 'Failed to delete Team Chat.')
+                                        }
+                                    })()
+                                }}
+                                className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                            >
+                                Delete Team Chat
+                            </button>
+                        </div>
+                    </div>
+                </div>
             ) : null}
         </>
     )

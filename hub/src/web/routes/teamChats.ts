@@ -92,6 +92,17 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
         return teamChat ? c.json({ teamChat }) : c.json({ error: 'Team Chat not found' }, 404)
     })
 
+    app.delete('/team-chats/:id', (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) return engine
+        try {
+            engine.archiveTeamChat(c.get('namespace'), c.req.param('id'))
+            return c.json({ ok: true })
+        } catch (error) {
+            return teamChatErrorResponse(c, error)
+        }
+    })
+
     app.get('/team-chats/:id/messages', (c) => {
         const engine = requireSyncEngine(c, getSyncEngine)
         if (engine instanceof Response) return engine

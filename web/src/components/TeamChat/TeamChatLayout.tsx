@@ -15,6 +15,7 @@ export function TeamChatLayout(props: {
     onOpenTeamChats?: () => void
     onOpenAgentMode?: () => void
     onOpenEditorMode?: () => void
+    onDeleteTeamChat?: () => void
     availableSessions?: SessionSummary[]
     onAddSession?: (session: SessionSummary, alias: string) => void
     onOpenSession?: (participant: TeamParticipant) => void
@@ -89,6 +90,15 @@ export function TeamChatLayout(props: {
                                 className="rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-2.5 py-1 text-xs font-medium text-[var(--app-fg)] transition-colors hover:bg-[var(--app-secondary-bg)]"
                             >
                                 Editor
+                            </button>
+                        ) : null}
+                        {props.onDeleteTeamChat ? (
+                            <button
+                                type="button"
+                                onClick={props.onDeleteTeamChat}
+                                className="rounded-md border border-red-500/30 bg-[var(--app-bg)] px-2.5 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-500/10 dark:text-red-400"
+                            >
+                                Delete
                             </button>
                         ) : null}
                     </div>

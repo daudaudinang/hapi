@@ -27,6 +27,29 @@ describe('TeamChatStore', () => {
         expect(store.teamChats.listTeamChats('ns-b')).toHaveLength(0)
     })
 
+    it('archives Team Chats without deleting sessions', () => {
+        const store = new Store(':memory:')
+        const session = store.sessions.getOrCreateSession('session-backend', { path: '/repo' }, null, 'default')
+        const chat = store.teamChats.createTeamChat({ namespace: 'default', name: 'Planning', projectPath: '/repo' })
+        store.teamChats.addParticipant({
+            namespace: 'default',
+            teamChatId: chat.id,
+            type: 'session',
+            sessionId: session.id,
+            displayName: 'Backend',
+            color: '#60a5fa',
+            role: 'backend'
+        })
+
+        store.teamChats.archiveTeamChat('default', chat.id)
+
+        expect(store.teamChats.listTeamChats('default')).toEqual([])
+        expect(store.teamChats.getTeamChat('default', chat.id)).toBeNull()
+        expect(store.teamChats.listParticipants('default', chat.id)).toEqual([])
+        expect(store.teamChats.listSessionTeamMemberships('default', session.id)).toEqual([])
+        expect(store.sessions.getSessionByNamespace(session.id, 'default')?.id).toBe(session.id)
+    })
+
     it('fetches messages around a reply target', () => {
         const store = new Store(':memory:')
         const chat = store.teamChats.createTeamChat({ namespace: 'default', name: 'Chat' })

@@ -79,6 +79,22 @@ describe('team chat routes', () => {
         expect(await response.json()).toEqual({ error: 'Team Chat resource not found' })
     })
 
+    it('archives Team Chats through the namespace-scoped engine API', async () => {
+        const calls: unknown[] = []
+        const engine = {
+            archiveTeamChat: (namespace: string, teamChatId: string) => {
+                calls.push({ namespace, teamChatId })
+            }
+        }
+        const app = createApp('ns-a', engine)
+
+        const response = await app.request('/api/team-chats/team-1', { method: 'DELETE' })
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toEqual({ ok: true })
+        expect(calls).toEqual([{ namespace: 'ns-a', teamChatId: 'team-1' }])
+    })
+
     it('rejects wrong-team reply context IDs', async () => {
         const engine = {
             getTeamMessagesAround: () => {

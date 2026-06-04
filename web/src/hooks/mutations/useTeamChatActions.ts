@@ -16,6 +16,8 @@ export function useTeamChatActions(api: ApiClient | null, teamChatId: string | n
     createTeamChat: (input: { name: string; projectPath?: string | null }) => Promise<string>
     sendTeamMessage: (input: { authorParticipantId: string; text: string; replyToMessageId?: string | null }) => Promise<void>
     addTeamParticipant: (input: AddTeamParticipantInput) => Promise<void>
+    addTeamParticipantTo: (targetTeamChatId: string, input: AddTeamParticipantInput) => Promise<void>
+    deleteTeamChat: (targetTeamChatId: string) => Promise<void>
     isPending: boolean
 } {
     const queryClient = useQueryClient()
@@ -41,21 +43,35 @@ export function useTeamChatActions(api: ApiClient | null, teamChatId: string | n
     })
 
     const addParticipantMutation = useMutation({
-        mutationFn: async (input: AddTeamParticipantInput) => {
-            if (!api || !teamChatId) throw new Error('Team Chat unavailable')
-            await api.addTeamParticipant(teamChatId, input)
+        mutationFn: async (payload: { teamChatId: string; input: AddTeamParticipantInput }) => {
+            if (!api) throw new Error('API unavailable')
+            await api.addTeamParticipant(payload.teamChatId, payload.input)
         },
-        onSuccess: async (_data, input) => {
-            if (teamChatId) {
-                await Promise.all([
-                    queryClient.invalidateQueries({ queryKey: queryKeys.teamParticipants(teamChatId) }),
-                    queryClient.invalidateQueries({ queryKey: queryKeys.teamChat(teamChatId) }),
-                    queryClient.invalidateQueries({ queryKey: queryKeys.teamMentionRequestsBase })
-                ])
-                if (input.sessionId) {
-                    await queryClient.invalidateQueries({ queryKey: queryKeys.sessionTeamMemberships(input.sessionId) })
-                }
+        onSuccess: async (_data, payload) => {
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: queryKeys.teamParticipants(payload.teamChatId) }),
+                queryClient.invalidateQueries({ queryKey: queryKeys.teamChat(payload.teamChatId) }),
+                queryClient.invalidateQueries({ queryKey: queryKeys.teamMentionRequestsBase })
+            ])
+            if (payload.input.sessionId) {
+                await queryClient.invalidateQueries({ queryKey: queryKeys.sessionTeamMemberships(payload.input.sessionId) })
             }
+        }
+    })
+
+    const deleteMutation = useMutation({
+        mutationFn: async (targetTeamChatId: string) => {
+            if (!api) throw new Error('API unavailable')
+            await api.deleteTeamChat(targetTeamChatId)
+        },
+        onSuccess: async (_data, targetTeamChatId) => {
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: queryKeys.teamChats }),
+                queryClient.invalidateQueries({ queryKey: queryKeys.teamChat(targetTeamChatId) }),
+                queryClient.invalidateQueries({ queryKey: queryKeys.teamParticipants(targetTeamChatId) }),
+                queryClient.invalidateQueries({ queryKey: queryKeys.teamMentionRequestsBase }),
+                queryClient.invalidateQueries({ queryKey: queryKeys.sessionTeamMembershipsBase })
+            ])
         }
     })
 
@@ -65,7 +81,14 @@ export function useTeamChatActions(api: ApiClient | null, teamChatId: string | n
             return response.teamChat.id
         },
         sendTeamMessage: sendMutation.mutateAsync,
-        addTeamParticipant: addParticipantMutation.mutateAsync,
-        isPending: createMutation.isPending || sendMutation.isPending || addParticipantMutation.isPending
+        addTeamParticipant: async (input) => {
+            if (!teamChatId) throw new Error('Team Chat unavailable')
+            await addParticipantMutation.mutateAsync({ teamChatId, input })
+        },
+        addTeamParticipantTo: async (targetTeamChatId, input) => {
+            await addParticipantMutation.mutateAsync({ teamChatId: targetTeamChatId, input })
+        },
+        deleteTeamChat: deleteMutation.mutateAsync,
+        isPending: createMutation.isPending || sendMutation.isPending || addParticipantMutation.isPending || deleteMutation.isPending
     }
 }

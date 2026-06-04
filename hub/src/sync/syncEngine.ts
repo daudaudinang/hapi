@@ -243,6 +243,10 @@ export class SyncEngine {
         return this.teamChatService.getTeamChat(namespace, id)
     }
 
+    archiveTeamChat(namespace: string, teamChatId: string): void {
+        this.teamChatService.archiveTeamChat(namespace, teamChatId)
+    }
+
     getTeamMessages(namespace: string, teamChatId: string, options: { limit: number; beforeSeq: number | null }) {
         return this.teamChatService.getMessages(namespace, teamChatId, options)
     }

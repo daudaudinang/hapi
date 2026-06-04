@@ -236,6 +236,12 @@ export class ApiClient {
         return await this.request<TeamChatResponse>(`/api/team-chats/${encodeURIComponent(teamChatId)}`)
     }
 
+    async deleteTeamChat(teamChatId: string): Promise<void> {
+        await this.request(`/api/team-chats/${encodeURIComponent(teamChatId)}`, {
+            method: 'DELETE'
+        })
+    }
+
     async getPushVapidPublicKey(): Promise<PushVapidPublicKeyResponse> {
         return await this.request<PushVapidPublicKeyResponse>('/api/push/vapid-public-key')
     }

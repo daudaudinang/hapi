@@ -37,6 +37,16 @@ export class TeamChatService {
         return this.store.teamChats.getTeamChat(namespace, id)
     }
 
+    archiveTeamChat(namespace: string, teamChatId: string): void {
+        const participants = this.store.teamChats.listParticipants(namespace, teamChatId)
+        this.requireTeamChat(namespace, teamChatId)
+        this.store.teamChats.archiveTeamChat(namespace, teamChatId)
+        this.publisher.emit({ type: 'team-chat-updated', namespace, teamChatId })
+        for (const participant of participants) {
+            this.publisher.emit({ type: 'team-participant-updated', namespace, teamChatId, participantId: participant.id })
+        }
+    }
+
     listParticipants(namespace: string, teamChatId: string) {
         this.requireTeamChat(namespace, teamChatId)
         return this.store.teamChats.listParticipants(namespace, teamChatId)

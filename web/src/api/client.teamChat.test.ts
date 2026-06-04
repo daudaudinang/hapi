@@ -38,6 +38,17 @@ describe('ApiClient team chat methods', () => {
         expect(fetchMock).toHaveBeenCalledWith('/api/team-chats/team%2F1', expect.any(Object))
     })
 
+    it('deletes a Team Chat with URL encoding', async () => {
+        const fetchMock = mockJson({ ok: true })
+        const api = new ApiClient('token')
+
+        await api.deleteTeamChat('team/1')
+
+        expect(fetchMock).toHaveBeenCalledWith('/api/team-chats/team%2F1', expect.objectContaining({
+            method: 'DELETE'
+        }))
+    })
+
     it('fetches Team Chat messages with limit, beforeSeq, and URL encoding', async () => {
         const fetchMock = mockJson({ messages: [], page: { limit: 20, nextBeforeSeq: null, hasMore: false } })
         const api = new ApiClient('token')
