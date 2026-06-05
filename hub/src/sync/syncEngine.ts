@@ -320,6 +320,10 @@ export class SyncEngine {
         return this.teamChatService.reportToTeam(input)
     }
 
+    autoReportSessionReply(input: { namespace: string; sessionId: string; text: string; requestId?: string | null }): { message: StoredTeamMessage } | null {
+        return this.teamChatService.autoReportSessionReply(input)
+    }
+
     listSessionTeamMentions(namespace: string, sessionId: string) {
         return this.teamChatService.listSessionMentionRequests(namespace, sessionId)
     }

@@ -366,6 +366,166 @@ describe('session model', () => {
         expect(activity[0].updatedAt).toBe(store.messages.getMessages(session.id, 1)[0]?.createdAt)
     })
 
+    it('passes plain CLI agent text to the Team auto-report bridge', () => {
+        const store = new Store(':memory:')
+        const events: SyncEvent[] = []
+        const cache = new SessionCache(store, createPublisher(events))
+        const session = cache.getOrCreateSession(
+            'session-cli-team-auto-report',
+            { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
+            null,
+            'default'
+        )
+        const handlers = new Map<string, (payload: unknown) => void>()
+        const agentTexts: Array<{ namespace: string; sessionId: string; text: string; requestId?: string | null }> = []
+
+        registerSessionHandlers({
+            on: (event: string, handler: (payload: unknown) => void) => {
+                handlers.set(event, handler)
+            },
+            to: () => ({ emit() {} })
+        } as never, {
+            store,
+            resolveSessionAccess: (sessionId) => {
+                const stored = store.sessions.getSessionByNamespace(sessionId, 'default')
+                return stored ? { ok: true, value: stored } : { ok: false, reason: 'not-found' }
+            },
+            emitAccessError: () => {},
+            onAgentTextMessage: (input) => {
+                agentTexts.push(input)
+            }
+        })
+
+        store.messages.addMessage(session.id, {
+            role: 'user',
+            content: { type: 'text', text: '[HAPI_TEAM_MENTION] hello' },
+            meta: {
+                sentFrom: 'team-chat',
+                teamMentionRequestId: 'request-1',
+                teamChatId: 'team-1',
+                sourceMessageId: 'message-1'
+            }
+        })
+
+        handlers.get('message')?.({
+            sid: session.id,
+            message: JSON.stringify({
+                role: 'agent',
+                content: {
+                    type: 'codex',
+                    data: {
+                        type: 'message',
+                        message: 'Reply from SIM to Team Chat'
+                    }
+                }
+            })
+        })
+
+        expect(agentTexts).toEqual([{
+            namespace: 'default',
+            sessionId: session.id,
+            text: 'Reply from SIM to Team Chat',
+            requestId: 'request-1'
+        }])
+    })
+
+    it('passes Codex data.text agent replies to the Team auto-report bridge', () => {
+        const store = new Store(':memory:')
+        const cache = new SessionCache(store, createPublisher([]))
+        const session = cache.getOrCreateSession(
+            'session-cli-team-auto-report-text',
+            { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
+            null,
+            'default'
+        )
+        const handlers = new Map<string, (payload: unknown) => void>()
+        const agentTexts: string[] = []
+
+        registerSessionHandlers({
+            on: (event: string, handler: (payload: unknown) => void) => {
+                handlers.set(event, handler)
+            },
+            to: () => ({ emit() {} })
+        } as never, {
+            store,
+            resolveSessionAccess: (sessionId) => {
+                const stored = store.sessions.getSessionByNamespace(sessionId, 'default')
+                return stored ? { ok: true, value: stored } : { ok: false, reason: 'not-found' }
+            },
+            emitAccessError: () => {},
+            onAgentTextMessage: (input) => {
+                agentTexts.push(input.text)
+            }
+        })
+
+        store.messages.addMessage(session.id, {
+            role: 'user',
+            content: { type: 'text', text: '[HAPI_TEAM_MENTION] hello' },
+            meta: { sentFrom: 'team-chat', teamMentionRequestId: 'request-text', teamChatId: 'team-1', sourceMessageId: 'message-1' }
+        })
+
+        handlers.get('message')?.({
+            sid: session.id,
+            message: JSON.stringify({
+                role: 'agent',
+                content: { type: 'codex', data: { type: 'message', text: 'Reply from data.text' } }
+            })
+        })
+
+        expect(agentTexts).toEqual(['Reply from data.text'])
+    })
+
+    it('does not auto-report plain agent text when latest user turn is not a Team mention', () => {
+        const store = new Store(':memory:')
+        const cache = new SessionCache(store, createPublisher([]))
+        const session = cache.getOrCreateSession(
+            'session-cli-private-after-team-mention',
+            { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
+            null,
+            'default'
+        )
+        const handlers = new Map<string, (payload: unknown) => void>()
+        const agentTexts: Array<{ namespace: string; sessionId: string; text: string; requestId?: string | null }> = []
+
+        registerSessionHandlers({
+            on: (event: string, handler: (payload: unknown) => void) => {
+                handlers.set(event, handler)
+            },
+            to: () => ({ emit() {} })
+        } as never, {
+            store,
+            resolveSessionAccess: (sessionId) => {
+                const stored = store.sessions.getSessionByNamespace(sessionId, 'default')
+                return stored ? { ok: true, value: stored } : { ok: false, reason: 'not-found' }
+            },
+            emitAccessError: () => {},
+            onAgentTextMessage: (input) => {
+                agentTexts.push(input)
+            }
+        })
+
+        store.messages.addMessage(session.id, {
+            role: 'user',
+            content: { type: 'text', text: '[HAPI_TEAM_MENTION] hello' },
+            meta: { sentFrom: 'team-chat', teamMentionRequestId: 'request-1', teamChatId: 'team-1', sourceMessageId: 'message-1' }
+        })
+        store.messages.addMessage(session.id, {
+            role: 'user',
+            content: { type: 'text', text: 'private follow-up' },
+            meta: { sentFrom: 'webapp' }
+        })
+
+        handlers.get('message')?.({
+            sid: session.id,
+            message: JSON.stringify({
+                role: 'agent',
+                content: { type: 'codex', data: { type: 'message', message: 'Private reply' } }
+            })
+        })
+
+        expect(agentTexts).toEqual([])
+    })
+
     it('does not report session activity for CLI tool messages', () => {
         const store = new Store(':memory:')
         const events: SyncEvent[] = []

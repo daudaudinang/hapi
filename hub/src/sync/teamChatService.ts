@@ -199,6 +199,24 @@ export class TeamChatService {
         return this.requireTeamMentionRequest(namespace, requestId, expectedSessionId)
     }
 
+    autoReportSessionReply(input: { namespace: string; sessionId: string; text: string; requestId?: string | null }): { message: StoredTeamMessage } | null {
+        const summary = input.text.trim().slice(0, 4_000)
+        if (!summary) return null
+        const request = input.requestId
+            ? this.store.teamChats.getMentionRequest(input.namespace, input.requestId)
+            : this.store.teamChats.listPendingMentionRequests(input.namespace, input.sessionId).at(-1)
+        if (!request || request.targetSessionId !== input.sessionId) return null
+        if (!['pending', 'delivered', 'seen', 'processing'].includes(request.status)) return null
+        return this.reportToTeam({
+            namespace: input.namespace,
+            teamChatId: request.teamChatId,
+            sourceSessionId: input.sessionId,
+            type: 'reply',
+            summary,
+            replyToRequestId: request.id
+        })
+    }
+
     reportToTeam(input: {
         namespace: string
         teamChatId: string
@@ -357,20 +375,31 @@ export class TeamChatService {
         const sharedContext = (chat.sharedContext && typeof chat.sharedContext === 'object')
             ? chat.sharedContext
             : { decisions: [], openQuestions: [], relevantFiles: [] }
-        const recentUpdates = this.store.teamChats.getMessages(namespace, teamChatId, 5)
+        const recentUpdates = this.store.teamChats.getMessages(namespace, teamChatId, 20)
             .filter((message) => message.id !== messageId)
             .map((message) => {
                 const author = this.store.teamChats.getParticipant(namespace, message.authorParticipantId)
                 return {
                     messageId: message.id,
                     authorName: author?.displayName ?? 'Unknown',
-                    excerpt: message.text.slice(0, 160)
+                    reportType: message.reportType,
+                    text: message.text.slice(0, 2_000),
+                    excerpt: message.text.slice(0, 240)
                 }
             })
+        const participants = this.store.teamChats.listParticipants(namespace, teamChatId).map((participant) => ({
+            participantId: participant.id,
+            type: participant.type,
+            sessionId: participant.sessionId,
+            displayName: participant.displayName,
+            role: participant.role
+        }))
         return {
             originalText,
             sharedContext,
+            participants,
             recentUpdates,
+            recentTeamMessages: recentUpdates,
             attachedFiles: []
         }
     }
@@ -381,6 +410,13 @@ export class TeamChatService {
             `requestId=${request.id}`,
             `teamChatId=${request.teamChatId}`,
             `sourceMessageId=${request.sourceMessageId}`,
+            '',
+            'Reply behavior:',
+            '- You were mentioned in a HAPI Team Chat.',
+            '- Answer the Team Chat request using the context below.',
+            '- If you send a normal text answer, HAPI will post it back to the Team Chat automatically.',
+            `- For structured updates, call hapi_session.report_to_team with teamChatId=${request.teamChatId} and replyToRequestId=${request.id}.`,
+            `- If no reply is needed, call hapi_session.mark_team_mention_no_action with requestId=${request.id}.`,
             '',
             `From Team Chat: ${text}`,
             '',

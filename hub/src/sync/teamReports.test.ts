@@ -108,6 +108,25 @@ describe('Team Chat reports', () => {
         expect(store.teamChats.getMentionRequest('default', responseRequest.id)?.status).toBe('responded')
     })
 
+    it('auto-reports a plain agent reply to the latest pending Team mention', () => {
+        const { store, service, chat, backend, user, backendSession } = createContext()
+        const source = service.postMessage({ namespace: 'default', teamChatId: chat.id, authorParticipantId: user.id, text: '@Backend what changed?' }).message
+        const request = store.teamChats.listPendingMentionRequests('default', backendSession.id)[0]
+
+        const report = service.autoReportSessionReply({
+            namespace: 'default',
+            sessionId: backendSession.id,
+            requestId: request.id,
+            text: 'The API route now validates aliases and colors.'
+        })
+
+        expect(report?.message.authorParticipantId).toBe(backend.id)
+        expect(report?.message.reportType).toBe('reply')
+        expect(report?.message.replyToMessageId).toBe(source.id)
+        expect(report?.message.text).toBe('The API route now validates aliases and colors.')
+        expect(store.teamChats.getMentionRequest('default', request.id)?.status).toBe('responded')
+    })
+
     it('rejects low-signal reports that are not replying to a request', () => {
         const { service, chat, backend } = createContext()
 

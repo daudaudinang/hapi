@@ -66,10 +66,55 @@ export type SessionHandlersDeps = {
     onBackgroundTaskDelta?: (sessionId: string, delta: { started: number; completed: number }) => void
     onSessionActivity?: (sessionId: string, updatedAt: number) => void
     onSessionCrashed?: (sessionId: string, error?: string) => void
+    onAgentTextMessage?: (input: { namespace: string; sessionId: string; text: string; requestId?: string | null }) => void
+}
+
+function getTeamMentionRequestId(content: unknown): string | null {
+    if (!isObject(content)) return null
+    const meta = (content as Record<string, unknown>).meta
+    if (!isObject(meta)) return null
+    const metaRecord = meta as Record<string, unknown>
+    if (metaRecord.sentFrom !== 'team-chat') return null
+    return typeof metaRecord.teamMentionRequestId === 'string' ? metaRecord.teamMentionRequestId : null
+}
+
+function findLatestTeamMentionRequestIdBeforeAgentReply(messages: Array<{ content: unknown }>): string | null {
+    for (let index = messages.length - 1; index >= 0; index--) {
+        const content = messages[index]?.content
+        if (!isObject(content)) continue
+        if ((content as Record<string, unknown>).role !== 'user') continue
+        return getTeamMentionRequestId(content)
+    }
+    return null
+}
+
+function extractAgentTextMessage(content: unknown): string | null {
+    if (!isObject(content) || (content as Record<string, unknown>).role !== 'agent') return null
+    const inner = (content as Record<string, unknown>).content
+    if (!isObject(inner)) return null
+    const innerRecord = inner as Record<string, unknown>
+
+    if (innerRecord.type === 'codex' && isObject(innerRecord.data)) {
+        const data = innerRecord.data as Record<string, unknown>
+        if (data.type === 'message') {
+            if (typeof data.message === 'string') return data.message
+            if (typeof data.text === 'string') return data.text
+        }
+    }
+
+    if (innerRecord.type === 'message' && typeof innerRecord.message === 'string') {
+        return innerRecord.message
+    }
+
+    if (innerRecord.type === 'text' && typeof innerRecord.text === 'string') {
+        return innerRecord.text
+    }
+
+    return null
 }
 
 export function registerSessionHandlers(socket: CliSocketWithData, deps: SessionHandlersDeps): void {
-    const { store, resolveSessionAccess, emitAccessError, onSessionAlive, onSessionEnd, onWebappEvent, onBackgroundTaskDelta, onSessionActivity, onSessionCrashed } = deps
+    const { store, resolveSessionAccess, emitAccessError, onSessionAlive, onSessionEnd, onWebappEvent, onBackgroundTaskDelta, onSessionActivity, onSessionCrashed, onAgentTextMessage } = deps
 
     socket.on('message', (data: unknown) => {
         const parsed = messageSchema.safeParse(data)
@@ -124,6 +169,19 @@ export function registerSessionHandlers(socket: CliSocketWithData, deps: Session
         const bgDelta = extractBackgroundTaskDelta(content)
         if (bgDelta) {
             onBackgroundTaskDelta?.(sid, bgDelta)
+        }
+
+        const agentText = extractAgentTextMessage(content)
+        if (agentText) {
+            const recentMessages = store.messages.getMessages(sid, 50, msg.seq)
+            const requestId = findLatestTeamMentionRequestIdBeforeAgentReply(recentMessages)
+            if (requestId) {
+                try {
+                    onAgentTextMessage?.({ namespace: session.namespace, sessionId: sid, text: agentText, requestId })
+                } catch (error) {
+                    console.warn('Failed to auto-report Team mention reply', error)
+                }
+            }
         }
 
         // Detect thread crash event from CLI → notify hub to set session inactive

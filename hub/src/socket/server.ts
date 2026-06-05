@@ -42,6 +42,7 @@ export type SocketServerDeps = {
     onBackgroundTaskDelta?: (sessionId: string, delta: { started: number; completed: number }) => void
     onSessionActivity?: (sessionId: string, updatedAt: number) => void
     onSessionCrashed?: (sessionId: string, error?: string) => void
+    onAgentTextMessage?: (input: { namespace: string; sessionId: string; text: string; requestId?: string | null }) => void
 }
 
 export function createSocketServer(deps: SocketServerDeps): {
@@ -119,7 +120,8 @@ export function createSocketServer(deps: SocketServerDeps): {
         onWebappEvent: deps.onWebappEvent,
         onBackgroundTaskDelta: deps.onBackgroundTaskDelta,
         onSessionActivity: deps.onSessionActivity,
-        onSessionCrashed: deps.onSessionCrashed
+        onSessionCrashed: deps.onSessionCrashed,
+        onAgentTextMessage: deps.onAgentTextMessage
     }))
 
     terminalNs.use(async (socket, next) => {

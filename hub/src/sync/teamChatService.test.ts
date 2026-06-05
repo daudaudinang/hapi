@@ -65,6 +65,7 @@ describe('TeamChatService', () => {
         const user = service.addParticipant({ namespace: 'default', teamChatId: chat.id, type: 'user', displayName: 'You', role: 'general', color: '#34d399' })
         const backend = service.addParticipant({ namespace: 'default', teamChatId: chat.id, type: 'session', sessionId: target.id, displayName: 'Backend API', role: 'backend', color: '#60a5fa' })
 
+        service.postMessage({ namespace: 'default', teamChatId: chat.id, authorParticipantId: user.id, text: 'Earlier full team context message with important details that should not be hidden' })
         const result = service.postMessage({ namespace: 'default', teamChatId: chat.id, authorParticipantId: user.id, text: '@Backend API confirm fields' })
 
         expect(result.message.mentions).toEqual([{ participantId: backend.id, sessionId: target.id }])
@@ -75,6 +76,12 @@ describe('TeamChatService', () => {
             request: expect.objectContaining({ id: requests[0].id }),
             mode: 'invoke-agent',
             envelope: expect.stringContaining('[HAPI_TEAM_MENTION]')
+        }))
+        expect(delivery.deliver).toHaveBeenCalledWith(expect.objectContaining({
+            envelope: expect.stringContaining('Reply behavior:')
+        }))
+        expect(delivery.deliver).toHaveBeenCalledWith(expect.objectContaining({
+            envelope: expect.stringContaining('Earlier full team context message with important details that should not be hidden')
         }))
     })
 
