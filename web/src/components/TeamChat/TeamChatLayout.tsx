@@ -1,4 +1,4 @@
-import type { SessionSummary, TeamChat, TeamChatMessage, TeamMentionRequest, TeamParticipant } from '@/types/api'
+import type { Machine, SessionSummary, TeamChat, TeamChatMessage, TeamMentionRequest, TeamParticipant } from '@/types/api'
 import { TeamChatComposer } from './TeamChatComposer'
 import { TeamChatMobileLayout } from './TeamChatMobileLayout'
 import { TeamChatRightPanel } from './TeamChatRightPanel'
@@ -17,7 +17,11 @@ export function TeamChatLayout(props: {
     onOpenEditorMode?: () => void
     onDeleteTeamChat?: () => void
     availableSessions?: SessionSummary[]
-    onAddSession?: (session: SessionSummary, alias: string) => void
+    machines?: Machine[]
+    defaultMachineId?: string | null
+    defaultProjectPath?: string | null
+    onAddSession?: (session: SessionSummary, alias: string) => Promise<void> | void
+    onCreateSessionMember?: (input: { alias: string; machineId: string; projectPath: string; initialTask?: string }) => Promise<void> | void
     onOpenSession?: (participant: TeamParticipant) => void
 }) {
     const composer = (
@@ -33,7 +37,11 @@ export function TeamChatLayout(props: {
         messages={props.messages}
         mentionRequests={props.mentionRequests}
         availableSessions={props.availableSessions}
+        machines={props.machines}
+        defaultMachineId={props.defaultMachineId}
+        defaultProjectPath={props.defaultProjectPath}
         onAddSession={props.onAddSession}
+        onCreateSessionMember={props.onCreateSessionMember}
         onOpenSession={props.onOpenSession}
     />
     const mobileMemberList = <TeamChatRightPanel
@@ -41,7 +49,11 @@ export function TeamChatLayout(props: {
         messages={props.messages}
         mentionRequests={props.mentionRequests}
         availableSessions={props.availableSessions}
+        machines={props.machines}
+        defaultMachineId={props.defaultMachineId}
+        defaultProjectPath={props.defaultProjectPath}
         onAddSession={props.onAddSession}
+        onCreateSessionMember={props.onCreateSessionMember}
         onOpenSession={props.onOpenSession}
         className="block h-full w-full border-0 lg:hidden"
     />

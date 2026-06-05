@@ -1,8 +1,12 @@
 import { lazy, Suspense, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router'
 import { TeamChatLayout } from '@/components/TeamChat/TeamChatLayout'
 import { useAppContext } from '@/lib/app-context'
+import { createTeamSessionMember } from '@/lib/team-session-member'
+import { queryKeys } from '@/lib/query-keys'
 import { useSessions } from '@/hooks/queries/useSessions'
+import { useMachines } from '@/hooks/queries/useMachines'
 import { useTeamChat } from '@/hooks/queries/useTeamChat'
 import { useTeamChatActions } from '@/hooks/mutations/useTeamChatActions'
 import { useTeamChatMessages } from '@/hooks/queries/useTeamChatMessages'
@@ -30,12 +34,14 @@ function getNextParticipantColor(participants: TeamParticipant[]): string {
 
 export default function TeamChatDetailPage() {
     const { api } = useAppContext()
+    const queryClient = useQueryClient()
     const navigate = useNavigate()
     const search = useSearch({ strict: false }) as { machine?: string; project?: string }
     const params = useParams({ strict: false }) as { teamChatId?: string }
     const teamChatId = params.teamChatId ?? null
     const { teamChat, isLoading } = useTeamChat(api, teamChatId)
     const { sessions } = useSessions(api)
+    const { machines } = useMachines(api, true)
     const { messages } = useTeamChatMessages(api, teamChatId)
     const { participants } = useTeamChatParticipants(api, teamChatId)
     const { requests: mentionRequests } = useTeamChatMentionRequests(api, teamChatId, participants)
@@ -53,6 +59,10 @@ export default function TeamChatDetailPage() {
     const mergedMessages = mergeMessages(messages, aroundMessages)
     const editorProject = teamChat?.projectPath ?? search.project
     const editorMachine = search.machine
+    const defaultMachineId = editorMachine
+        ?? sessions.find((session) => session.metadata?.machineId)?.metadata?.machineId
+        ?? machines[0]?.id
+        ?? null
 
     return (
         <>
@@ -86,9 +96,12 @@ export default function TeamChatDetailPage() {
                     setDeleteConfirmOpen(true)
                 } : undefined}
                 availableSessions={sessions}
+                machines={machines}
+                defaultMachineId={defaultMachineId}
+                defaultProjectPath={editorProject ?? null}
                 onAddSession={(session, alias) => {
                     if (!teamChatId) return
-                    void addTeamParticipant({
+                    return addTeamParticipant({
                         type: 'session',
                         sessionId: session.id,
                         displayName: alias,
@@ -96,6 +109,19 @@ export default function TeamChatDetailPage() {
                         color: getNextParticipantColor(participants)
                     })
                 }}
+                onCreateSessionMember={api && teamChatId ? async (input) => {
+                    const sessionId = await createTeamSessionMember({
+                        api,
+                        machineId: input.machineId,
+                        projectPath: input.projectPath,
+                        alias: input.alias,
+                        color: getNextParticipantColor(participants),
+                        initialTask: input.initialTask,
+                        addTeamParticipant
+                    })
+                    void queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
+                    void queryClient.invalidateQueries({ queryKey: queryKeys.session(sessionId) })
+                } : undefined}
                 onOpenSession={(participant) => setDirectChatParticipant(participant)}
                 onLoadAround={async (messageId) => {
                     if (!api || !teamChatId || !messageId) return

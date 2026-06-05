@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TeamChatRightPanel } from './TeamChatRightPanel'
 
@@ -18,8 +18,9 @@ it('renders needs attention items from blocked reports and pending mentions', ()
     expect(screen.getByText('Waiting for response')).toBeInTheDocument()
 })
 
-it('lets the user add an existing session from a grouped status tree', () => {
+it('lets the user add an existing session from a grouped status tree', async () => {
     const onAddSession = vi.fn()
+    const onCreateSessionMember = vi.fn()
     render(<TeamChatRightPanel
         participants={[{ id: 'p1', teamChatId: 'team-1', type: 'session', sessionId: 's1', displayName: 'Backend', role: 'backend', color: '#60a5fa', joinedAt: 1 }]}
         availableSessions={[
@@ -29,9 +30,14 @@ it('lets the user add an existing session from a grouped status tree', () => {
             { id: 's4', active: true, thinking: false, activeAt: 4, updatedAt: 2, metadata: { path: '/repo/hub', machineId: 'machine-a', name: 'Hub API' }, todoProgress: null, pendingRequestsCount: 1, model: null, effort: null }
         ]}
         onAddSession={onAddSession}
+        onCreateSessionMember={onCreateSessionMember}
     />)
 
     fireEvent.click(screen.getByRole('button', { name: /Add member/i }))
+
+    expect(screen.getByRole('dialog', { name: /Add member/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /Existing session/i })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: /New session/i })).toBeInTheDocument()
 
     const tree = screen.getByRole('tree', { name: /Available sessions/i })
     expect(within(tree).getByRole('treeitem', { name: /hapi/i })).toBeInTheDocument()
@@ -45,6 +51,35 @@ it('lets the user add an existing session from a grouped status tree', () => {
     fireEvent.click(screen.getByRole('button', { name: /Add to Team/i }))
 
     expect(onAddSession).toHaveBeenCalledWith(expect.objectContaining({ id: 's2' }), 'UI')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /Add member/i })).not.toBeInTheDocument())
+})
+
+it('lets the user create a new session member with an alias and optional initial task', async () => {
+    const onCreateSessionMember = vi.fn()
+    render(<TeamChatRightPanel
+        participants={[{ id: 'p1', teamChatId: 'team-1', type: 'user', displayName: 'You', role: 'general', color: '#34d399', joinedAt: 1 }]}
+        machines={[
+            { id: 'machine-a', active: true, metadata: { host: 'local', platform: 'linux', happyCliVersion: '1.0.0', displayName: 'Local' } }
+        ]}
+        defaultMachineId="machine-a"
+        defaultProjectPath="/repo/hapi"
+        onCreateSessionMember={onCreateSessionMember}
+    />)
+
+    fireEvent.click(screen.getByRole('button', { name: /Add member/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /New session/i }))
+    fireEvent.change(screen.getByRole('textbox', { name: /Team alias/i }), { target: { value: 'Backend API' } })
+    fireEvent.change(screen.getByRole('textbox', { name: /Project path/i }), { target: { value: '/repo/hapi' } })
+    fireEvent.change(screen.getByRole('textbox', { name: /Initial task/i }), { target: { value: 'Review the Team Chat API.' } })
+    fireEvent.click(screen.getByRole('button', { name: /Create session & add to Team/i }))
+
+    expect(onCreateSessionMember).toHaveBeenCalledWith({
+        alias: 'Backend API',
+        machineId: 'machine-a',
+        projectPath: '/repo/hapi',
+        initialTask: 'Review the Team Chat API.'
+    })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /Add member/i })).not.toBeInTheDocument())
 })
 
 it('prevents duplicate aliases in the Team Chat picker', () => {
