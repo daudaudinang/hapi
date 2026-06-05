@@ -77,6 +77,25 @@ export class TeamChatService {
         return participant
     }
 
+    updateParticipant(input: {
+        namespace: string
+        teamChatId: string
+        participantId: string
+        displayName: string
+        role: StoredTeamParticipant['role']
+        color: string
+    }) {
+        this.requireTeamParticipant(input.namespace, input.teamChatId, input.participantId)
+        const participant = this.store.teamChats.updateParticipant(input)
+        this.publisher.emit({
+            type: 'team-participant-updated',
+            namespace: input.namespace,
+            teamChatId: input.teamChatId,
+            participantId: input.participantId
+        })
+        return participant
+    }
+
     archiveParticipant(namespace: string, teamChatId: string, participantId: string): void {
         this.requireTeamParticipant(namespace, teamChatId, participantId)
         this.store.teamChats.archiveParticipant(namespace, teamChatId, participantId)

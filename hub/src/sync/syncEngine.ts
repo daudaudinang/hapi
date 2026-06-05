@@ -276,6 +276,17 @@ export class SyncEngine {
         return this.teamChatService.addParticipant(input)
     }
 
+    updateTeamParticipant(input: {
+        namespace: string
+        teamChatId: string
+        participantId: string
+        displayName: string
+        role: StoredTeamParticipant['role']
+        color: string
+    }) {
+        return this.teamChatService.updateParticipant(input)
+    }
+
     archiveTeamParticipant(namespace: string, teamChatId: string, participantId: string): void {
         this.teamChatService.archiveParticipant(namespace, teamChatId, participantId)
     }

@@ -311,6 +311,27 @@ export class ApiClient {
         })
     }
 
+    async updateTeamParticipant(
+        teamChatId: string,
+        participantId: string,
+        input: {
+            displayName: string
+            role: TeamParticipant['role']
+            color: string
+        }
+    ): Promise<{ participant: TeamParticipant }> {
+        return await this.request<{ participant: TeamParticipant }>(`/api/team-chats/${encodeURIComponent(teamChatId)}/participants/${encodeURIComponent(participantId)}`, {
+            method: 'PATCH',
+            body: JSON.stringify(input)
+        })
+    }
+
+    async deleteTeamParticipant(teamChatId: string, participantId: string): Promise<void> {
+        await this.request(`/api/team-chats/${encodeURIComponent(teamChatId)}/participants/${encodeURIComponent(participantId)}`, {
+            method: 'DELETE'
+        })
+    }
+
     async getSessionTeamMentions(sessionId: string): Promise<{ requests: TeamMentionRequest[] }> {
         return await this.request<{ requests: TeamMentionRequest[] }>(`/api/sessions/${encodeURIComponent(sessionId)}/team-mentions`)
     }

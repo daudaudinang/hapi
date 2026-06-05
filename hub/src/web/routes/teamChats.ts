@@ -17,12 +17,20 @@ const postTeamChatMessageSchema = z.object({
     replyToMessageId: z.string().optional().nullable()
 })
 
+const participantRoleSchema = z.enum(['backend', 'frontend', 'tests', 'reviewer', 'docs', 'general'])
+
 const addParticipantSchema = z.object({
     type: z.enum(['user', 'session']),
     userId: z.string().optional().nullable(),
     sessionId: z.string().optional().nullable(),
     displayName: z.string().trim().min(1).max(32),
-    role: z.enum(['backend', 'frontend', 'tests', 'reviewer', 'docs', 'general']).default('general'),
+    role: participantRoleSchema.default('general'),
+    color: z.string().regex(/^#[0-9a-f]{6}$/i)
+})
+
+const updateParticipantSchema = z.object({
+    displayName: z.string().trim().min(1).max(32),
+    role: participantRoleSchema,
     color: z.string().regex(/^#[0-9a-f]{6}$/i)
 })
 
@@ -187,6 +195,24 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
                 teamChatId: c.req.param('id'),
                 ...parsed.data
             }) }, 201)
+        } catch (error) {
+            return teamChatErrorResponse(c, error)
+        }
+    })
+
+    app.patch('/team-chats/:id/participants/:participantId', async (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) return engine
+        const body = await c.req.json().catch(() => null)
+        const parsed = updateParticipantSchema.safeParse(body)
+        if (!parsed.success) return c.json({ error: 'Invalid body' }, 400)
+        try {
+            return c.json({ participant: engine.updateTeamParticipant({
+                namespace: c.get('namespace'),
+                teamChatId: c.req.param('id'),
+                participantId: c.req.param('participantId'),
+                ...parsed.data
+            }) })
         } catch (error) {
             return teamChatErrorResponse(c, error)
         }

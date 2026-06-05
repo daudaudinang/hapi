@@ -171,6 +171,34 @@ describe('team chat routes', () => {
         expect(calls).toEqual([{ namespace: 'ns-a', sessionId: 'session-1' }])
     })
 
+    it('updates a Team Chat participant through the namespace-scoped engine API', async () => {
+        const calls: unknown[] = []
+        const engine = {
+            updateTeamParticipant: (input: unknown) => {
+                calls.push(input)
+                return { id: 'p1', teamChatId: 'team-1', type: 'session', sessionId: 'session-1', displayName: 'UI Lead', role: 'frontend', color: '#a78bfa', joinedAt: 1 }
+            }
+        }
+        const app = createApp('ns-a', engine)
+
+        const response = await app.request('/api/team-chats/team-1/participants/p1', {
+            method: 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ displayName: '  UI Lead  ', role: 'frontend', color: '#a78bfa' })
+        })
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toEqual({ participant: { id: 'p1', teamChatId: 'team-1', type: 'session', sessionId: 'session-1', displayName: 'UI Lead', role: 'frontend', color: '#a78bfa', joinedAt: 1 } })
+        expect(calls).toEqual([{
+            namespace: 'ns-a',
+            teamChatId: 'team-1',
+            participantId: 'p1',
+            displayName: 'UI Lead',
+            role: 'frontend',
+            color: '#a78bfa'
+        }])
+    })
+
     it('trims participant aliases before adding a Team Chat member', async () => {
         const calls: unknown[] = []
         const engine = {

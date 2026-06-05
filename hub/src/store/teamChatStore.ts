@@ -206,6 +206,35 @@ export class TeamChatStore {
         return rows.map(toParticipant)
     }
 
+    updateParticipant(input: {
+        namespace: string
+        teamChatId: string
+        participantId: string
+        displayName: string
+        role: StoredTeamParticipant['role']
+        color: string
+    }): StoredTeamParticipant {
+        this.requireParticipant(input.namespace, input.teamChatId, input.participantId)
+        const displayName = input.displayName.trim()
+        if (!displayName) throw new Error('TEAM_PARTICIPANT_DISPLAY_NAME_INVALID')
+        const duplicate = this.db.prepare(`
+            SELECT id FROM team_participants
+            WHERE namespace = ?
+              AND team_chat_id = ?
+              AND archived_at IS NULL
+              AND lower(display_name) = lower(?)
+              AND id != ?
+            LIMIT 1
+        `).get(input.namespace, input.teamChatId, displayName, input.participantId) as { id: string } | undefined
+        if (duplicate) throw new Error('TEAM_PARTICIPANT_DISPLAY_NAME_EXISTS')
+        this.db.prepare(`
+            UPDATE team_participants
+            SET display_name = ?, role = ?, color = ?
+            WHERE namespace = ? AND team_chat_id = ? AND id = ? AND archived_at IS NULL
+        `).run(displayName, input.role, input.color, input.namespace, input.teamChatId, input.participantId)
+        return this.getParticipant(input.namespace, input.participantId)!
+    }
+
     listSessionTeamMemberships(namespace: string, sessionId: string): Array<{ teamChat: StoredTeamChat; participant: StoredTeamParticipant }> {
         const participantRows = this.db.prepare(`
             SELECT p.* FROM team_participants p
