@@ -1,27 +1,26 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '@/api/client'
-import { createTeamSessionMember } from './team-session-member'
+import { configureTeamSessionMember } from './team-session-member'
 
-describe('createTeamSessionMember', () => {
-    it('spawns a codex session, adds it as a Team member, and sends the optional initial task', async () => {
+describe('configureTeamSessionMember', () => {
+    it('renames the created session, adds it as a Team member, and sends the optional initial task', async () => {
         const api = {
-            spawnSession: vi.fn(async () => ({ type: 'success' as const, sessionId: 'session-new' })),
+            renameSession: vi.fn(async () => undefined),
             sendMessage: vi.fn(async () => ({ status: 'sent' as const, sessionId: 'session-new' }))
         } as unknown as ApiClient
         const addTeamParticipant = vi.fn(async () => undefined)
 
-        const sessionId = await createTeamSessionMember({
+        await configureTeamSessionMember({
             api,
-            machineId: 'machine-a',
-            projectPath: '/repo/hapi',
+            sessionId: 'session-new',
+            label: 'Backend API',
             alias: 'Backend API',
             color: '#60a5fa',
             initialTask: '  Review the Team Chat API.  ',
             addTeamParticipant
         })
 
-        expect(sessionId).toBe('session-new')
-        expect(api.spawnSession).toHaveBeenCalledWith('machine-a', '/repo/hapi', 'codex')
+        expect(api.renameSession).toHaveBeenCalledWith('session-new', 'Backend API')
         expect(addTeamParticipant).toHaveBeenCalledWith({
             type: 'session',
             sessionId: 'session-new',
@@ -32,24 +31,25 @@ describe('createTeamSessionMember', () => {
         expect(api.sendMessage).toHaveBeenCalledWith('session-new', 'Review the Team Chat API.')
     })
 
-    it('throws the runner error and does not add a member when session spawn fails', async () => {
+    it('skips rename and initial task when optional fields are blank', async () => {
         const api = {
-            spawnSession: vi.fn(async () => ({ type: 'error' as const, message: 'Runner unavailable' })),
+            renameSession: vi.fn(),
             sendMessage: vi.fn()
         } as unknown as ApiClient
-        const addTeamParticipant = vi.fn()
+        const addTeamParticipant = vi.fn(async () => undefined)
 
-        await expect(createTeamSessionMember({
+        await configureTeamSessionMember({
             api,
-            machineId: 'machine-a',
-            projectPath: '/repo/hapi',
+            sessionId: 'session-new',
+            label: '  ',
             alias: 'Backend API',
             color: '#60a5fa',
-            initialTask: 'Review',
+            initialTask: ' ',
             addTeamParticipant
-        })).rejects.toThrow('Runner unavailable')
+        })
 
-        expect(addTeamParticipant).not.toHaveBeenCalled()
+        expect(api.renameSession).not.toHaveBeenCalled()
+        expect(addTeamParticipant).toHaveBeenCalled()
         expect(api.sendMessage).not.toHaveBeenCalled()
     })
 })

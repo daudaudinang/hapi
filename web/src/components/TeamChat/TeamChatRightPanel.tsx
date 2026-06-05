@@ -1,5 +1,8 @@
 import { useMemo, useState } from 'react'
+import type { ApiClient } from '@/api/client'
 import type { Machine, SessionSummary, TeamChatMessage, TeamMentionRequest, TeamParticipant } from '@/types/api'
+import { NewSession } from '@/components/NewSession'
+import { WorkspaceBrowser } from '@/components/WorkspaceBrowser'
 import { compareSessionGroupOrder } from '@/lib/session-group-order'
 import { cn } from '@/lib/utils'
 import { getParticipantAccent } from './teamColors'
@@ -135,12 +138,6 @@ function sortSessionsForPicker(sessions: SessionSummary[]): SessionSummary[] {
     })
 }
 
-function getMachineDisplayName(machine: Machine): string {
-    return machine.metadata?.displayName
-        ?? machine.metadata?.host
-        ?? machine.id.slice(0, 8)
-}
-
 function groupSessionsForPicker(sessions: SessionSummary[]): SessionPickerGroup[] {
     const groups = new Map<string, { directory: string; machineId: string | null; sessions: SessionSummary[] }>()
 
@@ -257,6 +254,7 @@ function SessionPickerTree(props: {
 }
 
 export function TeamChatRightPanel(props: {
+    api?: ApiClient | null
     participants: TeamParticipant[]
     messages?: TeamChatMessage[]
     mentionRequests?: TeamMentionRequest[]
@@ -265,7 +263,7 @@ export function TeamChatRightPanel(props: {
     defaultMachineId?: string | null
     defaultProjectPath?: string | null
     onAddSession?: (session: SessionSummary, alias: string) => Promise<void> | void
-    onCreateSessionMember?: (input: { alias: string; machineId: string; projectPath: string; initialTask?: string }) => Promise<void> | void
+    onCreateSessionMember?: (input: { sessionId: string; label?: string; alias: string; initialTask?: string }) => Promise<void> | void
     onOpenSession?: (participant: TeamParticipant) => void
     className?: string
 }) {
@@ -273,10 +271,12 @@ export function TeamChatRightPanel(props: {
     const [addMemberTab, setAddMemberTab] = useState<'existing' | 'new'>('existing')
     const [selectedSessionId, setSelectedSessionId] = useState('')
     const [alias, setAlias] = useState('')
+    const [newSessionLabel, setNewSessionLabel] = useState('')
     const [newAlias, setNewAlias] = useState('')
-    const [newMachineId, setNewMachineId] = useState('')
-    const [newProjectPath, setNewProjectPath] = useState('')
+    const [newAliasTouched, setNewAliasTouched] = useState(false)
     const [newInitialTask, setNewInitialTask] = useState('')
+    const [newSessionSeed, setNewSessionSeed] = useState<{ machineId: string | null; directory: string }>({ machineId: null, directory: '' })
+    const [isBrowsingNewSessionPath, setIsBrowsingNewSessionPath] = useState(false)
     const [dialogError, setDialogError] = useState<string | null>(null)
     const [isSubmittingMember, setIsSubmittingMember] = useState(false)
     const attentionItems = getAttentionItems(props.messages ?? [], props.mentionRequests ?? [])
@@ -291,19 +291,6 @@ export function TeamChatRightPanel(props: {
     }, [props.availableSessions, props.participants])
     const sessionGroups = useMemo(() => groupSessionsForPicker(addableSessions), [addableSessions])
     const sortedAddableSessions = useMemo(() => sessionGroups.flatMap((group) => group.sessions), [sessionGroups])
-    const machineOptions = useMemo(() => {
-        const options = (props.machines ?? []).map((machine) => ({
-            id: machine.id,
-            label: getMachineDisplayName(machine)
-        }))
-        if (props.defaultMachineId && !options.some((machine) => machine.id === props.defaultMachineId)) {
-            options.unshift({
-                id: props.defaultMachineId,
-                label: props.defaultMachineId.slice(0, 8)
-            })
-        }
-        return options
-    }, [props.defaultMachineId, props.machines])
 
     const selectedSession = sortedAddableSessions.find((session) => session.id === selectedSessionId) ?? sortedAddableSessions[0] ?? null
     const normalizedAlias = normalizeAlias(alias)
@@ -315,6 +302,7 @@ export function TeamChatRightPanel(props: {
             : aliasExists
                 ? 'Alias already used in this Team Chat.'
                 : null
+    const normalizedNewSessionLabel = normalizeAlias(newSessionLabel)
     const normalizedNewAlias = normalizeAlias(newAlias)
     const newAliasExists = props.participants.some((participant) => participant.displayName.toLowerCase() === normalizedNewAlias.toLowerCase())
     const newAliasError = !normalizedNewAlias
@@ -324,25 +312,26 @@ export function TeamChatRightPanel(props: {
             : newAliasExists
                 ? 'Alias already used in this Team Chat.'
                 : null
-    const normalizedNewProjectPath = newProjectPath.trim()
     const normalizedInitialTask = newInitialTask.trim()
     const canAddMembers = Boolean(props.onAddSession || props.onCreateSessionMember)
 
     const handleStartAdding = () => {
         const firstSession = sortedAddableSessions[0] ?? null
         const firstMachineId = props.defaultMachineId
-            ?? machineOptions[0]?.id
             ?? firstSession?.metadata?.machineId
+            ?? props.machines?.[0]?.id
             ?? ''
         const firstProjectPath = props.defaultProjectPath
             ?? firstSession?.metadata?.path
             ?? ''
         setSelectedSessionId(firstSession?.id ?? '')
         setAlias(firstSession ? suggestSessionAlias(firstSession) : '')
+        setNewSessionLabel('')
         setNewAlias('')
-        setNewMachineId(firstMachineId)
-        setNewProjectPath(firstProjectPath)
+        setNewAliasTouched(false)
         setNewInitialTask('')
+        setNewSessionSeed({ machineId: firstMachineId || null, directory: firstProjectPath })
+        setIsBrowsingNewSessionPath(false)
         setDialogError(null)
         setAddMemberTab(props.onAddSession && firstSession ? 'existing' : 'new')
         setIsAddingMember(true)
@@ -370,22 +359,34 @@ export function TeamChatRightPanel(props: {
         }
     }
 
-    const handleCreateSessionMember = async () => {
-        if (!props.onCreateSessionMember || newAliasError || !newMachineId || !normalizedNewProjectPath) return
+    const handleNewSessionLabelChange = (value: string) => {
+        setNewSessionLabel(value)
+        if (!newAliasTouched) {
+            setNewAlias(value)
+        }
+    }
+
+    const handleCreateSessionMember = async (sessionId: string) => {
+        if (!props.onCreateSessionMember || newAliasError) {
+            setDialogError(newAliasError ?? 'Team alias is required.')
+            return
+        }
         setDialogError(null)
         setIsSubmittingMember(true)
         try {
             await props.onCreateSessionMember({
+                sessionId,
+                label: normalizedNewSessionLabel || undefined,
                 alias: normalizedNewAlias,
-                machineId: newMachineId,
-                projectPath: normalizedNewProjectPath,
                 initialTask: normalizedInitialTask || undefined
             })
             setIsAddingMember(false)
+            setNewSessionLabel('')
             setNewAlias('')
+            setNewAliasTouched(false)
             setNewInitialTask('')
         } catch (error) {
-            setDialogError(error instanceof Error ? error.message : 'Failed to create session member.')
+            setDialogError(error instanceof Error ? error.message : 'Failed to configure session member.')
         } finally {
             setIsSubmittingMember(false)
         }
@@ -524,104 +525,127 @@ export function TeamChatRightPanel(props: {
                                 </div>
                             ) : null}
                             {addMemberTab === 'new' && props.onCreateSessionMember ? (
-                                <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.8fr)]">
-                                    <div className="space-y-3">
-                                        <div>
-                                            <div className="text-xs font-semibold uppercase tracking-wide text-[var(--app-hint)]">New session</div>
-                                            <div className="mt-1 text-xs text-[var(--app-hint)]">Creates a Codex session and immediately adds it to this Team Chat.</div>
-                                        </div>
-                                        <div>
-                                            <label htmlFor="team-chat-new-machine" className="mb-1 block text-xs font-medium text-[var(--app-hint)]">Machine</label>
-                                            <select
-                                                id="team-chat-new-machine"
-                                                aria-label="Machine"
-                                                value={newMachineId}
-                                                onChange={(event) => setNewMachineId(event.target.value)}
-                                                className="w-full rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-2 py-2 text-sm text-[var(--app-fg)] outline-none focus:border-[var(--app-link)]"
+                                isBrowsingNewSessionPath && props.api ? (
+                                    <div className="min-h-[520px] overflow-hidden rounded-xl border border-[var(--app-border)]">
+                                        <div className="flex items-center justify-between gap-2 border-b border-[var(--app-border)] bg-[var(--app-subtle-bg)] px-3 py-2">
+                                            <div>
+                                                <div className="text-sm font-semibold">Choose project path</div>
+                                                <div className="text-xs text-[var(--app-hint)]">Pick a folder, then return to the Team member setup.</div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsBrowsingNewSessionPath(false)}
+                                                className="rounded-md border border-[var(--app-border)] px-2.5 py-1 text-xs text-[var(--app-fg)] hover:bg-[var(--app-secondary-bg)]"
                                             >
-                                                {machineOptions.map((machine) => (
-                                                    <option key={machine.id} value={machine.id}>{machine.label}</option>
-                                                ))}
-                                            </select>
-                                            {machineOptions.length === 0 ? <div className="mt-1 text-xs text-red-600">No machine available to create a session.</div> : null}
+                                                Back to setup
+                                            </button>
                                         </div>
-                                        <div>
-                                            <label htmlFor="team-chat-new-project" className="mb-1 block text-xs font-medium text-[var(--app-hint)]">Project path</label>
-                                            <input
-                                                id="team-chat-new-project"
-                                                aria-label="Project path"
-                                                value={newProjectPath}
-                                                onChange={(event) => setNewProjectPath(event.target.value)}
-                                                className="w-full rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-2 py-2 text-sm text-[var(--app-fg)] outline-none focus:border-[var(--app-link)]"
-                                                placeholder="/home/me/project"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label htmlFor="team-chat-new-initial-task" className="mb-1 block text-xs font-medium text-[var(--app-hint)]">Initial task</label>
-                                            <textarea
-                                                id="team-chat-new-initial-task"
-                                                aria-label="Initial task"
-                                                value={newInitialTask}
-                                                onChange={(event) => setNewInitialTask(event.target.value)}
-                                                rows={5}
-                                                className="w-full resize-none rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-2 py-2 text-sm text-[var(--app-fg)] outline-none focus:border-[var(--app-link)]"
-                                                placeholder="Optional. Send the first instruction to this new session."
+                                        <div className="h-[min(64vh,620px)] min-h-0">
+                                            <WorkspaceBrowser
+                                                api={props.api}
+                                                machines={props.machines ?? []}
+                                                machinesLoading={false}
+                                                initialMachineId={newSessionSeed.machineId ?? undefined}
+                                                initialPath={newSessionSeed.directory || undefined}
+                                                actionLabel="Use this folder"
+                                                onStartSession={(machineId, directory) => {
+                                                    setNewSessionSeed({ machineId, directory })
+                                                    setIsBrowsingNewSessionPath(false)
+                                                }}
                                             />
                                         </div>
                                     </div>
-                                    <div className="rounded-xl border border-[var(--app-border)] bg-[var(--app-card-bg,var(--app-bg))] p-3">
-                                        <label htmlFor="team-chat-new-alias" className="mb-1 block text-xs font-medium text-[var(--app-hint)]">
-                                            Team alias
-                                        </label>
-                                        <input
-                                            id="team-chat-new-alias"
-                                            aria-label="Team alias"
-                                            value={newAlias}
-                                            maxLength={64}
-                                            onChange={(event) => setNewAlias(event.target.value)}
-                                            className="w-full rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-2 py-1.5 text-sm text-[var(--app-fg)] outline-none focus:border-[var(--app-link)]"
-                                            placeholder="Backend API"
-                                        />
-                                        <div className="mt-1 flex items-center justify-between gap-2 text-[11px]">
-                                            <span className="truncate text-[var(--app-hint)]">
-                                                Tag preview: <span className="font-mono">@{normalizedNewAlias || 'alias'}</span>
-                                            </span>
-                                            <span className="text-[var(--app-hint)]">{normalizedNewAlias.length}/32</span>
+                                ) : props.api ? (
+                                    <div className="grid gap-4 lg:grid-cols-[minmax(260px,0.7fr)_minmax(0,1.3fr)]">
+                                        <div className="rounded-xl border border-[var(--app-border)] bg-[var(--app-card-bg,var(--app-bg))] p-3">
+                                            <div className="text-xs font-semibold uppercase tracking-wide text-[var(--app-hint)]">Team setup</div>
+                                            <div className="mt-1 text-xs text-[var(--app-hint)]">Label names the session globally. Alias is how this Team Chat mentions it.</div>
+                                            <div className="mt-3">
+                                                <label htmlFor="team-chat-new-session-label" className="mb-1 block text-xs font-medium text-[var(--app-hint)]">Session label</label>
+                                                <input
+                                                    id="team-chat-new-session-label"
+                                                    aria-label="Session label"
+                                                    value={newSessionLabel}
+                                                    maxLength={80}
+                                                    onChange={(event) => handleNewSessionLabelChange(event.target.value)}
+                                                    className="w-full rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-2 py-1.5 text-sm text-[var(--app-fg)] outline-none focus:border-[var(--app-link)]"
+                                                    placeholder="Backend API"
+                                                />
+                                            </div>
+                                            <div className="mt-3">
+                                                <label htmlFor="team-chat-new-alias" className="mb-1 block text-xs font-medium text-[var(--app-hint)]">Team alias</label>
+                                                <input
+                                                    id="team-chat-new-alias"
+                                                    aria-label="Team alias"
+                                                    value={newAlias}
+                                                    maxLength={64}
+                                                    onChange={(event) => {
+                                                        setNewAliasTouched(true)
+                                                        setNewAlias(event.target.value)
+                                                    }}
+                                                    className="w-full rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-2 py-1.5 text-sm text-[var(--app-fg)] outline-none focus:border-[var(--app-link)]"
+                                                    placeholder="Backend API"
+                                                />
+                                                <div className="mt-1 flex items-center justify-between gap-2 text-[11px]">
+                                                    <span className="truncate text-[var(--app-hint)]">Tag preview: <span className="font-mono">@{normalizedNewAlias || 'alias'}</span></span>
+                                                    <span className="text-[var(--app-hint)]">{normalizedNewAlias.length}/32</span>
+                                                </div>
+                                                {newAliasError ? <div className="mt-1 text-xs text-red-600">{newAliasError}</div> : null}
+                                            </div>
+                                            <div className="mt-3">
+                                                <label htmlFor="team-chat-new-initial-task" className="mb-1 block text-xs font-medium text-[var(--app-hint)]">Initial task</label>
+                                                <textarea
+                                                    id="team-chat-new-initial-task"
+                                                    aria-label="Initial task"
+                                                    value={newInitialTask}
+                                                    onChange={(event) => setNewInitialTask(event.target.value)}
+                                                    rows={5}
+                                                    className="w-full resize-none rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-2 py-2 text-sm text-[var(--app-fg)] outline-none focus:border-[var(--app-link)]"
+                                                    placeholder="Optional. Send the first instruction to this new session."
+                                                />
+                                            </div>
                                         </div>
-                                        {newAliasError ? <div className="mt-1 text-xs text-red-600">{newAliasError}</div> : null}
-                                        <div className="mt-3 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg)] p-2 text-xs text-[var(--app-hint)]">
-                                            New member will use Codex and the alias visible only inside this Team Chat.
+                                        <div className="min-w-0 overflow-hidden rounded-xl border border-[var(--app-border)] bg-[var(--app-card-bg,var(--app-bg))]">
+                                            <div className="border-b border-[var(--app-border)] px-3 py-2">
+                                                <div className="text-xs font-semibold uppercase tracking-wide text-[var(--app-hint)]">New Session config</div>
+                                                <div className="mt-1 text-xs text-[var(--app-hint)]">Uses the same form as New Session: recent paths, browse, agent, model, reasoning, session type, and YOLO.</div>
+                                            </div>
+                                            <NewSession
+                                                key={`${newSessionSeed.machineId ?? 'auto'}:${newSessionSeed.directory}`}
+                                                api={props.api}
+                                                machines={props.machines ?? []}
+                                                initialMachineId={newSessionSeed.machineId ?? undefined}
+                                                initialDirectory={newSessionSeed.directory}
+                                                createLabel="Create session & add to Team"
+                                                canCreateExtra={!newAliasError}
+                                                onCancel={() => setIsAddingMember(false)}
+                                                onChooseFolder={(args) => {
+                                                    setNewSessionSeed({ machineId: args.machineId, directory: args.directory })
+                                                    setIsBrowsingNewSessionPath(true)
+                                                }}
+                                                onSuccess={(sessionId) => void handleCreateSessionMember(sessionId)}
+                                            />
                                         </div>
                                     </div>
-                                </div>
+                                ) : (
+                                    <div className="rounded-lg border border-dashed border-[var(--app-border)] p-3 text-sm text-[var(--app-hint)]">API unavailable. Cannot create a session member.</div>
+                                )
                             ) : null}
+
                             {dialogError ? <div className="mt-3 rounded-lg bg-red-500/10 p-2 text-sm text-red-600 dark:text-red-400">{dialogError}</div> : null}
                         </div>
-                        <div className="flex shrink-0 items-center justify-between gap-3 border-t border-[var(--app-border)] bg-[var(--app-bg)] px-4 py-3">
-                            <div className="min-w-0 truncate text-xs text-[var(--app-hint)]">
-                                {addMemberTab === 'new'
-                                    ? 'Creates a new session; the session itself is not tied permanently to this room.'
-                                    : 'Adds the selected session with a room-specific alias.'}
-                            </div>
-                            <div className="flex shrink-0 gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setIsAddingMember(false)}
-                                    disabled={isSubmittingMember}
-                                    className="rounded-md border border-[var(--app-border)] px-3 py-1.5 text-sm text-[var(--app-fg)] transition-colors hover:bg-[var(--app-secondary-bg)] disabled:opacity-50"
-                                >
-                                    Cancel
-                                </button>
-                                {addMemberTab === 'new' ? (
+                        {addMemberTab === 'existing' ? (
+                            <div className="flex shrink-0 items-center justify-between gap-3 border-t border-[var(--app-border)] bg-[var(--app-bg)] px-4 py-3">
+                                <div className="min-w-0 truncate text-xs text-[var(--app-hint)]">Adds the selected session with a room-specific alias.</div>
+                                <div className="flex shrink-0 gap-2">
                                     <button
                                         type="button"
-                                        onClick={() => void handleCreateSessionMember()}
-                                        disabled={isSubmittingMember || Boolean(newAliasError) || !newMachineId || !normalizedNewProjectPath}
-                                        className="rounded-md bg-[var(--app-button)] px-3 py-1.5 text-sm font-medium text-[var(--app-button-text)] transition-opacity hover:opacity-90 disabled:opacity-50"
+                                        onClick={() => setIsAddingMember(false)}
+                                        disabled={isSubmittingMember}
+                                        className="rounded-md border border-[var(--app-border)] px-3 py-1.5 text-sm text-[var(--app-fg)] transition-colors hover:bg-[var(--app-secondary-bg)] disabled:opacity-50"
                                     >
-                                        {isSubmittingMember ? 'Creating…' : 'Create session & add to Team'}
+                                        Cancel
                                     </button>
-                                ) : (
                                     <button
                                         type="button"
                                         onClick={() => void handleAddSelectedSession()}
@@ -630,9 +654,9 @@ export function TeamChatRightPanel(props: {
                                     >
                                         {isSubmittingMember ? 'Adding…' : 'Add to Team'}
                                     </button>
-                                )}
+                                </div>
                             </div>
-                        </div>
+                        ) : null}
                     </div>
                 </div>
             ) : props.onAddSession && addableSessions.length === 0 ? (

@@ -40,6 +40,8 @@ export function NewSession(props: {
     onChooseFolder?: (args: { machineId: string | null; directory: string }) => void
     initialDirectory?: string
     initialMachineId?: string
+    createLabel?: string
+    canCreateExtra?: boolean
 }) {
     const { haptic } = usePlatform()
     const { t } = useTranslation()
@@ -216,7 +218,7 @@ export function NewSession(props: {
     const directoryStatusTone = missingWorktreeDirectory ? 'error' : needsDirectoryCreationWarning ? 'warning' : null
     const createLabel = needsDirectoryCreationWarning && directoryCreationConfirmed
         ? t('session.createAndCreateDirectory')
-        : undefined
+        : props.createLabel
 
     useEffect(() => {
         setDirectoryCreationConfirmed(false)
@@ -365,7 +367,7 @@ export function NewSession(props: {
         }
     }
 
-    const canCreate = Boolean(machineId && trimmedDirectory && !isFormDisabled && !missingWorktreeDirectory)
+    const canCreate = Boolean(machineId && trimmedDirectory && !isFormDisabled && !missingWorktreeDirectory && (props.canCreateExtra ?? true))
 
     return (
         <div className="flex flex-col divide-y divide-[var(--app-divider)]">

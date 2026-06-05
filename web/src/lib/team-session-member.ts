@@ -9,23 +9,23 @@ type AddTeamParticipantInput = {
     color: string
 }
 
-export async function createTeamSessionMember(input: {
+export async function configureTeamSessionMember(input: {
     api: ApiClient
-    machineId: string
-    projectPath: string
+    sessionId: string
+    label?: string
     alias: string
     color: string
     initialTask?: string
     addTeamParticipant: (participant: AddTeamParticipantInput) => Promise<void>
-}): Promise<string> {
-    const result = await input.api.spawnSession(input.machineId, input.projectPath, 'codex')
-    if (result.type === 'error') {
-        throw new Error(result.message)
+}): Promise<void> {
+    const label = input.label?.trim()
+    if (label) {
+        await input.api.renameSession(input.sessionId, label)
     }
 
     await input.addTeamParticipant({
         type: 'session',
-        sessionId: result.sessionId,
+        sessionId: input.sessionId,
         displayName: input.alias,
         role: 'general',
         color: input.color
@@ -33,8 +33,6 @@ export async function createTeamSessionMember(input: {
 
     const initialTask = input.initialTask?.trim()
     if (initialTask) {
-        await input.api.sendMessage(result.sessionId, initialTask)
+        await input.api.sendMessage(input.sessionId, initialTask)
     }
-
-    return result.sessionId
 }

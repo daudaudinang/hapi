@@ -1,10 +1,12 @@
 import type { Machine, SessionSummary, TeamChat, TeamChatMessage, TeamMentionRequest, TeamParticipant } from '@/types/api'
+import type { ApiClient } from '@/api/client'
 import { TeamChatComposer } from './TeamChatComposer'
 import { TeamChatMobileLayout } from './TeamChatMobileLayout'
 import { TeamChatRightPanel } from './TeamChatRightPanel'
 import { TeamChatTimeline } from './TeamChatTimeline'
 
 export function TeamChatLayout(props: {
+    api?: ApiClient | null
     teamChat: TeamChat | null
     messages: TeamChatMessage[]
     participants: TeamParticipant[]
@@ -21,7 +23,7 @@ export function TeamChatLayout(props: {
     defaultMachineId?: string | null
     defaultProjectPath?: string | null
     onAddSession?: (session: SessionSummary, alias: string) => Promise<void> | void
-    onCreateSessionMember?: (input: { alias: string; machineId: string; projectPath: string; initialTask?: string }) => Promise<void> | void
+    onCreateSessionMember?: (input: { sessionId: string; label?: string; alias: string; initialTask?: string }) => Promise<void> | void
     onOpenSession?: (participant: TeamParticipant) => void
 }) {
     const composer = (
@@ -36,6 +38,7 @@ export function TeamChatLayout(props: {
         participants={props.participants}
         messages={props.messages}
         mentionRequests={props.mentionRequests}
+        api={props.api}
         availableSessions={props.availableSessions}
         machines={props.machines}
         defaultMachineId={props.defaultMachineId}
@@ -48,6 +51,7 @@ export function TeamChatLayout(props: {
         participants={props.participants}
         messages={props.messages}
         mentionRequests={props.mentionRequests}
+        api={props.api}
         availableSessions={props.availableSessions}
         machines={props.machines}
         defaultMachineId={props.defaultMachineId}

@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router'
 import { TeamChatLayout } from '@/components/TeamChat/TeamChatLayout'
 import { useAppContext } from '@/lib/app-context'
-import { createTeamSessionMember } from '@/lib/team-session-member'
+import { configureTeamSessionMember } from '@/lib/team-session-member'
 import { queryKeys } from '@/lib/query-keys'
 import { useSessions } from '@/hooks/queries/useSessions'
 import { useMachines } from '@/hooks/queries/useMachines'
@@ -95,6 +95,7 @@ export default function TeamChatDetailPage() {
                     setDeleteError(null)
                     setDeleteConfirmOpen(true)
                 } : undefined}
+                api={api}
                 availableSessions={sessions}
                 machines={machines}
                 defaultMachineId={defaultMachineId}
@@ -110,17 +111,17 @@ export default function TeamChatDetailPage() {
                     })
                 }}
                 onCreateSessionMember={api && teamChatId ? async (input) => {
-                    const sessionId = await createTeamSessionMember({
+                    await configureTeamSessionMember({
                         api,
-                        machineId: input.machineId,
-                        projectPath: input.projectPath,
+                        sessionId: input.sessionId,
+                        label: input.label,
                         alias: input.alias,
                         color: getNextParticipantColor(participants),
                         initialTask: input.initialTask,
                         addTeamParticipant
                     })
                     void queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
-                    void queryClient.invalidateQueries({ queryKey: queryKeys.session(sessionId) })
+                    void queryClient.invalidateQueries({ queryKey: queryKeys.session(input.sessionId) })
                 } : undefined}
                 onOpenSession={(participant) => setDirectChatParticipant(participant)}
                 onLoadAround={async (messageId) => {

@@ -2,6 +2,26 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TeamChatRightPanel } from './TeamChatRightPanel'
 
+vi.mock('@/components/NewSession', () => ({
+    NewSession: (props: {
+        initialDirectory?: string
+        initialMachineId?: string
+        createLabel?: string
+        onSuccess: (sessionId: string) => void
+        onChooseFolder?: (args: { machineId: string | null; directory: string }) => void
+    }) => (
+        <div aria-label="Full New Session form">
+            <div>Recent paths</div>
+            <button type="button" onClick={() => props.onChooseFolder?.({ machineId: props.initialMachineId ?? null, directory: props.initialDirectory ?? '' })}>Browse</button>
+            <label>Agent<select><option>Codex</option></select></label>
+            <label>Model<select><option>Default</option></select></label>
+            <label>Reasoning effort<select><option>Default</option></select></label>
+            <label><input type="checkbox" /> YOLO mode</label>
+            <button type="button" onClick={() => props.onSuccess('session-new')}>{props.createLabel ?? 'Create'}</button>
+        </div>
+    )
+}))
+
 afterEach(() => {
     cleanup()
 })
@@ -54,9 +74,10 @@ it('lets the user add an existing session from a grouped status tree', async () 
     await waitFor(() => expect(screen.queryByRole('dialog', { name: /Add member/i })).not.toBeInTheDocument())
 })
 
-it('lets the user create a new session member with an alias and optional initial task', async () => {
+it('lets the user create a full NewSession member with a session label, default alias, and optional initial task', async () => {
     const onCreateSessionMember = vi.fn()
     render(<TeamChatRightPanel
+        api={{} as never}
         participants={[{ id: 'p1', teamChatId: 'team-1', type: 'user', displayName: 'You', role: 'general', color: '#34d399', joinedAt: 1 }]}
         machines={[
             { id: 'machine-a', active: true, metadata: { host: 'local', platform: 'linux', happyCliVersion: '1.0.0', displayName: 'Local' } }
@@ -68,15 +89,24 @@ it('lets the user create a new session member with an alias and optional initial
 
     fireEvent.click(screen.getByRole('button', { name: /Add member/i }))
     fireEvent.click(screen.getByRole('tab', { name: /New session/i }))
+    expect(screen.getByLabelText('Full New Session form')).toBeInTheDocument()
+    expect(screen.getByText('Recent paths')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Browse/i })).toBeInTheDocument()
+    expect(screen.getByLabelText(/Agent/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Model/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Reasoning effort/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/YOLO mode/i)).toBeInTheDocument()
+
+    fireEvent.change(screen.getByRole('textbox', { name: /Session label/i }), { target: { value: 'Backend API' } })
+    expect(screen.getByRole('textbox', { name: /Team alias/i })).toHaveValue('Backend API')
     fireEvent.change(screen.getByRole('textbox', { name: /Team alias/i }), { target: { value: 'Backend API' } })
-    fireEvent.change(screen.getByRole('textbox', { name: /Project path/i }), { target: { value: '/repo/hapi' } })
     fireEvent.change(screen.getByRole('textbox', { name: /Initial task/i }), { target: { value: 'Review the Team Chat API.' } })
     fireEvent.click(screen.getByRole('button', { name: /Create session & add to Team/i }))
 
     expect(onCreateSessionMember).toHaveBeenCalledWith({
+        sessionId: 'session-new',
+        label: 'Backend API',
         alias: 'Backend API',
-        machineId: 'machine-a',
-        projectPath: '/repo/hapi',
         initialTask: 'Review the Team Chat API.'
     })
     await waitFor(() => expect(screen.queryByRole('dialog', { name: /Add member/i })).not.toBeInTheDocument())
