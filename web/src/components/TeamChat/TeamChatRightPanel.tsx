@@ -1,9 +1,19 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { getCodexCollaborationModeOptions, getPermissionModeOptionsForFlavor, supportsEffort, supportsModelChange } from '@hapi/protocol'
 import type { ApiClient } from '@/api/client'
-import type { Machine, SessionSummary, TeamChatMessage, TeamMentionRequest, TeamParticipant } from '@/types/api'
+import type { CodexCollaborationMode, Machine, PermissionMode, Session, SessionSummary, TeamChatMessage, TeamMentionRequest, TeamParticipant } from '@/types/api'
 import { NewSession } from '@/components/NewSession'
+import { SessionComposerSettingsPanel } from '@/components/AssistantChat/SessionComposerSettingsPanel'
 import { WorkspaceBrowser } from '@/components/WorkspaceBrowser'
 import { compareSessionGroupOrder } from '@/lib/session-group-order'
+import { queryKeys } from '@/lib/query-keys'
+import { useSessionActions } from '@/hooks/mutations/useSessionActions'
+import { useCodexModels } from '@/hooks/queries/useCodexModels'
+import { useOpencodeModels } from '@/hooks/queries/useOpencodeModels'
+import { getModelOptionsForFlavor } from '@/components/AssistantChat/modelOptions'
+import { getClaudeComposerEffortOptions } from '@/components/AssistantChat/claudeEffortOptions'
+import { getCodexComposerReasoningEffortOptions } from '@/components/AssistantChat/codexReasoningEffortOptions'
 import { cn } from '@/lib/utils'
 import { getParticipantAccent } from './teamColors'
 
@@ -22,6 +32,17 @@ type SessionPickerGroup = {
     workingCount: number
     activeCount: number
 }
+
+const PARTICIPANT_ROLE_OPTIONS: Array<{ value: TeamParticipant['role']; label: string }> = [
+    { value: 'general', label: 'General' },
+    { value: 'backend', label: 'Backend' },
+    { value: 'frontend', label: 'Frontend' },
+    { value: 'tests', label: 'Tests' },
+    { value: 'reviewer', label: 'Reviewer' },
+    { value: 'docs', label: 'Docs' }
+]
+
+const PARTICIPANT_COLOR_OPTIONS = ['#60a5fa', '#a78bfa', '#34d399', '#fbbf24', '#f87171', '#22d3ee', '#fb7185', '#818cf8']
 
 function getAttentionItems(messages: TeamChatMessage[], mentionRequests: TeamMentionRequest[]): AttentionItem[] {
     return [
@@ -253,6 +274,179 @@ function SessionPickerTree(props: {
     )
 }
 
+function TeamMemberSessionSettings(props: {
+    api?: ApiClient | null
+    participant: TeamParticipant
+    summary?: SessionSummary | null
+}) {
+    const sessionId = props.participant.sessionId ?? null
+    const sessionQuery = useQuery({
+        queryKey: sessionId ? queryKeys.session(sessionId) : ['team-member-session-config', 'missing'],
+        queryFn: async () => {
+            if (!props.api || !sessionId) throw new Error('Session unavailable')
+            return await props.api.getSession(sessionId)
+        },
+        enabled: Boolean(props.api && sessionId)
+    })
+    const session = sessionQuery.data?.session as Session | undefined
+    const [error, setError] = useState<string | null>(null)
+
+    if (!sessionId) {
+        return <div className="rounded-lg border border-dashed border-[var(--app-border)] p-3 text-sm text-[var(--app-hint)]">This member is not backed by a session.</div>
+    }
+
+    if (!props.api) {
+        return <div className="rounded-lg border border-dashed border-[var(--app-border)] p-3 text-sm text-[var(--app-hint)]">API unavailable. Cannot configure the original session.</div>
+    }
+
+    if (sessionQuery.isLoading || !session) {
+        return (
+            <div className="rounded-lg border border-dashed border-[var(--app-border)] p-3 text-sm text-[var(--app-hint)]">
+                Loading session settings for {props.summary ? getSessionDisplayName(props.summary) : `@${props.participant.displayName}`}…
+            </div>
+        )
+    }
+
+    if (sessionQuery.isError) {
+        return <div className="rounded-lg bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-400">Failed to load session settings.</div>
+    }
+
+    return <TeamMemberLoadedSessionSettings api={props.api} session={session} error={error} setError={setError} />
+}
+
+function TeamMemberLoadedSessionSettings(props: {
+    api: ApiClient
+    session: Session
+    error: string | null
+    setError: (error: string | null) => void
+}) {
+    const agentFlavor = props.session.metadata?.flavor ?? null
+    const controlledByUser = props.session.agentState?.controlledByUser === true
+    const codexCollaborationModeSupported = agentFlavor === 'codex' && !controlledByUser
+    const codexModelsState = useCodexModels({
+        api: props.api,
+        sessionId: props.session.id,
+        enabled: agentFlavor === 'codex' && !controlledByUser
+    })
+    const codexModelOptions = useMemo(() => {
+        if (agentFlavor !== 'codex') return undefined
+        return codexModelsState.models.map((codexModel) => ({
+            value: codexModel.id,
+            label: codexModel.displayName
+        }))
+    }, [agentFlavor, codexModelsState.models])
+    const opencodeModelsState = useOpencodeModels({
+        api: props.api,
+        sessionId: props.session.id,
+        enabled: agentFlavor === 'opencode'
+    })
+    const opencodeModelOptions = useMemo(() => {
+        if (agentFlavor !== 'opencode') return undefined
+        return opencodeModelsState.availableModels.map((opencodeModel) => ({
+            value: opencodeModel.modelId,
+            label: opencodeModel.name ?? opencodeModel.modelId
+        }))
+    }, [agentFlavor, opencodeModelsState.availableModels])
+    const opencodeReasoningEffortOptions = useMemo(() => {
+        if (agentFlavor !== 'opencode' || opencodeModelsState.availableEfforts.length === 0) return undefined
+        return opencodeModelsState.availableEfforts.map((effort) => ({
+            value: effort.effortId === 'default' ? null : effort.effortId,
+            label: effort.name ?? effort.effortId
+        }))
+    }, [agentFlavor, opencodeModelsState.availableEfforts])
+    const { setPermissionMode, setCollaborationMode, setModel, setModelReasoningEffort, setEffort, isPending } = useSessionActions(
+        props.api,
+        props.session.id,
+        agentFlavor,
+        codexCollaborationModeSupported
+    )
+
+    const permissionMode = props.session.permissionMode ?? 'default'
+    const collaborationMode = props.session.collaborationMode ?? 'default'
+    const model = props.session.model ?? null
+    const modelReasoningEffort = props.session.modelReasoningEffort ?? null
+    const effort = props.session.effort ?? null
+    const permissionModeOptions = useMemo(() => getPermissionModeOptionsForFlavor(agentFlavor), [agentFlavor])
+    const collaborationModeOptions = useMemo(() => agentFlavor === 'codex' ? getCodexCollaborationModeOptions() : [], [agentFlavor])
+    const modelOptions = useMemo(
+        () => getModelOptionsForFlavor(agentFlavor, model, agentFlavor === 'codex' ? codexModelOptions : agentFlavor === 'opencode' ? opencodeModelOptions : undefined),
+        [agentFlavor, model, codexModelOptions, opencodeModelOptions]
+    )
+    const modelReasoningEffortOptions = useMemo(
+        () => agentFlavor === 'codex'
+            ? getCodexComposerReasoningEffortOptions(modelReasoningEffort)
+            : opencodeReasoningEffortOptions ?? [],
+        [agentFlavor, modelReasoningEffort, opencodeReasoningEffortOptions]
+    )
+    const claudeEffortOptions = useMemo(() => getClaudeComposerEffortOptions(effort), [effort])
+    const codexModelsError = props.session.active ? codexModelsState.error : null
+
+    const runSessionSetting = async (action: () => Promise<void>) => {
+        props.setError(null)
+        try {
+            await action()
+        } catch (error) {
+            props.setError(error instanceof Error ? error.message : 'Failed to update session setting.')
+        }
+    }
+
+    const hasSettings = Boolean(
+        collaborationModeOptions.length > 0
+        || permissionModeOptions.length > 0
+        || modelOptions.length > 0
+        || modelReasoningEffortOptions.length > 0
+        || supportsEffort(agentFlavor)
+    )
+
+    return (
+        <div className="space-y-3">
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
+                These settings affect the original session, so Agent Mode and Editor Mode will see the same changes.
+            </div>
+            {controlledByUser ? (
+                <div className="rounded-lg border border-[var(--app-border)] bg-[var(--app-secondary-bg)] p-3 text-xs text-[var(--app-hint)]">
+                    This session is currently controlled locally. Some model/reasoning settings are locked, matching Session Composer behavior.
+                </div>
+            ) : null}
+            {codexModelsError ? (
+                <div className="rounded-lg border border-[var(--app-border)] bg-[var(--app-secondary-bg)] p-3 text-xs text-[var(--app-hint)]">
+                    Provider model discovery is unavailable right now. Existing session model is preserved.
+                </div>
+            ) : null}
+            {hasSettings ? (
+                <div className="overflow-hidden rounded-xl border border-[var(--app-border)] bg-[var(--app-card-bg,var(--app-bg))]">
+                    <SessionComposerSettingsPanel
+                        controlsDisabled={isPending}
+                        collaborationMode={collaborationMode as CodexCollaborationMode}
+                        permissionMode={permissionMode as PermissionMode}
+                        model={model}
+                        modelReasoningEffort={modelReasoningEffort}
+                        effort={effort}
+                        showCollaborationSettings={Boolean(codexCollaborationModeSupported && collaborationModeOptions.length > 0)}
+                        showPermissionSettings={permissionModeOptions.length > 0}
+                        showModelSettings={Boolean(supportsModelChange(agentFlavor) && modelOptions.length > 0 && !(agentFlavor === 'codex' && (controlledByUser || codexModelsError)))}
+                        showModelReasoningEffortSettings={Boolean((agentFlavor === 'codex' || agentFlavor === 'opencode') && !controlledByUser && modelReasoningEffortOptions.length > 0)}
+                        showEffortSettings={supportsEffort(agentFlavor)}
+                        collaborationModeOptions={collaborationModeOptions}
+                        permissionModeOptions={permissionModeOptions}
+                        modelOptions={modelOptions}
+                        modelReasoningEffortOptions={modelReasoningEffortOptions}
+                        claudeEffortOptions={claudeEffortOptions}
+                        onCollaborationModeChange={(mode) => void runSessionSetting(() => setCollaborationMode(mode))}
+                        onPermissionModeChange={(mode) => void runSessionSetting(() => setPermissionMode(mode))}
+                        onModelChange={(nextModel) => void runSessionSetting(() => setModel(nextModel))}
+                        onModelReasoningEffortChange={(nextEffort) => void runSessionSetting(() => setModelReasoningEffort(nextEffort))}
+                        onEffortChange={(nextEffort) => void runSessionSetting(() => setEffort(nextEffort))}
+                    />
+                </div>
+            ) : (
+                <div className="rounded-lg border border-dashed border-[var(--app-border)] p-3 text-sm text-[var(--app-hint)]">No configurable session settings are available for this provider.</div>
+            )}
+            {props.error ? <div className="rounded-md bg-red-500/10 p-2 text-sm text-red-600 dark:text-red-400">{props.error}</div> : null}
+        </div>
+    )
+}
+
 export function TeamChatRightPanel(props: {
     api?: ApiClient | null
     participants: TeamParticipant[]
@@ -265,6 +459,8 @@ export function TeamChatRightPanel(props: {
     onAddSession?: (session: SessionSummary, alias: string) => Promise<void> | void
     onCreateSessionMember?: (input: { sessionId: string; label?: string; alias: string; initialTask?: string }) => Promise<void> | void
     onOpenSession?: (participant: TeamParticipant) => void
+    onUpdateParticipant?: (participant: TeamParticipant, input: { displayName: string; role: TeamParticipant['role']; color: string }) => Promise<void> | void
+    onRemoveParticipant?: (participant: TeamParticipant) => Promise<void> | void
     className?: string
 }) {
     const [isAddingMember, setIsAddingMember] = useState(false)
@@ -279,6 +475,14 @@ export function TeamChatRightPanel(props: {
     const [isBrowsingNewSessionPath, setIsBrowsingNewSessionPath] = useState(false)
     const [dialogError, setDialogError] = useState<string | null>(null)
     const [isSubmittingMember, setIsSubmittingMember] = useState(false)
+    const [openMemberMenuId, setOpenMemberMenuId] = useState<string | null>(null)
+    const [configParticipant, setConfigParticipant] = useState<TeamParticipant | null>(null)
+    const [configTab, setConfigTab] = useState<'member' | 'session'>('member')
+    const [configAlias, setConfigAlias] = useState('')
+    const [configRole, setConfigRole] = useState<TeamParticipant['role']>('general')
+    const [configColor, setConfigColor] = useState('#60a5fa')
+    const [removeParticipant, setRemoveParticipant] = useState<TeamParticipant | null>(null)
+    const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const attentionItems = getAttentionItems(props.messages ?? [], props.mentionRequests ?? [])
     const sessionsById = useMemo(() => new Map((props.availableSessions ?? []).map((session) => [session.id, session])), [props.availableSessions])
     const addableSessions = useMemo(() => {
@@ -313,6 +517,18 @@ export function TeamChatRightPanel(props: {
                 ? 'Alias already used in this Team Chat.'
                 : null
     const normalizedInitialTask = newInitialTask.trim()
+    const normalizedConfigAlias = normalizeAlias(configAlias)
+    const configAliasExists = props.participants.some((participant) => (
+        participant.id !== configParticipant?.id
+        && participant.displayName.toLowerCase() === normalizedConfigAlias.toLowerCase()
+    ))
+    const configAliasError = !normalizedConfigAlias
+        ? 'Alias is required.'
+        : normalizedConfigAlias.length > 32
+            ? 'Alias must be 32 characters or fewer.'
+            : configAliasExists
+                ? 'Alias already used in this Team Chat.'
+                : null
     const canAddMembers = Boolean(props.onAddSession || props.onCreateSessionMember)
 
     const handleStartAdding = () => {
@@ -387,6 +603,46 @@ export function TeamChatRightPanel(props: {
             setNewInitialTask('')
         } catch (error) {
             setDialogError(error instanceof Error ? error.message : 'Failed to configure session member.')
+        } finally {
+            setIsSubmittingMember(false)
+        }
+    }
+
+    const clearLongPressTimer = () => {
+        if (!longPressTimerRef.current) return
+        clearTimeout(longPressTimerRef.current)
+        longPressTimerRef.current = null
+    }
+
+    const startLongPressMenu = (participantId: string) => {
+        clearLongPressTimer()
+        longPressTimerRef.current = setTimeout(() => {
+            setOpenMemberMenuId(participantId)
+        }, 450)
+    }
+
+    const openConfigModal = (participant: TeamParticipant) => {
+        setConfigParticipant(participant)
+        setConfigTab('member')
+        setConfigAlias(participant.displayName)
+        setConfigRole(participant.role)
+        setConfigColor(participant.color)
+        setDialogError(null)
+    }
+
+    const handleSaveMemberConfig = async () => {
+        if (!configParticipant || configAliasError) return
+        setDialogError(null)
+        setIsSubmittingMember(true)
+        try {
+            await props.onUpdateParticipant?.(configParticipant, {
+                displayName: normalizedConfigAlias,
+                role: configRole,
+                color: configColor
+            })
+            setConfigParticipant(null)
+        } catch (error) {
+            setDialogError(error instanceof Error ? error.message : 'Failed to update member.')
         } finally {
             setIsSubmittingMember(false)
         }
@@ -670,6 +926,7 @@ export function TeamChatRightPanel(props: {
                     const status = backingSession ? getSessionStatus(backingSession) : null
                     const details = backingSession ? getSessionDetails(backingSession) : ''
                     const canOpenSession = participant.type === 'session' && Boolean(participant.sessionId && props.onOpenSession)
+                    const isMenuOpen = openMemberMenuId === participant.id
                     const content = (
                         <>
                             <div className="relative shrink-0">
@@ -697,26 +954,270 @@ export function TeamChatRightPanel(props: {
                             ) : null}
                         </>
                     )
-                    if (canOpenSession) {
-                        return (
-                            <button
-                                key={participant.id}
-                                type="button"
-                                aria-label={`Open @${participant.displayName} direct chat${status ? ` ${status.label}` : ''}`}
-                                onClick={() => props.onOpenSession?.(participant)}
-                                className="flex w-full items-center gap-2 rounded-xl border border-[var(--app-border)] bg-[var(--app-card-bg,var(--app-bg))] p-2 text-left transition-colors hover:border-[var(--app-link)] hover:bg-[var(--app-secondary-bg)] focus:outline-none focus:ring-2 focus:ring-[var(--app-link)]/40"
-                            >
-                                {content}
-                            </button>
-                        )
-                    }
                     return (
-                        <div key={participant.id} className="flex items-center gap-2 rounded-xl border border-[var(--app-border)] bg-[var(--app-card-bg,var(--app-bg))] p-2">
-                            {content}
+                        <div
+                            key={participant.id}
+                            className="relative flex items-stretch rounded-xl border border-[var(--app-border)] bg-[var(--app-card-bg,var(--app-bg))] transition-colors hover:border-[var(--app-link)] hover:bg-[var(--app-secondary-bg)]"
+                            onContextMenu={(event) => {
+                                event.preventDefault()
+                                setOpenMemberMenuId(participant.id)
+                            }}
+                            onTouchStart={() => startLongPressMenu(participant.id)}
+                            onTouchEnd={clearLongPressTimer}
+                            onTouchCancel={clearLongPressTimer}
+                        >
+                            {canOpenSession ? (
+                                <button
+                                    type="button"
+                                    aria-label={`Open @${participant.displayName} direct chat${status ? ` ${status.label}` : ''}`}
+                                    onClick={() => props.onOpenSession?.(participant)}
+                                    className="flex min-w-0 flex-1 items-center gap-2 rounded-l-xl p-2 text-left focus:outline-none focus:ring-2 focus:ring-[var(--app-link)]/40"
+                                >
+                                    {content}
+                                </button>
+                            ) : (
+                                <div className="flex min-w-0 flex-1 items-center gap-2 p-2">{content}</div>
+                            )}
+                            <button
+                                type="button"
+                                aria-haspopup="menu"
+                                aria-expanded={isMenuOpen}
+                                aria-label={`Actions for @${participant.displayName}`}
+                                onClick={(event) => {
+                                    event.stopPropagation()
+                                    setOpenMemberMenuId(isMenuOpen ? null : participant.id)
+                                }}
+                                className="flex w-9 shrink-0 items-center justify-center rounded-r-xl border-l border-[var(--app-border)] text-lg leading-none text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)] focus:outline-none focus:ring-2 focus:ring-[var(--app-link)]/40"
+                            >
+                                ⋯
+                            </button>
+                            {isMenuOpen ? (
+                                <div
+                                    role="menu"
+                                    className="absolute right-1 top-10 z-20 min-w-44 overflow-hidden rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)] py-1 text-sm shadow-xl"
+                                >
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        disabled={!canOpenSession}
+                                        onClick={() => {
+                                            setOpenMemberMenuId(null)
+                                            props.onOpenSession?.(participant)
+                                        }}
+                                        className="block w-full px-3 py-2 text-left text-[var(--app-fg)] hover:bg-[var(--app-secondary-bg)] disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        Xem
+                                    </button>
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        onClick={() => {
+                                            setOpenMemberMenuId(null)
+                                            openConfigModal(participant)
+                                        }}
+                                        className="block w-full px-3 py-2 text-left text-[var(--app-fg)] hover:bg-[var(--app-secondary-bg)]"
+                                    >
+                                        Cấu hình
+                                    </button>
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        onClick={() => {
+                                            setOpenMemberMenuId(null)
+                                            setRemoveParticipant(participant)
+                                        }}
+                                        className="block w-full px-3 py-2 text-left text-red-600 hover:bg-red-500/10 dark:text-red-400"
+                                    >
+                                        Remove khỏi Team Chat
+                                    </button>
+                                </div>
+                            ) : null}
                         </div>
                     )
                 })}
             </div>
+            {configParticipant ? (
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label={`Cấu hình @${configParticipant.displayName}`}
+                    className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/45 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+                >
+                    <div className="flex h-full w-full max-w-2xl flex-col border border-[var(--app-border)] bg-[var(--app-bg)] text-[var(--app-fg)] shadow-2xl sm:h-auto sm:max-h-[calc(100vh-32px)] sm:rounded-2xl">
+                        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--app-border)] px-4 py-3">
+                            <div>
+                                <div className="text-base font-semibold">Cấu hình @{configParticipant.displayName}</div>
+                                <div className="mt-0.5 text-xs text-[var(--app-hint)]">Member settings apply only in this Team Chat. Session settings affect the original session.</div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setConfigParticipant(null)
+                                    setDialogError(null)
+                                }}
+                                className="rounded-md border border-[var(--app-border)] px-2.5 py-1 text-sm text-[var(--app-fg)] transition-colors hover:bg-[var(--app-secondary-bg)]"
+                            >
+                                Close
+                            </button>
+                        </div>
+                        <div role="tablist" aria-label="Member config sections" className="flex shrink-0 gap-2 border-b border-[var(--app-border)] px-4 py-2">
+                            <button
+                                type="button"
+                                role="tab"
+                                aria-selected={configTab === 'member'}
+                                onClick={() => setConfigTab('member')}
+                                className={cn('rounded-md px-3 py-1.5 text-sm font-medium transition-colors', configTab === 'member' ? 'bg-[var(--app-button)] text-[var(--app-button-text)]' : 'text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]')}
+                            >
+                                Member
+                            </button>
+                            <button
+                                type="button"
+                                role="tab"
+                                aria-selected={configTab === 'session'}
+                                disabled={!configParticipant.sessionId}
+                                onClick={() => setConfigTab('session')}
+                                className={cn('rounded-md px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50', configTab === 'session' ? 'bg-[var(--app-button)] text-[var(--app-button-text)]' : 'text-[var(--app-hint)] hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]')}
+                            >
+                                Session
+                            </button>
+                        </div>
+                        <div className="min-h-0 flex-1 overflow-auto px-4 py-3">
+                            {configTab === 'member' ? (
+                                <div className="space-y-3">
+                                    <div>
+                                        <label htmlFor="team-member-config-alias" className="mb-1 block text-xs font-medium text-[var(--app-hint)]">Team alias</label>
+                                        <input
+                                            id="team-member-config-alias"
+                                            aria-label="Team alias"
+                                            value={configAlias}
+                                            maxLength={64}
+                                            onChange={(event) => setConfigAlias(event.target.value)}
+                                            className="w-full rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-2 py-1.5 text-sm text-[var(--app-fg)] outline-none focus:border-[var(--app-link)]"
+                                        />
+                                        <div className="mt-1 flex items-center justify-between gap-2 text-[11px]">
+                                            <span className="truncate text-[var(--app-hint)]">Tag preview: <span className="font-mono">@{normalizedConfigAlias || 'alias'}</span></span>
+                                            <span className="text-[var(--app-hint)]">{normalizedConfigAlias.length}/32</span>
+                                        </div>
+                                        {configAliasError ? <div className="mt-1 text-xs text-red-600">{configAliasError}</div> : null}
+                                    </div>
+                                    <div>
+                                        <label htmlFor="team-member-config-role" className="mb-1 block text-xs font-medium text-[var(--app-hint)]">Role</label>
+                                        <select
+                                            id="team-member-config-role"
+                                            aria-label="Role"
+                                            value={configRole}
+                                            onChange={(event) => setConfigRole(event.target.value as TeamParticipant['role'])}
+                                            className="w-full rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-2 py-1.5 text-sm text-[var(--app-fg)] outline-none focus:border-[var(--app-link)]"
+                                        >
+                                            {PARTICIPANT_ROLE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label htmlFor="team-member-config-color" className="mb-1 block text-xs font-medium text-[var(--app-hint)]">Color</label>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            {PARTICIPANT_COLOR_OPTIONS.map((color) => (
+                                                <button
+                                                    key={color}
+                                                    type="button"
+                                                    aria-label={`Use color ${color}`}
+                                                    aria-pressed={configColor.toLowerCase() === color.toLowerCase()}
+                                                    onClick={() => setConfigColor(color)}
+                                                    className={cn('h-7 w-7 rounded-full border-2', configColor.toLowerCase() === color.toLowerCase() ? 'border-[var(--app-fg)]' : 'border-transparent')}
+                                                    style={{ backgroundColor: color }}
+                                                />
+                                            ))}
+                                            <input
+                                                id="team-member-config-color"
+                                                aria-label="Color"
+                                                value={configColor}
+                                                onChange={(event) => setConfigColor(event.target.value)}
+                                                className="min-w-28 rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] px-2 py-1.5 font-mono text-sm text-[var(--app-fg)] outline-none focus:border-[var(--app-link)]"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <TeamMemberSessionSettings
+                                    api={props.api}
+                                    participant={configParticipant}
+                                    summary={configParticipant.sessionId ? sessionsById.get(configParticipant.sessionId) ?? null : null}
+                                />
+                            )}
+                            {dialogError ? <div className="mt-3 rounded-md bg-red-500/10 p-2 text-sm text-red-600 dark:text-red-400">{dialogError}</div> : null}
+                        </div>
+                        {configTab === 'member' ? (
+                            <div className="flex shrink-0 justify-end gap-2 border-t border-[var(--app-border)] px-4 py-3">
+                                <button
+                                    type="button"
+                                    disabled={isSubmittingMember}
+                                    onClick={() => setConfigParticipant(null)}
+                                    className="rounded-md border border-[var(--app-border)] px-3 py-1.5 text-sm text-[var(--app-fg)] transition-colors hover:bg-[var(--app-secondary-bg)] disabled:opacity-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={isSubmittingMember || Boolean(configAliasError) || !/^#[0-9a-f]{6}$/i.test(configColor) || !props.onUpdateParticipant}
+                                    onClick={() => void handleSaveMemberConfig()}
+                                    className="rounded-md bg-[var(--app-button)] px-3 py-1.5 text-sm font-medium text-[var(--app-button-text)] transition-opacity hover:opacity-90 disabled:opacity-50"
+                                >
+                                    {isSubmittingMember ? 'Saving…' : 'Save member config'}
+                                </button>
+                            </div>
+                        ) : null}
+                    </div>
+                </div>
+            ) : null}
+            {removeParticipant ? (
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label={`Remove @${removeParticipant.displayName}`}
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm"
+                >
+                    <div className="w-full max-w-md rounded-2xl border border-[var(--app-border)] bg-[var(--app-bg)] p-4 text-[var(--app-fg)] shadow-2xl">
+                        <div className="text-base font-semibold">Remove @{removeParticipant.displayName}?</div>
+                        <div className="mt-2 text-sm text-[var(--app-hint)]">
+                            Remove this member khỏi Team Chat này. Session gốc sẽ không bị xoá.
+                        </div>
+                        {dialogError ? <div className="mt-3 rounded-md bg-red-500/10 p-2 text-sm text-red-600 dark:text-red-400">{dialogError}</div> : null}
+                        <div className="mt-4 flex justify-end gap-2">
+                            <button
+                                type="button"
+                                disabled={isSubmittingMember}
+                                onClick={() => {
+                                    setRemoveParticipant(null)
+                                    setDialogError(null)
+                                }}
+                                className="rounded-md border border-[var(--app-border)] px-3 py-1.5 text-sm text-[var(--app-fg)] transition-colors hover:bg-[var(--app-secondary-bg)] disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                disabled={isSubmittingMember || !props.onRemoveParticipant}
+                                onClick={() => {
+                                    void (async () => {
+                                        setDialogError(null)
+                                        setIsSubmittingMember(true)
+                                        try {
+                                            await props.onRemoveParticipant?.(removeParticipant)
+                                            setRemoveParticipant(null)
+                                        } catch (error) {
+                                            setDialogError(error instanceof Error ? error.message : 'Failed to remove member.')
+                                        } finally {
+                                            setIsSubmittingMember(false)
+                                        }
+                                    })()
+                                }}
+                                className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                            >
+                                Remove
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
         </aside>
     )
 }

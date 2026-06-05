@@ -1,4 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { I18nProvider } from '@/lib/i18n-context'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TeamChatRightPanel } from './TeamChatRightPanel'
 
@@ -127,6 +129,113 @@ it('prevents duplicate aliases in the Team Chat picker', () => {
 
     expect(screen.getByText('Alias already used in this Team Chat.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Add to Team/i })).toBeDisabled()
+})
+
+it('opens member actions from the three-dot menu with view configure and remove options', () => {
+    const onOpenSession = vi.fn()
+    render(<TeamChatRightPanel
+        participants={[{ id: 'p2', teamChatId: 'team-1', type: 'session', sessionId: 's2', displayName: 'UI', role: 'frontend', color: '#a78bfa', joinedAt: 1 }]}
+        availableSessions={[{ id: 's2', active: true, thinking: false, activeAt: 2, updatedAt: 4, metadata: { path: '/repo/hapi', machineId: 'machine-a', name: 'Frontend polish', flavor: 'codex' }, todoProgress: null, pendingRequestsCount: 0, model: 'gpt-5.4', effort: null }]}
+        onOpenSession={onOpenSession}
+    />)
+
+    fireEvent.click(screen.getByRole('button', { name: /Actions for @UI/i }))
+
+    expect(screen.getByRole('menu')).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Xem' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Cấu hình' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /Remove khỏi Team Chat/i })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Xem' }))
+
+    expect(onOpenSession).toHaveBeenCalledWith(expect.objectContaining({ id: 'p2', sessionId: 's2' }))
+})
+
+it('confirms removing a member from the Team Chat', async () => {
+    const onRemoveParticipant = vi.fn()
+    render(<TeamChatRightPanel
+        participants={[{ id: 'p2', teamChatId: 'team-1', type: 'session', sessionId: 's2', displayName: 'UI', role: 'frontend', color: '#a78bfa', joinedAt: 1 }]}
+        onRemoveParticipant={onRemoveParticipant}
+    />)
+
+    fireEvent.click(screen.getByRole('button', { name: /Actions for @UI/i }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /Remove khỏi Team Chat/i }))
+
+    expect(screen.getByRole('dialog', { name: /Remove @UI/i })).toBeInTheDocument()
+    expect(screen.getByText(/Session gốc sẽ không bị xoá/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /^Remove$/i }))
+
+    expect(onRemoveParticipant).toHaveBeenCalledWith(expect.objectContaining({ id: 'p2', sessionId: 's2' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /Remove @UI/i })).not.toBeInTheDocument())
+})
+
+it('configures Team-scoped member alias role and color', async () => {
+    const onUpdateParticipant = vi.fn()
+    render(<TeamChatRightPanel
+        participants={[{ id: 'p2', teamChatId: 'team-1', type: 'session', sessionId: 's2', displayName: 'UI', role: 'frontend', color: '#a78bfa', joinedAt: 1 }]}
+        onUpdateParticipant={onUpdateParticipant}
+    />)
+
+    fireEvent.click(screen.getByRole('button', { name: /Actions for @UI/i }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Cấu hình' }))
+
+    expect(screen.getByRole('dialog', { name: /Cấu hình @UI/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Member' })).toHaveAttribute('aria-selected', 'true')
+
+    fireEvent.change(screen.getByRole('textbox', { name: /Team alias/i }), { target: { value: 'UI Lead' } })
+    fireEvent.change(screen.getByLabelText(/Role/i), { target: { value: 'reviewer' } })
+    fireEvent.change(screen.getByRole('textbox', { name: /^Color$/i }), { target: { value: '#60a5fa' } })
+    fireEvent.click(screen.getByRole('button', { name: /Save member config/i }))
+
+    expect(onUpdateParticipant).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'p2' }),
+        { displayName: 'UI Lead', role: 'reviewer', color: '#60a5fa' }
+    )
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /Cấu hình @UI/i })).not.toBeInTheDocument())
+})
+
+it('renders original session settings from the member config Session tab', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const api = {
+        getSession: vi.fn(async () => ({
+            session: {
+                id: 's2',
+                active: true,
+                thinking: false,
+                activeAt: 1,
+                updatedAt: 1,
+                metadata: { path: '/repo/hapi', flavor: 'claude', name: 'Frontend polish' },
+                agentState: null,
+                permissionMode: 'default',
+                collaborationMode: 'default',
+                model: null,
+                modelReasoningEffort: null,
+                effort: null,
+                todos: [],
+                messages: []
+            }
+        }))
+    }
+
+    render(
+        <QueryClientProvider client={queryClient}>
+            <I18nProvider>
+                <TeamChatRightPanel
+                    api={api as never}
+                    participants={[{ id: 'p2', teamChatId: 'team-1', type: 'session', sessionId: 's2', displayName: 'UI', role: 'frontend', color: '#a78bfa', joinedAt: 1 }]}
+                />
+            </I18nProvider>
+        </QueryClientProvider>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /Actions for @UI/i }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Cấu hình' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Session' }))
+
+    expect(await screen.findByText(/These settings affect the original session/i)).toBeInTheDocument()
+    expect(screen.getByText(/Permission Mode/i)).toBeInTheDocument()
+    expect(screen.getByText(/Model/i)).toBeInTheDocument()
 })
 
 it('shows live session status in members and opens the direct chat for a member', () => {

@@ -25,6 +25,8 @@ export function TeamChatLayout(props: {
     onAddSession?: (session: SessionSummary, alias: string) => Promise<void> | void
     onCreateSessionMember?: (input: { sessionId: string; label?: string; alias: string; initialTask?: string }) => Promise<void> | void
     onOpenSession?: (participant: TeamParticipant) => void
+    onUpdateParticipant?: (participant: TeamParticipant, input: { displayName: string; role: TeamParticipant['role']; color: string }) => Promise<void> | void
+    onRemoveParticipant?: (participant: TeamParticipant) => Promise<void> | void
 }) {
     const composer = (
         <TeamChatComposer
@@ -46,6 +48,8 @@ export function TeamChatLayout(props: {
         onAddSession={props.onAddSession}
         onCreateSessionMember={props.onCreateSessionMember}
         onOpenSession={props.onOpenSession}
+        onUpdateParticipant={props.onUpdateParticipant}
+        onRemoveParticipant={props.onRemoveParticipant}
     />
     const mobileMemberList = <TeamChatRightPanel
         participants={props.participants}
@@ -59,6 +63,8 @@ export function TeamChatLayout(props: {
         onAddSession={props.onAddSession}
         onCreateSessionMember={props.onCreateSessionMember}
         onOpenSession={props.onOpenSession}
+        onUpdateParticipant={props.onUpdateParticipant}
+        onRemoveParticipant={props.onRemoveParticipant}
         className="block h-full w-full border-0 lg:hidden"
     />
     const contextPanel = (

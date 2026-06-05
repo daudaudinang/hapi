@@ -47,7 +47,7 @@ export default function TeamChatDetailPage() {
     const { requests: mentionRequests } = useTeamChatMentionRequests(api, teamChatId, participants)
     const [aroundMessages, setAroundMessages] = useState<TeamChatMessage[]>([])
     const currentParticipant = participants.find((participant) => participant.type === 'user') ?? participants[0] ?? null
-    const { sendTeamMessage, addTeamParticipant, deleteTeamChat, isPending } = useTeamChatActions(api, teamChatId)
+    const { sendTeamMessage, addTeamParticipant, updateTeamParticipant, removeTeamParticipant, deleteTeamChat, isPending } = useTeamChatActions(api, teamChatId)
     const [directChatParticipant, setDirectChatParticipant] = useState<TeamParticipant | null>(null)
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
     const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -124,6 +124,15 @@ export default function TeamChatDetailPage() {
                     void queryClient.invalidateQueries({ queryKey: queryKeys.session(input.sessionId) })
                 } : undefined}
                 onOpenSession={(participant) => setDirectChatParticipant(participant)}
+                onUpdateParticipant={(participant, input) => updateTeamParticipant({
+                    participantId: participant.id,
+                    sessionId: participant.sessionId,
+                    ...input
+                })}
+                onRemoveParticipant={(participant) => removeTeamParticipant({
+                    participantId: participant.id,
+                    sessionId: participant.sessionId
+                })}
                 onLoadAround={async (messageId) => {
                     if (!api || !teamChatId || !messageId) return
                     const response = await api.getTeamMessagesAround(teamChatId, messageId)
