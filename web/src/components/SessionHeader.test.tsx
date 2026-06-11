@@ -85,9 +85,26 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     }
 }
 
+function setDesktopViewport(isDesktop: boolean) {
+    Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        value: vi.fn((query: string) => ({
+            matches: query.includes('max-width') ? !isDesktop : isDesktop,
+            media: query,
+            onchange: null,
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+            addListener: vi.fn(),
+            removeListener: vi.fn(),
+            dispatchEvent: vi.fn()
+        }))
+    })
+}
+
 describe('SessionHeader editor entry point', () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        setDesktopViewport(true)
         useTeamChatsMock.mockReturnValue({ teamChats: [], isLoading: false, error: null, refetch: vi.fn() })
         useSessionTeamMembershipsMock.mockReturnValue({ memberships: [], isLoading: false, error: null, refetch: vi.fn() })
     })
@@ -214,4 +231,102 @@ describe('SessionHeader editor entry point', () => {
             displayName: 'UI'
         })))
     })
+
+    it('shows a desktop-only compact focus button and opens focus from it', () => {
+        setDesktopViewport(true)
+        const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        const onFocusSession = vi.fn()
+
+        render(
+            <QueryClientProvider client={qc}>
+                <SessionHeader
+                    session={makeSession()}
+                    onBack={vi.fn()}
+                    api={null}
+                    compactMode
+                    pinIndex={1}
+                    onFocusSession={onFocusSession}
+                />
+            </QueryClientProvider>
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: 'Focus session' }))
+
+        expect(onFocusSession).toHaveBeenCalledTimes(1)
+    })
+
+    it('opens focus when double-clicking the compact header title on desktop', () => {
+        setDesktopViewport(true)
+        const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        const onFocusSession = vi.fn()
+
+        render(
+            <QueryClientProvider client={qc}>
+                <SessionHeader
+                    session={makeSession()}
+                    onBack={vi.fn()}
+                    api={null}
+                    compactMode
+                    pinIndex={1}
+                    onFocusSession={onFocusSession}
+                />
+            </QueryClientProvider>
+        )
+
+        fireEvent.doubleClick(screen.getAllByText('repo')[0])
+
+        expect(onFocusSession).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not open focus when double-clicking compact header action buttons', () => {
+        setDesktopViewport(true)
+        const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        const onFocusSession = vi.fn()
+        const onBack = vi.fn()
+
+        render(
+            <QueryClientProvider client={qc}>
+                <SessionHeader
+                    session={makeSession()}
+                    onBack={onBack}
+                    api={null}
+                    compactMode
+                    pinIndex={1}
+                    onFocusSession={onFocusSession}
+                />
+            </QueryClientProvider>
+        )
+
+        fireEvent.doubleClick(screen.getByTitle('button.files'))
+        fireEvent.doubleClick(screen.getByTitle('button.terminal'))
+        fireEvent.doubleClick(screen.getByTitle('session.more'))
+        fireEvent.doubleClick(screen.getByTitle('Unpin this session'))
+
+        expect(onFocusSession).not.toHaveBeenCalled()
+    })
+
+    it('does not render compact focus controls or double-click behavior on mobile', () => {
+        setDesktopViewport(false)
+        const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        const onFocusSession = vi.fn()
+
+        render(
+            <QueryClientProvider client={qc}>
+                <SessionHeader
+                    session={makeSession()}
+                    onBack={vi.fn()}
+                    api={null}
+                    compactMode
+                    pinIndex={1}
+                    onFocusSession={onFocusSession}
+                />
+            </QueryClientProvider>
+        )
+
+        expect(screen.queryByRole('button', { name: 'Focus session' })).not.toBeInTheDocument()
+        fireEvent.doubleClick(screen.getAllByText('repo')[0])
+
+        expect(onFocusSession).not.toHaveBeenCalled()
+    })
+
 })

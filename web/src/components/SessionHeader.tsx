@@ -31,6 +31,11 @@ function normalizeTeamAlias(alias: string): string {
     return alias.trim().replace(/\s+/g, ' ')
 }
 
+function isDesktopFocusViewport(): boolean {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return true
+    return !window.matchMedia('(max-width: 768px)').matches
+}
+
 function FilesIcon(props: { className?: string }) {
     return (
         <svg
@@ -166,6 +171,7 @@ export function SessionHeader(props: {
     onSessionDeleted?: () => void
     compactMode?: boolean
     pinIndex?: number
+    onFocusSession?: () => void
 }) {
     const { t } = useTranslation()
     const navigate = useNavigate()
@@ -190,6 +196,7 @@ export function SessionHeader(props: {
     const [teamMenuOpen, setTeamMenuOpen] = useState(false)
     const [addingTeamChatId, setAddingTeamChatId] = useState<string | null>(null)
     const [teamAlias, setTeamAlias] = useState(title)
+    const [desktopFocusEnabled, setDesktopFocusEnabled] = useState(() => isDesktopFocusViewport())
     const normalizedTeamAlias = normalizeTeamAlias(teamAlias)
     const teamAliasError = !normalizedTeamAlias
         ? 'Alias is required.'
@@ -200,6 +207,24 @@ export function SessionHeader(props: {
     useEffect(() => {
         setTeamAlias(title.length > 32 ? title.slice(0, 32).trim() : title)
     }, [title])
+
+    useEffect(() => {
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
+        const media = window.matchMedia('(max-width: 768px)')
+        const update = () => setDesktopFocusEnabled(!media.matches)
+        update()
+        media.addEventListener('change', update)
+        return () => media.removeEventListener('change', update)
+    }, [])
+
+    const canFocusSession = Boolean(compactMode && props.onFocusSession && desktopFocusEnabled)
+
+    const handleCompactHeaderDoubleClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+        if (!canFocusSession) return
+        const target = event.target as HTMLElement | null
+        if (target?.closest('button,a,input,select,textarea,[role="button"],[data-focus-ignore="true"]')) return
+        props.onFocusSession?.()
+    }, [canFocusSession, props.onFocusSession])
 
     const { archiveSession, renameSession, deleteSession, isPending } = useSessionActions(
         api,
@@ -283,7 +308,7 @@ export function SessionHeader(props: {
     if (compactMode) {
         return (
             <>
-                <div className="db-pinned__compact-header">
+                <div className="db-pinned__compact-header" onDoubleClick={handleCompactHeaderDoubleClick}>
                     <div className="db-pinned__compact-row1">
                         {pinIndex !== undefined && <span className="db-pinned__index-badge">{pinIndex}</span>}
                         <span className={`db-card__dot db-card__dot--${sessionStatus}`} />
@@ -300,11 +325,29 @@ export function SessionHeader(props: {
                         ))}
                         
                         <div className="db-pinned__compact-actions flex items-center gap-1 ml-auto">
+                            {canFocusSession ? (
+                                <button
+                                    type="button"
+                                    className="db-pinned__compact-action db-pinned__compact-action--focus"
+                                    onClick={props.onFocusSession}
+                                    onDoubleClick={(event) => event.stopPropagation()}
+                                    title="Focus session"
+                                    aria-label="Focus session"
+                                >
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                        <path d="M15 3h6v6" />
+                                        <path d="M10 14 21 3" />
+                                        <path d="M9 21H3v-6" />
+                                        <path d="M14 10 3 21" />
+                                    </svg>
+                                </button>
+                            ) : null}
                             {editorSearch ? (
                                 <button
                                     type="button"
                                     className="db-pinned__compact-action"
                                     onClick={() => navigate({ to: '/editor', search: editorSearch })}
+                                    onDoubleClick={(event) => event.stopPropagation()}
                                     title="Open in Editor"
                                     aria-label="Open in Editor"
                                 >
@@ -316,6 +359,7 @@ export function SessionHeader(props: {
                                     type="button"
                                     className="db-pinned__compact-action"
                                     onClick={() => { void handleCreateTeamChatWithSession() }}
+                                    onDoubleClick={(event) => event.stopPropagation()}
                                     title="Create Team Chat with this session"
                                     aria-label="Create Team Chat with this session"
                                     disabled={creatingTeamChat}
@@ -323,15 +367,16 @@ export function SessionHeader(props: {
                                     💬
                                 </button>
                             ) : null}
-                            <button type="button" className="db-pinned__compact-action" onClick={() => navigate({ search: (prev: any) => ({ ...prev, modal: 'files', modalSessionId: session.id }) } as any)} title="Files">
+                            <button type="button" className="db-pinned__compact-action" onClick={() => navigate({ search: (prev: any) => ({ ...prev, modal: 'files', modalSessionId: session.id }) } as any)} onDoubleClick={(event) => event.stopPropagation()} title={t('button.files')}>
                                 <FolderIcon className="w-4 h-4" />
                             </button>
-                            <button type="button" className="db-pinned__compact-action" onClick={() => navigate({ search: (prev: any) => ({ ...prev, modal: 'terminal', modalSessionId: session.id }) } as any)} title="Terminal">
+                            <button type="button" className="db-pinned__compact-action" onClick={() => navigate({ search: (prev: any) => ({ ...prev, modal: 'terminal', modalSessionId: session.id }) } as any)} onDoubleClick={(event) => event.stopPropagation()} title={t('button.terminal')}>
                                 <TerminalIcon className="w-4 h-4" />
                             </button>
                             <button
                                 type="button"
                                 onClick={handleMenuToggle}
+                                onDoubleClick={(event) => event.stopPropagation()}
                                 onPointerDown={(e) => e.stopPropagation()}
                                 ref={menuAnchorRef}
                                 className="db-pinned__compact-action"
@@ -343,6 +388,7 @@ export function SessionHeader(props: {
                                 type="button"
                                 className="db-pinned__unpin-btn"
                                 onClick={props.onBack}
+                                onDoubleClick={(event) => event.stopPropagation()}
                                 title="Unpin this session"
                             >
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

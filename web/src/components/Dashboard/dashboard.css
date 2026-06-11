@@ -1534,6 +1534,10 @@
     transition: color 0.15s, background 0.15s;
 }
 
+.db-pinned__compact-action--focus {
+    color: var(--app-fg);
+}
+
 .db-pinned__compact-action:hover {
     color: var(--app-fg);
     background: var(--app-secondary-bg);

@@ -75,6 +75,7 @@ export function SessionChat(props: {
     composerAppendText?: string
     onComposerAppendTextConsumed?: () => void
     onNewSessionRequested?: () => void
+    onFocusSession?: () => void
 }) {
     const { requests: teamMentionRequests } = useSessionTeamMentions(props.api, props.session.id)
     const { haptic } = usePlatform()
@@ -440,6 +441,7 @@ export function SessionChat(props: {
                     onSessionDeleted={props.onBack}
                     compactMode={props.compactMode}
                     pinIndex={props.pinIndex}
+                    onFocusSession={props.onFocusSession}
                 />
             )}
 
