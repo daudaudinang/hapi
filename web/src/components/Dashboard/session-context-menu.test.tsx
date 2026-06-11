@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Dashboard } from './index'
+import type { ApiClient } from '@/api/client'
 import type { SessionSummary } from '@/types/api'
 
 const navigate = vi.fn()
@@ -64,7 +65,23 @@ vi.mock('@/hooks/queries/useSkills', () => ({
 }))
 
 vi.mock('@/components/SessionChat', () => ({
-    SessionChat: (props: { session: { id: string } }) => <div data-testid="pinned-panel">{props.session.id}</div>
+    SessionChat: (props: { session: { id: string }; onFocusSession?: () => void }) => (
+        <div data-testid="pinned-panel">
+            {props.session.id}
+            {props.onFocusSession ? (
+                <button type="button" onClick={props.onFocusSession}>Mock focus session</button>
+            ) : null}
+        </div>
+    )
+}))
+
+vi.mock('@/components/FocusedSessionChatModal', () => ({
+    FocusedSessionChatModal: (props: { sessionId: string; onClose: () => void }) => (
+        <div role="dialog" aria-label="Focus session">
+            Focused modal {props.sessionId}
+            <button type="button" onClick={props.onClose}>Close focused modal</button>
+        </div>
+    )
 }))
 
 vi.mock('@/lib/use-translation', () => ({
@@ -109,7 +126,7 @@ function renderDashboard() {
     })
     return render(
         <QueryClientProvider client={queryClient}>
-            <Dashboard api={null} />
+            <Dashboard api={{} as ApiClient} />
         </QueryClientProvider>
     )
 }
@@ -140,6 +157,21 @@ describe('Dashboard session context menu', () => {
         const cardTitle = screen.getByText('Build app')
 
         fireEvent.click(cardTitle)
+        expect(sessionStorage.getItem('mc-pinned-ids')).toBe(JSON.stringify(['session-1']))
+    })
+
+    it('opens and closes the focused session modal from a pinned panel focus callback', () => {
+        renderDashboard()
+
+        fireEvent.click(screen.getByText('Build app'))
+        fireEvent.click(screen.getByRole('button', { name: 'Mock focus session' }))
+
+        expect(screen.getByRole('dialog', { name: 'Focus session' })).toHaveTextContent('Focused modal session-1')
+        expect(sessionStorage.getItem('mc-pinned-ids')).toBe(JSON.stringify(['session-1']))
+
+        fireEvent.click(screen.getByRole('button', { name: 'Close focused modal' }))
+
+        expect(screen.queryByRole('dialog', { name: 'Focus session' })).not.toBeInTheDocument()
         expect(sessionStorage.getItem('mc-pinned-ids')).toBe(JSON.stringify(['session-1']))
     })
 

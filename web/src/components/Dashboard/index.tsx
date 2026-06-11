@@ -14,6 +14,7 @@ import { fetchLatestMessages, seedMessageWindowFromSession } from '@/lib/message
 import { clearDraftsAfterSend } from '@/lib/clearDraftsAfterSend'
 import { compareSessionGroupOrder } from '@/lib/session-group-order'
 import { SessionChat } from '@/components/SessionChat'
+import { FocusedSessionChatModal } from '@/components/FocusedSessionChatModal'
 import type { ApiClient } from '@/api/client'
 import type { SessionSummary, AttachmentMetadata, Machine } from '@/types/api'
 import { useTranslation } from '@/lib/use-translation'
@@ -233,9 +234,10 @@ interface PinnedPanelProps {
     compact?: boolean     // true when 3-4 panels (collapse mode)
     isActive?: boolean
     onFocus?: () => void
+    onFocusSession?: () => void
 }
 
-function PinnedPanel({ sessionId, api, onUnpin, onSessionResolved, pinIndex, compact, isActive, onFocus }: PinnedPanelProps) {
+function PinnedPanel({ sessionId, api, onUnpin, onSessionResolved, pinIndex, compact, isActive, onFocus, onFocusSession }: PinnedPanelProps) {
     const { t } = useTranslation()
     const queryClient = useQueryClient()
     const { session, refetch: refetchSession } = useSession(api, sessionId)
@@ -338,6 +340,7 @@ function PinnedPanel({ sessionId, api, onUnpin, onSessionResolved, pinIndex, com
                 disableVoice
                 compactMode={true}
                 pinIndex={pinIndex}
+                onFocusSession={onFocusSession}
             />
 
         </div>
@@ -914,6 +917,7 @@ export function Dashboard({ api }: DashboardProps) {
     const [showOverviewDrawer, setShowOverviewDrawer] = useState(false)
     const [activePinIndex, setActivePinIndex] = useState(0)
     const [pendingReplacePin, setPendingReplacePin] = useState<string | null>(null)
+    const [focusedSessionId, setFocusedSessionId] = useState<string | null>(null)
     const [pinnedAction, setPinnedAction] = useState<{ id: string, x: number, y: number } | null>(null)
 
     // ── Inline confirm ────────────────────────────────────────────────────────
@@ -1472,11 +1476,13 @@ export function Dashboard({ api }: DashboardProps) {
                                     onUnpin={() => handleUnpin(s.id)}
                                     onSessionResolved={(newId) => {
                                         setPinnedIds(prev => prev.map(id => id === s.id ? newId : id))
+                                        setFocusedSessionId(current => current === s.id ? newId : current)
                                     }}
                                     pinIndex={idx + 1}
                                     compact={true}
                                     isActive={activePinIndex === idx}
                                     onFocus={() => setActivePinIndex(idx)}
+                                    onFocusSession={() => setFocusedSessionId(s.id)}
                                 />
                             </div>
                         ))}
@@ -1545,6 +1551,14 @@ export function Dashboard({ api }: DashboardProps) {
                     </div>
                 )}
             </div>
+
+            {api && focusedSessionId ? (
+                <FocusedSessionChatModal
+                    api={api}
+                    sessionId={focusedSessionId}
+                    onClose={() => setFocusedSessionId(null)}
+                />
+            ) : null}
 
             {pendingReplacePin && (
                 <ReplacePinModal
