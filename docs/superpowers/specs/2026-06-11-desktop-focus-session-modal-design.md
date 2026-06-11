@@ -11,6 +11,7 @@ Trong Agent Mode trên desktop, khi người dùng pin 3 hoặc 4 session, mỗi
 - Chỉ hiển thị nút Focus ở giao diện desktop.
 - Chỉ hiển thị trong compact header của pinned session trong Agent Mode.
 - Khi bấm Focus, mở modal lớn chứa cùng session chat.
+- Trên desktop, double-click vào vùng header của pinned session cũng mở nhanh modal Focus.
 - Modal cho phép đọc chat, gửi tin, retry, load more, và resume inactive session theo logic hiện có.
 - Đóng modal thì quay lại Agent Mode với danh sách pin giữ nguyên.
 
@@ -26,7 +27,7 @@ Trong Agent Mode trên desktop, khi người dùng pin 3 hoặc 4 session, mỗi
 
 1. User đang ở Agent Mode trên desktop.
 2. User đã pin nhiều session, thường là 3 hoặc 4.
-3. User bấm nút Focus trong header nhỏ của một session.
+3. User bấm nút Focus trong header nhỏ của một session, hoặc double-click vào vùng header của session đó.
 4. Hệ thống mở modal lớn cho đúng session đó.
 5. User đọc hoặc gửi tin trong modal.
 6. User đóng modal và quay lại layout pin như cũ.
@@ -37,7 +38,7 @@ Trong Agent Mode trên desktop, khi người dùng pin 3 hoặc 4 session, mỗi
 
 `PinnedPanel` truyền callback focus xuống `SessionChat` / `SessionHeader`.
 
-`SessionHeader` compact mode render nút Focus khi được phép và khi viewport là desktop.
+`SessionHeader` compact mode render nút Focus khi được phép và khi viewport là desktop. Header cũng nhận double-click trên vùng nền/title để gọi cùng callback focus; các nút con như Files, Terminal, More, Unpin không được vô tình kích hoạt double-click focus.
 
 Modal focus dùng lại logic session chat lớn:
 
@@ -56,7 +57,7 @@ Nếu tách modal chung làm phạm vi quá rộng, phương án an toàn là t�
 | File/Khối | Vai trò | Sửa gì | Rủi ro / cần kiểm tra |
 |---|---|---|---|
 | `web/src/components/Dashboard/index.tsx` | Agent Mode và pinned sessions | Thêm state focus modal, truyền callback xuống pinned panel, render modal | Cần không làm mất trạng thái pin/active pin |
-| `web/src/components/SessionHeader.tsx` | Header session, gồm compact header | Thêm prop focus và nút Focus desktop-only | Header compact có thể chật |
+| `web/src/components/SessionHeader.tsx` | Header session, gồm compact header | Thêm prop focus, nút Focus desktop-only, và double-click trên header | Header compact có thể chật; cần tránh double-click trên nút con mở nhầm modal |
 | `web/src/components/TeamChat/TeamSessionChatModal.tsx` hoặc modal mới | Modal chat lớn hiện có | Tái sử dụng/tách logic hoặc tạo modal focus tương tự | Tránh đổi hành vi Team Chat ngoài ý muốn |
 | `web/src/components/Dashboard/dashboard.css` | Style Agent Mode/pinned header | Style nút Focus và ẩn trên mobile | Cần kiểm tra desktop/mobile breakpoint |
 
@@ -65,6 +66,7 @@ Nếu tách modal chung làm phạm vi quá rộng, phương án an toàn là t�
 - Nút Focus chỉ cần cho desktop.
 - Mobile không cần nút Focus.
 - Nút nằm trong header của pinned session trong Agent Mode.
+- Double-click vào header pinned session trên desktop cũng mở Focus modal.
 - Modal nên là modal chat lớn, tương tự trải nghiệm bấm member trong Team Chat, nhưng wording là Focus session.
 
 ## 8. Rủi ro
@@ -74,6 +76,7 @@ Nếu tách modal chung làm phạm vi quá rộng, phương án an toàn là t�
 - Compact header vốn đã nhiều nút; thêm Focus có thể làm title ngắn hơn.
 - Nếu copy modal Team Chat quá nhiều, có thể lệch wording hoặc logic về “direct chat”.
 - Nếu dùng CSS breakpoint không đúng, nút có thể xuất hiện trên mobile.
+- Double-click header có thể xung đột với click vào các nút con nếu không chặn event đúng.
 
 ### Xanh
 
@@ -87,9 +90,11 @@ Nếu tách modal chung làm phạm vi quá rộng, phương án an toàn là t�
 
 1. Desktop, pin 3 session: nút Focus xuất hiện, bấm mở đúng session trong modal.
 2. Desktop, pin 4 session: modal vẫn mở đúng và layout pin phía sau không đổi.
-3. Mobile viewport: nút Focus không xuất hiện.
-4. Trong modal: gửi message hoạt động như session gốc.
-5. Đóng modal: quay lại Agent Mode, pinned sessions vẫn giữ nguyên.
+3. Desktop: double-click vùng header/title mở đúng Focus modal.
+4. Desktop: double-click hoặc click nhanh trên nút Files/Terminal/More/Unpin không mở nhầm Focus modal.
+5. Mobile viewport: nút Focus không xuất hiện và double-click header không mở Focus modal.
+6. Trong modal: gửi message hoạt động như session gốc.
+7. Đóng modal: quay lại Agent Mode, pinned sessions vẫn giữ nguyên.
 
 ### Kiểm chứng thủ công nên chạy
 
