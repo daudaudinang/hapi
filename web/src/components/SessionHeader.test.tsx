@@ -101,6 +101,22 @@ function setDesktopViewport(isDesktop: boolean) {
     })
 }
 
+function setLegacyDesktopViewport(isDesktop: boolean) {
+    const media = {
+        matches: !isDesktop,
+        media: '(max-width: 768px)',
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn()
+    }
+    Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        value: vi.fn(() => media)
+    })
+    return media
+}
+
 describe('SessionHeader editor entry point', () => {
     beforeEach(() => {
         vi.clearAllMocks()
@@ -297,10 +313,10 @@ describe('SessionHeader editor entry point', () => {
             </QueryClientProvider>
         )
 
-        fireEvent.doubleClick(screen.getByTitle('button.files'))
-        fireEvent.doubleClick(screen.getByTitle('button.terminal'))
-        fireEvent.doubleClick(screen.getByTitle('session.more'))
-        fireEvent.doubleClick(screen.getByTitle('Unpin this session'))
+        fireEvent.doubleClick(screen.getByRole('button', { name: 'button.files' }))
+        fireEvent.doubleClick(screen.getByRole('button', { name: 'button.terminal' }))
+        fireEvent.doubleClick(screen.getByRole('button', { name: 'session.more' }))
+        fireEvent.doubleClick(screen.getByRole('button', { name: 'Unpin this session' }))
 
         expect(onFocusSession).not.toHaveBeenCalled()
     })
@@ -327,6 +343,32 @@ describe('SessionHeader editor entry point', () => {
         fireEvent.doubleClick(screen.getAllByText('repo')[0])
 
         expect(onFocusSession).not.toHaveBeenCalled()
+    })
+
+
+    it('uses legacy matchMedia listener fallback and cleanup when event listener APIs are missing', () => {
+        const media = setLegacyDesktopViewport(true)
+        const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+        render(
+            <QueryClientProvider client={qc}>
+                <SessionHeader
+                    session={makeSession()}
+                    onBack={vi.fn()}
+                    api={null}
+                    compactMode
+                    pinIndex={1}
+                    onFocusSession={vi.fn()}
+                />
+            </QueryClientProvider>
+        )
+
+        expect(media.addListener).toHaveBeenCalledTimes(1)
+
+        cleanup()
+
+        expect(media.removeListener).toHaveBeenCalledTimes(1)
+        expect(media.removeListener).toHaveBeenCalledWith(media.addListener.mock.calls[0][0])
     })
 
 })
