@@ -199,7 +199,7 @@ export function FocusedSessionChatModal(props: {
                             </div>
                             <div className="mt-0.5 truncate text-xs text-[var(--app-hint)]">{title}</div>
                             <div className="mt-0.5 truncate text-[11px] text-[var(--app-hint)]">
-                                <span>Messages here go only to this focused session, not the Team Chat.</span>
+                                <span>Messages here stay inside this focus session.</span>
                                 {metaLine ? <span> · {metaLine}</span> : null}
                             </div>
                         </div>

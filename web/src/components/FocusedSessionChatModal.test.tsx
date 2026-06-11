@@ -130,6 +130,7 @@ describe('FocusedSessionChatModal', () => {
         expect(screen.getByRole('dialog', { name: /Focus session/i })).toBeInTheDocument()
         expect(screen.getByText('Frontend polish')).toBeInTheDocument()
         expect(screen.getByText(/gpt-5.4/)).toBeInTheDocument()
+        expect(screen.queryByText(/Team Chat|Direct chat/i)).not.toBeInTheDocument()
         expect(screen.getByTestId('session-chat')).toHaveTextContent('Focused Session Chat session-1')
         expect(useRegisterActiveOverlaySessionMock).toHaveBeenCalledWith('session-1')
         expect(sessionChatMock).toHaveBeenCalledWith(expect.objectContaining({
@@ -144,5 +145,37 @@ describe('FocusedSessionChatModal', () => {
 
         expect(sendMessage).toHaveBeenCalledWith('focus question', undefined)
         expect(onClose).toHaveBeenCalled()
+    })
+
+    it('closes when Escape is pressed', () => {
+        const api = {} as ApiClient
+        const onClose = vi.fn()
+        const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+
+        render(
+            <QueryClientProvider client={queryClient}>
+                <FocusedSessionChatModal api={api} sessionId="session-1" onClose={onClose} />
+            </QueryClientProvider>
+        )
+
+        fireEvent.keyDown(window, { key: 'Escape' })
+
+        expect(onClose).toHaveBeenCalledTimes(1)
+    })
+
+    it('closes when the backdrop is pressed', () => {
+        const api = {} as ApiClient
+        const onClose = vi.fn()
+        const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+
+        render(
+            <QueryClientProvider client={queryClient}>
+                <FocusedSessionChatModal api={api} sessionId="session-1" onClose={onClose} />
+            </QueryClientProvider>
+        )
+
+        fireEvent.mouseDown(screen.getByRole('dialog', { name: /Focus session/i }))
+
+        expect(onClose).toHaveBeenCalledTimes(1)
     })
 })
