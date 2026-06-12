@@ -117,15 +117,21 @@ function makeSession(overrides: Partial<SessionSummary> & { id: string }): Sessi
     }
 }
 
-function setCoarsePointer(matches: boolean) {
+function setMediaMatches({ coarsePointer = false, mobileViewport = false }: { coarsePointer?: boolean; mobileViewport?: boolean } = {}) {
     Object.defineProperty(window, 'matchMedia', {
         configurable: true,
-        value: vi.fn(() => ({
-            matches,
+        value: vi.fn((query: string) => ({
+            matches: query.includes('pointer: coarse') ? coarsePointer
+                : query.includes('max-width: 768px') ? mobileViewport
+                : false,
             addEventListener: vi.fn(),
             removeEventListener: vi.fn(),
         }))
     })
+}
+
+function setCoarsePointer(matches: boolean) {
+    setMediaMatches({ coarsePointer: matches })
 }
 
 function renderDashboard() {
@@ -223,6 +229,18 @@ describe('Dashboard session context menu', () => {
         expect(focusedPanel).toContainElement(screen.getByTestId('pinned-panel-chat'))
         expect(screen.getByTestId('pinned-panel-chat')).toHaveAttribute('data-instance-id', instanceId)
         expect(screen.getByRole('textbox', { name: 'Mock composer draft' })).toHaveValue('draft from context menu')
+        expect(sessionChatUnmounts).not.toHaveBeenCalled()
+    })
+
+    it('does not open focused pinned panel on mobile viewport', () => {
+        setMediaMatches({ mobileViewport: true })
+        renderDashboard()
+
+        fireEvent.click(screen.getByText('Build app'))
+        fireEvent.click(screen.getByTitle('dashboard.openSessionMenu'))
+        fireEvent.click(screen.getByText('dashboard.focus'))
+
+        expect(screen.queryByTestId('focused-pinned-panel')).not.toBeInTheDocument()
         expect(sessionChatUnmounts).not.toHaveBeenCalled()
     })
 

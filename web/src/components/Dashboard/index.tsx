@@ -900,6 +900,11 @@ function AddArchivedCard({ archivedCount, addedCount, onClick }: { archivedCount
 const MAX_PINS = 4
 const PINS_KEY = 'mc-pinned-ids'  // sessionStorage — per-tab, survives refresh, auto-clears on tab close
 
+function isMobileFocusViewport() {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false
+    return window.matchMedia('(max-width: 768px)').matches
+}
+
 interface DashboardProps {
     api: ApiClient | null
 }
@@ -921,6 +926,13 @@ export function Dashboard({ api }: DashboardProps) {
 
     const closeFocusedPinnedSession = useCallback(() => {
         setFocusedPinnedSessionId(null)
+    }, [])
+
+    const openFocusedPinnedSession = useCallback((sessionId: string, index: number) => {
+        setActivePinIndex(index)
+        if (!isMobileFocusViewport()) {
+            setFocusedPinnedSessionId(sessionId)
+        }
     }, [])
 
     // ── Inline confirm ────────────────────────────────────────────────────────
@@ -1543,10 +1555,7 @@ export function Dashboard({ api }: DashboardProps) {
                                         compact={true}
                                         isActive={activePinIndex === idx}
                                         onFocus={() => setActivePinIndex(idx)}
-                                        onFocusSession={() => {
-                                            setActivePinIndex(idx)
-                                            setFocusedPinnedSessionId(s.id)
-                                        }}
+                                        onFocusSession={() => openFocusedPinnedSession(s.id, idx)}
                                     />
                                 </div>
                             )
@@ -1639,8 +1648,7 @@ export function Dashboard({ api }: DashboardProps) {
                         onFocus={() => {
                             const idx = pinnedIds.indexOf(pinnedAction.id)
                             if (idx !== -1) {
-                                setActivePinIndex(idx)
-                                setFocusedPinnedSessionId(pinnedAction.id)
+                                openFocusedPinnedSession(pinnedAction.id, idx)
                             }
                             setPinnedAction(null)
                             setShowOverviewDrawer(false)
