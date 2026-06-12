@@ -1638,7 +1638,10 @@ export function Dashboard({ api }: DashboardProps) {
                         isPinned={ctxIsPinned}
                         onFocus={() => {
                             const idx = pinnedIds.indexOf(pinnedAction.id)
-                            if (idx !== -1) setActivePinIndex(idx)
+                            if (idx !== -1) {
+                                setActivePinIndex(idx)
+                                setFocusedPinnedSessionId(pinnedAction.id)
+                            }
                             setPinnedAction(null)
                             setShowOverviewDrawer(false)
                         }}

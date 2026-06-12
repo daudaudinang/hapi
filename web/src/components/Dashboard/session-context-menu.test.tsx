@@ -208,6 +208,24 @@ describe('Dashboard session context menu', () => {
         expect(sessionChatUnmounts).not.toHaveBeenCalled()
     })
 
+    it('opens focused pinned panel from context menu without unmounting the chat', () => {
+        renderDashboard()
+
+        fireEvent.click(screen.getByText('Build app'))
+        const chat = screen.getByTestId('pinned-panel-chat')
+        const instanceId = chat.getAttribute('data-instance-id')
+        fireEvent.change(screen.getByRole('textbox', { name: 'Mock composer draft' }), { target: { value: 'draft from context menu' } })
+
+        fireEvent.click(screen.getByTitle('dashboard.openSessionMenu'))
+        fireEvent.click(screen.getByText('dashboard.focus'))
+
+        const focusedPanel = screen.getByTestId('focused-pinned-panel')
+        expect(focusedPanel).toContainElement(screen.getByTestId('pinned-panel-chat'))
+        expect(screen.getByTestId('pinned-panel-chat')).toHaveAttribute('data-instance-id', instanceId)
+        expect(screen.getByRole('textbox', { name: 'Mock composer draft' })).toHaveValue('draft from context menu')
+        expect(sessionChatUnmounts).not.toHaveBeenCalled()
+    })
+
     it('opens the unified context menu from the explicit menu button', () => {
         renderDashboard()
 
