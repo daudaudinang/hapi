@@ -1214,6 +1214,7 @@ export function Dashboard({ api }: DashboardProps) {
 
     const handleUnpin = useCallback((sessionId: string) => {
         setPinnedIds(prev => prev.filter(id => id !== sessionId))
+        setFocusedPinnedSessionId(current => current === sessionId ? null : current)
     }, [])
 
     const handleReplacePin = useCallback((oldSessionId: string) => {
@@ -1561,9 +1562,9 @@ export function Dashboard({ api }: DashboardProps) {
 
                 {/* Pinned panels area */}
                 {focusedPinnedSessionId ? (
-                    <button
-                        type="button"
-                        aria-label="Close focus session backdrop"
+                    <div
+                        aria-hidden="true"
+                        data-testid="focused-pinned-backdrop"
                         className="db__pinned-focus-backdrop"
                         onClick={closeFocusedPinnedSession}
                     />

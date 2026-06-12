@@ -67,7 +67,7 @@ vi.mock('@/hooks/queries/useSkills', () => ({
 vi.mock('@/components/SessionChat', async () => {
     const React = await import('react')
     return {
-        SessionChat: (props: { session: { id: string }; onFocusSession?: () => void }) => {
+        SessionChat: (props: { session: { id: string }; onBack?: () => void; onFocusSession?: () => void }) => {
             const instanceId = React.useId()
             const [draft, setDraft] = React.useState('')
             React.useEffect(() => () => sessionChatUnmounts(props.session.id), [props.session.id])
@@ -84,6 +84,9 @@ vi.mock('@/components/SessionChat', async () => {
                     </label>
                     {props.onFocusSession ? (
                         <button type="button" onClick={props.onFocusSession}>Mock focus session</button>
+                    ) : null}
+                    {props.onBack ? (
+                        <button type="button" onClick={props.onBack}>Mock unpin session</button>
                     ) : null}
                 </div>
             )
@@ -291,12 +294,27 @@ describe('Dashboard session context menu', () => {
         fireEvent.change(screen.getByRole('textbox', { name: 'Mock composer draft' }), { target: { value: 'draft before backdrop' } })
         fireEvent.click(screen.getByRole('button', { name: 'Mock focus session' }))
 
-        fireEvent.click(screen.getByRole('button', { name: 'Close focus session backdrop' }))
+        expect(screen.queryByRole('button', { name: 'Close focus session backdrop' })).not.toBeInTheDocument()
+        fireEvent.click(screen.getByTestId('focused-pinned-backdrop'))
 
         expect(screen.queryByTestId('focused-pinned-panel')).not.toBeInTheDocument()
         expect(screen.getByTestId('pinned-panel-chat')).toHaveAttribute('data-instance-id', instanceId)
         expect(screen.getByRole('textbox', { name: 'Mock composer draft' })).toHaveValue('draft before backdrop')
         expect(sessionChatUnmounts).not.toHaveBeenCalled()
+    })
+
+    it('clears focus immediately when unpinning the focused panel', () => {
+        renderDashboard()
+
+        fireEvent.click(screen.getByText('Build app'))
+        fireEvent.click(screen.getByRole('button', { name: 'Mock focus session' }))
+        expect(screen.getByTestId('focused-pinned-panel')).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Mock unpin session' }))
+
+        expect(screen.queryByTestId('focused-pinned-panel')).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Close focus session' })).not.toBeInTheDocument()
+        expect(sessionStorage.getItem('mc-pinned-ids')).toBe('[]')
     })
 
     it('closes focused pinned panel when viewport becomes mobile', () => {
