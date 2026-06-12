@@ -940,17 +940,18 @@ export function Dashboard({ api }: DashboardProps) {
     const focusedPanelRef = useRef<HTMLDivElement | null>(null)
     const focusedCloseButtonRef = useRef<HTMLButtonElement | null>(null)
     const previouslyFocusedElementRef = useRef<HTMLElement | null>(null)
+    const contextMenuRestoreElementRef = useRef<HTMLElement | null>(null)
 
     const closeFocusedPinnedSession = useCallback(() => {
         setFocusedPinnedSessionId(null)
     }, [])
 
-    const openFocusedPinnedSession = useCallback((sessionId: string, index: number) => {
+    const openFocusedPinnedSession = useCallback((sessionId: string, index: number, restoreElement?: HTMLElement | null) => {
         setActivePinIndex(index)
         if (!isMobileFocusViewport()) {
-            previouslyFocusedElementRef.current = document.activeElement instanceof HTMLElement
+            previouslyFocusedElementRef.current = restoreElement ?? (document.activeElement instanceof HTMLElement
                 ? document.activeElement
-                : null
+                : null)
             setFocusedPinnedSessionId(sessionId)
         }
     }, [])
@@ -1207,6 +1208,7 @@ export function Dashboard({ api }: DashboardProps) {
     const handleContextMenu = useCallback((sessionId: string, e: React.MouseEvent) => {
         e.preventDefault()
         e.stopPropagation()
+        contextMenuRestoreElementRef.current = e.currentTarget instanceof HTMLElement ? e.currentTarget : null
         setPinnedAction({ id: sessionId, x: e.clientX, y: e.clientY })
     }, [])
 
@@ -1630,7 +1632,11 @@ export function Dashboard({ api }: DashboardProps) {
 
                         {/* 4th cell placeholder for 3-pin mode */}
                         {pinnedSessions.length === 3 && (
-                            <div className="db__pinned-placeholder">
+                            <div
+                                className="db__pinned-placeholder"
+                                inert={focusedPinnedSessionId ? true : undefined}
+                                aria-hidden={focusedPinnedSessionId ? true : undefined}
+                            >
                                 <div className="db__pinned-placeholder-header">
                                     <span className="db__pinned-placeholder-title">{t('dashboard.selectToPin', { n: 4, suffix: 'th' })}</span>
                                 </div>
@@ -1715,8 +1721,9 @@ export function Dashboard({ api }: DashboardProps) {
                         onFocus={() => {
                             const idx = pinnedIds.indexOf(pinnedAction.id)
                             if (idx !== -1) {
-                                openFocusedPinnedSession(pinnedAction.id, idx)
+                                openFocusedPinnedSession(pinnedAction.id, idx, contextMenuRestoreElementRef.current)
                             }
+                            contextMenuRestoreElementRef.current = null
                             setPinnedAction(null)
                             setShowOverviewDrawer(false)
                         }}

@@ -7,6 +7,7 @@ import type { SessionSummary } from '@/types/api'
 
 const navigate = vi.fn()
 const sessionChatUnmounts = vi.fn()
+let mockSessions: SessionSummary[]
 
 vi.mock('@tanstack/react-router', () => ({
     useNavigate: () => navigate,
@@ -15,9 +16,7 @@ vi.mock('@tanstack/react-router', () => ({
 
 vi.mock('@/hooks/queries/useSessions', () => ({
     useSessions: () => ({
-        sessions: [
-            makeSession({ id: 'session-1', metadata: { path: '/repo/app', name: 'Build app', flavor: 'claude' } }),
-        ],
+        sessions: mockSessions,
         isLoading: false,
     })
 }))
@@ -117,6 +116,19 @@ function makeSession(overrides: Partial<SessionSummary> & { id: string }): Sessi
     }
 }
 
+function resetMockSessions() {
+    mockSessions = [
+        makeSession({ id: 'session-1', metadata: { path: '/repo/app', name: 'Build app', flavor: 'claude' } }),
+    ]
+}
+
+function setMockSessions(count: number) {
+    mockSessions = Array.from({ length: count }, (_, index) => makeSession({
+        id: `session-${index + 1}`,
+        metadata: { path: '/repo/app', name: `Build app ${index + 1}`, flavor: 'claude' }
+    }))
+}
+
 type MockMediaQueryList = {
     matches: boolean
     addEventListener?: ReturnType<typeof vi.fn>
@@ -182,6 +194,7 @@ describe('Dashboard session context menu', () => {
         navigate.mockClear()
         sessionChatUnmounts.mockClear()
         sessionStorage.clear()
+        resetMockSessions()
         mobileMedia = null
         setCoarsePointer(false)
     })
@@ -330,6 +343,36 @@ describe('Dashboard session context menu', () => {
         expect(screen.getByTestId('pinned-panel-chat')).toHaveAttribute('data-instance-id', instanceId)
         expect(screen.getByRole('textbox', { name: 'Mock composer draft' })).toHaveValue('draft from context menu')
         expect(sessionChatUnmounts).not.toHaveBeenCalled()
+    })
+
+    it('restores focus to a stable context menu opener after closing context-menu focus', () => {
+        renderDashboard()
+
+        fireEvent.click(screen.getByText('Build app'))
+        const menuButton = screen.getByTitle('dashboard.openSessionMenu')
+        fireEvent.click(menuButton)
+        fireEvent.click(screen.getByText('dashboard.focus'))
+
+        expect(screen.getByRole('button', { name: 'Close focus session' })).toHaveFocus()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Close focus session' }))
+
+        expect(menuButton).toHaveFocus()
+        expect(sessionChatUnmounts).not.toHaveBeenCalled()
+    })
+
+    it('makes the three-pin placeholder inert while a pinned panel is focused', () => {
+        setMockSessions(3)
+        const { container } = renderDashboard()
+
+        fireEvent.click(screen.getByText('Build app 1'))
+        fireEvent.click(screen.getByText('Build app 2'))
+        fireEvent.click(screen.getByText('Build app 3'))
+        fireEvent.click(screen.getAllByRole('button', { name: 'Mock focus session' })[0])
+
+        const placeholder = container.querySelector('.db__pinned-placeholder')
+        expect(placeholder).toHaveAttribute('inert')
+        expect(placeholder).toHaveAttribute('aria-hidden', 'true')
     })
 
     it('does not open focused pinned panel on mobile viewport', () => {
