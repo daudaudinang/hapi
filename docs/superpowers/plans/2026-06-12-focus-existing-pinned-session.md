@@ -60,6 +60,7 @@ Do not modify backend, hub, cli, shared schemas, or API contracts.
 - Modify: `web/src/components/Dashboard/index.tsx`
 - Modify: `web/src/components/Dashboard/session-context-menu.test.tsx`
 - Modify: `web/src/components/Dashboard/dashboard.css`
+- Modify only if helper reuse is preferred: `web/src/hooks/useMediaQuery.ts`
 - Delete: `web/src/components/FocusedSessionChatModal.tsx`
 - Delete: `web/src/components/FocusedSessionChatModal.test.tsx`
 
@@ -206,7 +207,7 @@ Delete the old render block:
 ) : null}
 ```
 
-- [ ] **Step 4: Add close helpers and Escape handling**
+- [ ] **Step 4: Add close helpers, Escape handling, and mobile resize safety**
 
 In `Dashboard`, after state declarations, add:
 
@@ -240,6 +241,29 @@ useEffect(() => {
     return () => window.removeEventListener('keydown', onKeyDown)
 }, [focusedPinnedSessionId])
 ```
+
+Add mobile resize safety so focus cannot remain half-active if the user opens focus on desktop then resizes/navigates to mobile. Use the same breakpoint as the header Focus gate:
+
+```tsx
+useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
+    const media = window.matchMedia('(max-width: 768px)')
+    const closeIfMobile = () => {
+        if (media.matches) {
+            setFocusedPinnedSessionId(null)
+        }
+    }
+    closeIfMobile()
+    if (typeof media.addEventListener === 'function') {
+        media.addEventListener('change', closeIfMobile)
+        return () => media.removeEventListener('change', closeIfMobile)
+    }
+    media.addListener(closeIfMobile)
+    return () => media.removeListener(closeIfMobile)
+}, [])
+```
+
+This is defensive. The Focus button should still not render on mobile.
 
 - [ ] **Step 5: Apply focused classes to existing pinned panel**
 
@@ -338,6 +362,8 @@ In `web/src/components/Dashboard/dashboard.css`, near pinned panel styles, add:
     inset: 0;
     z-index: 45;
     border: 0;
+    padding: 0;
+    appearance: none;
     background: rgba(0, 0, 0, 0.45);
     backdrop-filter: blur(4px);
     cursor: default;
@@ -549,6 +575,7 @@ Desktop checks:
 - [ ] Files/Terminal/More/Unpin double-click does not open focus.
 - [ ] Backdrop click closes focus.
 - [ ] Escape closes focus.
+- [ ] Resizing from desktop focused view to mobile closes focus cleanly.
 - [ ] If the focused session is unpinned, focus closes cleanly.
 
 Mobile viewport checks:
@@ -593,12 +620,12 @@ No backend/data rollback is needed.
 - **Main risk:** CSS fixed overlay could visually conflict with existing dashboard modals. Mitigation: z-index below global modals when appropriate, test Files/Terminal modals while focus is closed; do not open nested Files/Terminal from focused overlay until manual QA confirms acceptable behavior.
 - **State risk reduced:** This plan removes the second `SessionChat`, so composer and messages no longer need cross-view synchronization.
 - **Accessibility risk:** There is still no full focus trap. This is same level as previous custom modal patterns; Escape/backdrop/Close button are required.
-- **Mobile risk:** Focus should be inaccessible on mobile. Defensive CSS prevents fixed overlay if state is somehow set.
+- **Mobile risk:** Focus should be inaccessible on mobile. Defensive CSS prevents fixed overlay if state is somehow set, and Dashboard clears focus when the viewport becomes mobile.
 
 ---
 
 ## Self-review
 
-- Spec coverage: one-instance focus, unsent prompt preservation, message cache preservation, close behavior, Escape/backdrop, active tab alignment, mobile suppression, and obsolete modal removal are all covered.
+- Spec coverage: one-instance focus, unsent prompt preservation, message cache preservation, close behavior, Escape/backdrop, active tab alignment, mobile suppression including resize safety, and obsolete modal removal are all covered.
 - Placeholder scan: no placeholder markers or vague implementation steps remain.
 - Type consistency: new state name `focusedPinnedSessionId` is used consistently in Dashboard; `onFocusSession` remains the boundary between header/session chat and Dashboard.
