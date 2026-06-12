@@ -6,6 +6,7 @@ import type { ApiClient } from '@/api/client'
 import type { SessionSummary } from '@/types/api'
 
 const navigate = vi.fn()
+const sessionChatUnmounts = vi.fn()
 
 vi.mock('@tanstack/react-router', () => ({
     useNavigate: () => navigate,
@@ -64,25 +65,32 @@ vi.mock('@/hooks/queries/useSkills', () => ({
     useSkills: () => ({ getSuggestions: vi.fn(async () => []) })
 }))
 
-vi.mock('@/components/SessionChat', () => ({
-    SessionChat: (props: { session: { id: string }; onFocusSession?: () => void }) => (
-        <div data-testid="pinned-panel">
-            {props.session.id}
-            {props.onFocusSession ? (
-                <button type="button" onClick={props.onFocusSession}>Mock focus session</button>
-            ) : null}
-        </div>
-    )
-}))
-
-vi.mock('@/components/FocusedSessionChatModal', () => ({
-    FocusedSessionChatModal: (props: { sessionId: string; onClose: () => void }) => (
-        <div role="dialog" aria-label="Focus session">
-            Focused modal {props.sessionId}
-            <button type="button" onClick={props.onClose}>Close focused modal</button>
-        </div>
-    )
-}))
+vi.mock('@/components/SessionChat', async () => {
+    const React = await import('react')
+    return {
+        SessionChat: (props: { session: { id: string }; onFocusSession?: () => void }) => {
+            const instanceId = React.useId()
+            const [draft, setDraft] = React.useState('')
+            React.useEffect(() => () => sessionChatUnmounts(props.session.id), [props.session.id])
+            return (
+                <div data-testid="pinned-panel-chat" data-instance-id={instanceId}>
+                    <span>{props.session.id}</span>
+                    <label>
+                        Draft
+                        <input
+                            aria-label="Mock composer draft"
+                            value={draft}
+                            onChange={(event) => setDraft(event.target.value)}
+                        />
+                    </label>
+                    {props.onFocusSession ? (
+                        <button type="button" onClick={props.onFocusSession}>Mock focus session</button>
+                    ) : null}
+                </div>
+            )
+        }
+    }
+})
 
 vi.mock('@/lib/use-translation', () => ({
     useTranslation: () => ({
@@ -134,6 +142,7 @@ function renderDashboard() {
 describe('Dashboard session context menu', () => {
     beforeEach(() => {
         navigate.mockClear()
+        sessionChatUnmounts.mockClear()
         sessionStorage.clear()
         setCoarsePointer(false)
     })
@@ -160,19 +169,43 @@ describe('Dashboard session context menu', () => {
         expect(sessionStorage.getItem('mc-pinned-ids')).toBe(JSON.stringify(['session-1']))
     })
 
-    it('opens and closes the focused session modal from a pinned panel focus callback', () => {
+    it('expands the existing pinned panel without remounting the session chat', () => {
+        renderDashboard()
+
+        fireEvent.click(screen.getByText('Build app'))
+        const chat = screen.getByTestId('pinned-panel-chat')
+        const instanceId = chat.getAttribute('data-instance-id')
+        fireEvent.change(screen.getByRole('textbox', { name: 'Mock composer draft' }), { target: { value: 'draft before focus' } })
+
+        fireEvent.click(screen.getByRole('button', { name: 'Mock focus session' }))
+
+        const focusedPanel = screen.getByTestId('focused-pinned-panel')
+        expect(focusedPanel).toContainElement(screen.getByTestId('pinned-panel-chat'))
+        expect(screen.getByTestId('pinned-panel-chat')).toHaveAttribute('data-instance-id', instanceId)
+        expect(screen.getByRole('textbox', { name: 'Mock composer draft' })).toHaveValue('draft before focus')
+        expect(screen.getByRole('button', { name: 'Close focus session' })).toBeInTheDocument()
+        expect(sessionStorage.getItem('mc-pinned-ids')).toBe(JSON.stringify(['session-1']))
+
+        fireEvent.click(screen.getByRole('button', { name: 'Close focus session' }))
+
+        expect(screen.queryByTestId('focused-pinned-panel')).not.toBeInTheDocument()
+        expect(screen.getByTestId('pinned-panel-chat')).toHaveAttribute('data-instance-id', instanceId)
+        expect(screen.getByRole('textbox', { name: 'Mock composer draft' })).toHaveValue('draft before focus')
+        expect(sessionChatUnmounts).not.toHaveBeenCalled()
+        expect(sessionStorage.getItem('mc-pinned-ids')).toBe(JSON.stringify(['session-1']))
+    })
+
+    it('closes focused pinned panel with Escape without unmounting the chat', () => {
         renderDashboard()
 
         fireEvent.click(screen.getByText('Build app'))
         fireEvent.click(screen.getByRole('button', { name: 'Mock focus session' }))
+        expect(screen.getByTestId('focused-pinned-panel')).toBeInTheDocument()
 
-        expect(screen.getByRole('dialog', { name: 'Focus session' })).toHaveTextContent('Focused modal session-1')
-        expect(sessionStorage.getItem('mc-pinned-ids')).toBe(JSON.stringify(['session-1']))
+        fireEvent.keyDown(window, { key: 'Escape' })
 
-        fireEvent.click(screen.getByRole('button', { name: 'Close focused modal' }))
-
-        expect(screen.queryByRole('dialog', { name: 'Focus session' })).not.toBeInTheDocument()
-        expect(sessionStorage.getItem('mc-pinned-ids')).toBe(JSON.stringify(['session-1']))
+        expect(screen.queryByTestId('focused-pinned-panel')).not.toBeInTheDocument()
+        expect(sessionChatUnmounts).not.toHaveBeenCalled()
     })
 
     it('opens the unified context menu from the explicit menu button', () => {

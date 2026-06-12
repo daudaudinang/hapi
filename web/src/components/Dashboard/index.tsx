@@ -14,7 +14,6 @@ import { fetchLatestMessages, seedMessageWindowFromSession } from '@/lib/message
 import { clearDraftsAfterSend } from '@/lib/clearDraftsAfterSend'
 import { compareSessionGroupOrder } from '@/lib/session-group-order'
 import { SessionChat } from '@/components/SessionChat'
-import { FocusedSessionChatModal } from '@/components/FocusedSessionChatModal'
 import type { ApiClient } from '@/api/client'
 import type { SessionSummary, AttachmentMetadata, Machine } from '@/types/api'
 import { useTranslation } from '@/lib/use-translation'
@@ -917,8 +916,12 @@ export function Dashboard({ api }: DashboardProps) {
     const [showOverviewDrawer, setShowOverviewDrawer] = useState(false)
     const [activePinIndex, setActivePinIndex] = useState(0)
     const [pendingReplacePin, setPendingReplacePin] = useState<string | null>(null)
-    const [focusedSessionId, setFocusedSessionId] = useState<string | null>(null)
+    const [focusedPinnedSessionId, setFocusedPinnedSessionId] = useState<string | null>(null)
     const [pinnedAction, setPinnedAction] = useState<{ id: string, x: number, y: number } | null>(null)
+
+    const closeFocusedPinnedSession = useCallback(() => {
+        setFocusedPinnedSessionId(null)
+    }, [])
 
     // ── Inline confirm ────────────────────────────────────────────────────────
     const [pendingConfirm, setPendingConfirm] = useState<{
@@ -1044,6 +1047,40 @@ export function Dashboard({ api }: DashboardProps) {
     const pinnedSessions = pinnedIds
         .map(id => sessions.find(s => s.id === id))
         .filter((s): s is SessionSummary => s !== undefined)
+
+    useEffect(() => {
+        if (!focusedPinnedSessionId) return
+        if (pinnedIds.includes(focusedPinnedSessionId)) return
+        setFocusedPinnedSessionId(null)
+    }, [focusedPinnedSessionId, pinnedIds])
+
+    useEffect(() => {
+        if (!focusedPinnedSessionId) return
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setFocusedPinnedSessionId(null)
+            }
+        }
+        window.addEventListener('keydown', onKeyDown)
+        return () => window.removeEventListener('keydown', onKeyDown)
+    }, [focusedPinnedSessionId])
+
+    useEffect(() => {
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
+        const media = window.matchMedia('(max-width: 768px)')
+        const closeIfMobile = () => {
+            if (media.matches) {
+                setFocusedPinnedSessionId(null)
+            }
+        }
+        closeIfMobile()
+        if (typeof media.addEventListener === 'function') {
+            media.addEventListener('change', closeIfMobile)
+            return () => media.removeEventListener('change', closeIfMobile)
+        }
+        media.addListener(closeIfMobile)
+        return () => media.removeListener(closeIfMobile)
+    }, [])
 
     const thinkingCount = [...statuses.values()].filter(s => s === 'thinking').length
     const doneCount = [...statuses.values()].filter(s => s === 'done').length
@@ -1453,39 +1490,67 @@ export function Dashboard({ api }: DashboardProps) {
             <div className={`db__content ${layoutClass}`}>
 
                 {/* Pinned panels area */}
+                {focusedPinnedSessionId ? (
+                    <button
+                        type="button"
+                        aria-label="Close focus session backdrop"
+                        className="db__pinned-focus-backdrop"
+                        onClick={closeFocusedPinnedSession}
+                    />
+                ) : null}
+
                 {hasPins && (
                     <div className="db__pinned-area">
-                        {pinnedSessions.map((s, idx) => (
-                            <div
-                                key={s.id}
-                                className={[
-                                    'db__pinned-panel',
-                                    pinnedIds.length >= 2 ? `db__pinned-panel--mobile-${idx === activePinIndex ? 'active' : 'hidden'}` : '',
-                                    s.id === modalNewSessionId ? 'ring-2 ring-[var(--app-button)]' : ''
-                                ].filter(Boolean).join(' ')}
-                                onClick={() => {
-                                    if (s.id === modalNewSessionId) clearNewSessionHighlight()
-                                }}
-                                onFocusCapture={() => {
-                                    if (s.id === modalNewSessionId) clearNewSessionHighlight()
-                                }}
-                            >
-                                <PinnedPanel
-                                    sessionId={s.id}
-                                    api={api}
-                                    onUnpin={() => handleUnpin(s.id)}
-                                    onSessionResolved={(newId) => {
-                                        setPinnedIds(prev => prev.map(id => id === s.id ? newId : id))
-                                        setFocusedSessionId(current => current === s.id ? newId : current)
+                        {pinnedSessions.map((s, idx) => {
+                            const isFocused = focusedPinnedSessionId === s.id
+                            return (
+                                <div
+                                    key={s.id}
+                                    data-testid={isFocused ? 'focused-pinned-panel' : undefined}
+                                    className={[
+                                        'db__pinned-panel',
+                                        isFocused ? 'db__pinned-panel--focused' : '',
+                                        focusedPinnedSessionId && !isFocused ? 'db__pinned-panel--focus-background' : '',
+                                        pinnedIds.length >= 2 ? `db__pinned-panel--mobile-${idx === activePinIndex ? 'active' : 'hidden'}` : '',
+                                        s.id === modalNewSessionId ? 'ring-2 ring-[var(--app-button)]' : ''
+                                    ].filter(Boolean).join(' ')}
+                                    onClick={() => {
+                                        if (s.id === modalNewSessionId) clearNewSessionHighlight()
                                     }}
-                                    pinIndex={idx + 1}
-                                    compact={true}
-                                    isActive={activePinIndex === idx}
-                                    onFocus={() => setActivePinIndex(idx)}
-                                    onFocusSession={() => setFocusedSessionId(s.id)}
-                                />
-                            </div>
-                        ))}
+                                    onFocusCapture={() => {
+                                        if (s.id === modalNewSessionId) clearNewSessionHighlight()
+                                    }}
+                                >
+                                    {isFocused ? (
+                                        <button
+                                            type="button"
+                                            aria-label="Close focus session"
+                                            className="db__pinned-focus-close"
+                                            onClick={closeFocusedPinnedSession}
+                                        >
+                                            Close
+                                        </button>
+                                    ) : null}
+                                    <PinnedPanel
+                                        sessionId={s.id}
+                                        api={api}
+                                        onUnpin={() => handleUnpin(s.id)}
+                                        onSessionResolved={(newId) => {
+                                            setPinnedIds(prev => prev.map(id => id === s.id ? newId : id))
+                                            setFocusedPinnedSessionId(current => current === s.id ? newId : current)
+                                        }}
+                                        pinIndex={idx + 1}
+                                        compact={true}
+                                        isActive={activePinIndex === idx}
+                                        onFocus={() => setActivePinIndex(idx)}
+                                        onFocusSession={() => {
+                                            setActivePinIndex(idx)
+                                            setFocusedPinnedSessionId(s.id)
+                                        }}
+                                    />
+                                </div>
+                            )
+                        })}
 
                         {/* 4th cell placeholder for 3-pin mode */}
                         {pinnedSessions.length === 3 && (
@@ -1551,15 +1616,6 @@ export function Dashboard({ api }: DashboardProps) {
                     </div>
                 )}
             </div>
-
-            {api && focusedSessionId ? (
-                <FocusedSessionChatModal
-                    api={api}
-                    sessionId={focusedSessionId}
-                    onClose={() => setFocusedSessionId(null)}
-                />
-            ) : null}
-
             {pendingReplacePin && (
                 <ReplacePinModal
                     sessionToPinId={pendingReplacePin}

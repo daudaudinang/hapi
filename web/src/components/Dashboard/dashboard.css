@@ -161,6 +161,51 @@
     border-right: none;
 }
 
+.db__pinned-focus-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 45;
+    border: 0;
+    padding: 0;
+    appearance: none;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(4px);
+    cursor: default;
+}
+
+.db__pinned-panel--focused {
+    position: fixed;
+    inset: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    z-index: 50;
+    border: 1px solid var(--app-border);
+    border-radius: 16px;
+    background: var(--app-bg);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+}
+
+.db__pinned-panel--focus-background {
+    pointer-events: none;
+}
+
+.db__pinned-focus-close {
+    position: absolute;
+    right: 14px;
+    top: 10px;
+    z-index: 2;
+    border: 1px solid var(--app-border);
+    border-radius: 8px;
+    background: var(--app-bg);
+    color: var(--app-fg);
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+}
+
+.db__pinned-focus-close:hover {
+    background: var(--app-secondary-bg);
+}
+
 .db__pinned-placeholder {
     flex: 1;
     min-width: 0;
@@ -517,6 +562,23 @@
     /* Sidebar hidden on mobile when pinned */
     .db__grid-area--sidebar {
         display: none;
+    }
+
+    .db__pinned-focus-backdrop,
+    .db__pinned-focus-close {
+        display: none;
+    }
+
+    .db__pinned-panel--focused {
+        position: static;
+        inset: auto;
+        z-index: auto;
+        border-radius: 0;
+        box-shadow: none;
+    }
+
+    .db__pinned-panel--focus-background {
+        pointer-events: auto;
     }
 
     /* Overview trigger moves to tab strip on mobile, so hide the desktop one */
