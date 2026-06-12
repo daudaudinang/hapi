@@ -905,6 +905,20 @@ function isMobileFocusViewport() {
     return window.matchMedia('(max-width: 768px)').matches
 }
 
+const FOCUSABLE_SELECTOR = [
+    'a[href]',
+    'button:not([disabled])',
+    'textarea:not([disabled])',
+    'input:not([disabled])',
+    'select:not([disabled])',
+    '[tabindex]:not([tabindex="-1"])'
+].join(',')
+
+function getFocusableElements(container: HTMLElement): HTMLElement[] {
+    return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
+        .filter(element => !element.getAttribute('aria-hidden'))
+}
+
 interface DashboardProps {
     api: ApiClient | null
 }
@@ -923,6 +937,9 @@ export function Dashboard({ api }: DashboardProps) {
     const [pendingReplacePin, setPendingReplacePin] = useState<string | null>(null)
     const [focusedPinnedSessionId, setFocusedPinnedSessionId] = useState<string | null>(null)
     const [pinnedAction, setPinnedAction] = useState<{ id: string, x: number, y: number } | null>(null)
+    const focusedPanelRef = useRef<HTMLDivElement | null>(null)
+    const focusedCloseButtonRef = useRef<HTMLButtonElement | null>(null)
+    const previouslyFocusedElementRef = useRef<HTMLElement | null>(null)
 
     const closeFocusedPinnedSession = useCallback(() => {
         setFocusedPinnedSessionId(null)
@@ -931,7 +948,34 @@ export function Dashboard({ api }: DashboardProps) {
     const openFocusedPinnedSession = useCallback((sessionId: string, index: number) => {
         setActivePinIndex(index)
         if (!isMobileFocusViewport()) {
+            previouslyFocusedElementRef.current = document.activeElement instanceof HTMLElement
+                ? document.activeElement
+                : null
             setFocusedPinnedSessionId(sessionId)
+        }
+    }, [])
+
+    const handleFocusedPanelKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+        if (event.key !== 'Tab') return
+        const panel = focusedPanelRef.current
+        if (!panel) return
+        const focusableElements = getFocusableElements(panel)
+        if (focusableElements.length === 0) {
+            event.preventDefault()
+            panel.focus()
+            return
+        }
+        const first = focusableElements[0]
+        const last = focusableElements[focusableElements.length - 1]
+        const active = document.activeElement
+        if (event.shiftKey && (active === first || !panel.contains(active))) {
+            event.preventDefault()
+            last.focus()
+            return
+        }
+        if (!event.shiftKey && active === last) {
+            event.preventDefault()
+            first.focus()
         }
     }, [])
 
@@ -1093,6 +1137,18 @@ export function Dashboard({ api }: DashboardProps) {
         media.addListener(closeIfMobile)
         return () => media.removeListener(closeIfMobile)
     }, [])
+
+    useEffect(() => {
+        if (focusedPinnedSessionId) {
+            focusedCloseButtonRef.current?.focus({ preventScroll: true })
+            return
+        }
+        const previouslyFocusedElement = previouslyFocusedElementRef.current
+        previouslyFocusedElementRef.current = null
+        if (previouslyFocusedElement && document.contains(previouslyFocusedElement)) {
+            previouslyFocusedElement.focus({ preventScroll: true })
+        }
+    }, [focusedPinnedSessionId])
 
     const thinkingCount = [...statuses.values()].filter(s => s === 'thinking').length
     const doneCount = [...statuses.values()].filter(s => s === 'done').length
@@ -1381,7 +1437,7 @@ export function Dashboard({ api }: DashboardProps) {
     return (
         <div className="db">
             {/* Top bar */}
-            <div className="db__topbar">
+            <div className="db__topbar" inert={focusedPinnedSessionId ? true : undefined} aria-hidden={focusedPinnedSessionId ? true : undefined}>
                 <div className="db__topbar-left">
                     <h1 className="db__title">Mission Control</h1>
                     <div className="db__stats">
@@ -1454,7 +1510,7 @@ export function Dashboard({ api }: DashboardProps) {
 
             {/* Mobile tab strip — shown on mobile when pinned sessions exist */}
             {hasPins && (
-                <div className="db__pinned-tabs">
+                <div className="db__pinned-tabs" inert={focusedPinnedSessionId ? true : undefined} aria-hidden={focusedPinnedSessionId ? true : undefined}>
                     <button
                         type="button"
                         className="db__pin-tab db__pin-tab--overview-trigger"
@@ -1518,7 +1574,17 @@ export function Dashboard({ api }: DashboardProps) {
                             return (
                                 <div
                                     key={s.id}
+                                    ref={node => {
+                                        if (isFocused) focusedPanelRef.current = node
+                                    }}
                                     data-testid={isFocused ? 'focused-pinned-panel' : undefined}
+                                    role={isFocused ? 'dialog' : undefined}
+                                    aria-modal={isFocused ? true : undefined}
+                                    aria-label={isFocused ? `Focus session ${getSessionTitle(s)}` : undefined}
+                                    aria-hidden={focusedPinnedSessionId && !isFocused ? true : undefined}
+                                    inert={focusedPinnedSessionId && !isFocused ? true : undefined}
+                                    tabIndex={isFocused ? -1 : undefined}
+                                    onKeyDown={isFocused ? handleFocusedPanelKeyDown : undefined}
                                     className={[
                                         'db__pinned-panel',
                                         isFocused ? 'db__pinned-panel--focused' : '',
@@ -1535,6 +1601,7 @@ export function Dashboard({ api }: DashboardProps) {
                                 >
                                     {isFocused ? (
                                         <button
+                                            ref={focusedCloseButtonRef}
                                             type="button"
                                             aria-label="Close focus session"
                                             className="db__pinned-focus-close"
@@ -1587,7 +1654,7 @@ export function Dashboard({ api }: DashboardProps) {
 
                 {/* Session card grid — sidebar when 1-2 pins, hidden when 3-4 pins */}
                 {(pinCount === 0 || hasOverflowSidebar) && (
-                    <div className={`db__grid-area ${hasPins ? 'db__grid-area--sidebar' : ''}`}>
+                    <div className={`db__grid-area ${hasPins ? 'db__grid-area--sidebar' : ''}`} inert={focusedPinnedSessionId ? true : undefined} aria-hidden={focusedPinnedSessionId ? true : undefined}>
                         {isLoading && <div className="db__loading">{t('dashboard.loadingSessions')}</div>}
 
                         {!isLoading && visibleSessions.length === 0 && !hasPins && (

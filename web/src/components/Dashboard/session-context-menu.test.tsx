@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Dashboard } from './index'
 import type { ApiClient } from '@/api/client'
@@ -117,16 +117,48 @@ function makeSession(overrides: Partial<SessionSummary> & { id: string }): Sessi
     }
 }
 
-function setMediaMatches({ coarsePointer = false, mobileViewport = false }: { coarsePointer?: boolean; mobileViewport?: boolean } = {}) {
+type MockMediaQueryList = {
+    matches: boolean
+    addEventListener?: ReturnType<typeof vi.fn>
+    removeEventListener?: ReturnType<typeof vi.fn>
+    addListener?: ReturnType<typeof vi.fn>
+    removeListener?: ReturnType<typeof vi.fn>
+    trigger: (matches: boolean) => void
+}
+
+let mobileMedia: MockMediaQueryList | null = null
+
+function createMockMediaQueryList(matches: boolean, legacy = false): MockMediaQueryList {
+    const modernListeners = new Set<(event: { matches: boolean }) => void>()
+    const legacyListeners = new Set<(event: { matches: boolean }) => void>()
+    const media: MockMediaQueryList = {
+        matches,
+        trigger(nextMatches: boolean) {
+            media.matches = nextMatches
+            const event = { matches: nextMatches }
+            modernListeners.forEach(listener => listener(event))
+            legacyListeners.forEach(listener => listener(event))
+        }
+    }
+    if (legacy) {
+        media.addListener = vi.fn((listener: (event: { matches: boolean }) => void) => legacyListeners.add(listener))
+        media.removeListener = vi.fn((listener: (event: { matches: boolean }) => void) => legacyListeners.delete(listener))
+    } else {
+        media.addEventListener = vi.fn((_event: string, listener: (event: { matches: boolean }) => void) => modernListeners.add(listener))
+        media.removeEventListener = vi.fn((_event: string, listener: (event: { matches: boolean }) => void) => modernListeners.delete(listener))
+    }
+    return media
+}
+
+function setMediaMatches({ coarsePointer = false, mobileViewport = false, legacyMobileListener = false }: { coarsePointer?: boolean; mobileViewport?: boolean; legacyMobileListener?: boolean } = {}) {
+    mobileMedia = createMockMediaQueryList(mobileViewport, legacyMobileListener)
     Object.defineProperty(window, 'matchMedia', {
         configurable: true,
-        value: vi.fn((query: string) => ({
-            matches: query.includes('pointer: coarse') ? coarsePointer
-                : query.includes('max-width: 768px') ? mobileViewport
-                : false,
-            addEventListener: vi.fn(),
-            removeEventListener: vi.fn(),
-        }))
+        value: vi.fn((query: string) => {
+            if (query.includes('pointer: coarse')) return createMockMediaQueryList(coarsePointer)
+            if (query.includes('max-width: 768px')) return mobileMedia
+            return createMockMediaQueryList(false)
+        })
     })
 }
 
@@ -150,6 +182,7 @@ describe('Dashboard session context menu', () => {
         navigate.mockClear()
         sessionChatUnmounts.mockClear()
         sessionStorage.clear()
+        mobileMedia = null
         setCoarsePointer(false)
     })
 
@@ -185,11 +218,13 @@ describe('Dashboard session context menu', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Mock focus session' }))
 
-        const focusedPanel = screen.getByTestId('focused-pinned-panel')
+        const focusedPanel = screen.getByRole('dialog', { name: 'Focus session Build app' })
+        expect(focusedPanel).toHaveAttribute('aria-modal', 'true')
+        expect(focusedPanel).toHaveAttribute('data-testid', 'focused-pinned-panel')
         expect(focusedPanel).toContainElement(screen.getByTestId('pinned-panel-chat'))
         expect(screen.getByTestId('pinned-panel-chat')).toHaveAttribute('data-instance-id', instanceId)
         expect(screen.getByRole('textbox', { name: 'Mock composer draft' })).toHaveValue('draft before focus')
-        expect(screen.getByRole('button', { name: 'Close focus session' })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Close focus session' })).toHaveFocus()
         expect(sessionStorage.getItem('mc-pinned-ids')).toBe(JSON.stringify(['session-1']))
 
         fireEvent.click(screen.getByRole('button', { name: 'Close focus session' }))
@@ -209,6 +244,71 @@ describe('Dashboard session context menu', () => {
         expect(screen.getByTestId('focused-pinned-panel')).toBeInTheDocument()
 
         fireEvent.keyDown(window, { key: 'Escape' })
+
+        expect(screen.queryByTestId('focused-pinned-panel')).not.toBeInTheDocument()
+        expect(sessionChatUnmounts).not.toHaveBeenCalled()
+    })
+
+    it('keeps keyboard focus inside the focused pinned panel and restores focus on close', () => {
+        renderDashboard()
+
+        fireEvent.click(screen.getByText('Build app'))
+        const focusButton = screen.getByRole('button', { name: 'Mock focus session' })
+        focusButton.focus()
+        fireEvent.click(focusButton)
+
+        const focusedPanel = screen.getByRole('dialog', { name: 'Focus session Build app' })
+        const closeButton = screen.getByRole('button', { name: 'Close focus session' })
+        expect(closeButton).toHaveFocus()
+
+        fireEvent.keyDown(focusedPanel, { key: 'Tab', shiftKey: true })
+        expect(focusedPanel.contains(document.activeElement)).toBe(true)
+
+        fireEvent.click(closeButton)
+        expect(focusButton).toHaveFocus()
+        expect(sessionChatUnmounts).not.toHaveBeenCalled()
+    })
+
+    it('closes focused pinned panel from backdrop without unmounting the chat or losing draft', () => {
+        renderDashboard()
+
+        fireEvent.click(screen.getByText('Build app'))
+        const chat = screen.getByTestId('pinned-panel-chat')
+        const instanceId = chat.getAttribute('data-instance-id')
+        fireEvent.change(screen.getByRole('textbox', { name: 'Mock composer draft' }), { target: { value: 'draft before backdrop' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Mock focus session' }))
+
+        fireEvent.click(screen.getByRole('button', { name: 'Close focus session backdrop' }))
+
+        expect(screen.queryByTestId('focused-pinned-panel')).not.toBeInTheDocument()
+        expect(screen.getByTestId('pinned-panel-chat')).toHaveAttribute('data-instance-id', instanceId)
+        expect(screen.getByRole('textbox', { name: 'Mock composer draft' })).toHaveValue('draft before backdrop')
+        expect(sessionChatUnmounts).not.toHaveBeenCalled()
+    })
+
+    it('closes focused pinned panel when viewport becomes mobile', () => {
+        renderDashboard()
+
+        fireEvent.click(screen.getByText('Build app'))
+        fireEvent.click(screen.getByRole('button', { name: 'Mock focus session' }))
+        expect(screen.getByTestId('focused-pinned-panel')).toBeInTheDocument()
+
+        act(() => mobileMedia?.trigger(true))
+
+        expect(screen.queryByTestId('focused-pinned-panel')).not.toBeInTheDocument()
+        expect(sessionChatUnmounts).not.toHaveBeenCalled()
+    })
+
+    it('closes focused pinned panel through legacy mobile media listener', () => {
+        setMediaMatches({ legacyMobileListener: true })
+        renderDashboard()
+
+        fireEvent.click(screen.getByText('Build app'))
+        fireEvent.click(screen.getByRole('button', { name: 'Mock focus session' }))
+        expect(screen.getByTestId('focused-pinned-panel')).toBeInTheDocument()
+        expect(mobileMedia?.addListener).toHaveBeenCalled()
+
+        act(() => mobileMedia?.trigger(true))
 
         expect(screen.queryByTestId('focused-pinned-panel')).not.toBeInTheDocument()
         expect(sessionChatUnmounts).not.toHaveBeenCalled()
