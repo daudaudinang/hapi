@@ -38,7 +38,7 @@ export default defineConfig({
     },
     server: {
         host: true,
-        allowedHosts: ['hapidev.weishu.me', "4173.littlepea.site"],
+        allowedHosts: ['hapidev.weishu.me', "4173.littlepea.site", "4173.littlepea.cloud"],
         proxy: {
             '/api': {
                 target: hubTarget,
