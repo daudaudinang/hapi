@@ -1,0 +1,1646 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="light" style="--rec-label: '★ Đề xuất'">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <title>HAPI Visual Inspector PRD</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    /* ============================================================
+       TOKENS
+       ============================================================ */
+    :root {
+      --bg: #FAFAF7;
+      --surface: #FFFFFF;
+      --surface-2: #F5F5F0;
+      --surface-3: #EFEEE8;
+      --text: #1A1A1A;
+      --text-muted: #4A4A45;
+      --text-subtle: #6B6B66;
+      --accent: #D97757;
+      --accent-hover: #C56843;
+      --accent-soft: #FBEEE6;
+      --accent-border: #F0D5C4;
+      --accent-strong: #A85533;
+      --border: #E5E4DC;
+      --border-strong: #CDCDC4;
+      --code-bg: #F5F2EC;
+      --code-text: #2A2A2A;
+      --info: #2563EB;
+      --info-soft: #EFF6FF;
+      --info-border: #BFDBFE;
+      --warn: #B45309;
+      --warn-soft: #FFFBEB;
+      --warn-border: #FDE68A;
+      --danger: #B91C1C;
+      --danger-soft: #FEF2F2;
+      --danger-border: #FECACA;
+      --success: #047857;
+      --success-soft: #ECFDF5;
+      --success-border: #A7F3D0;
+      --decision: #6D28D9;
+      --decision-soft: #F5F3FF;
+      --decision-border: #DDD6FE;
+      --shadow-sm: 0 1px 2px rgba(20, 14, 8, 0.04);
+      --shadow: 0 1px 2px rgba(20, 14, 8, 0.04), 0 4px 12px rgba(20, 14, 8, 0.06);
+      --shadow-lg: 0 8px 24px rgba(20, 14, 8, 0.10);
+      --radius: 12px;
+      --radius-sm: 8px;
+      --radius-lg: 16px;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Noto Sans CJK JP', 'Noto Sans CJK KR', sans-serif;
+      --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+      --z-progress: 200;
+      --z-topbar: 100;
+      --z-drawer: 300;
+      --z-backdrop: 250;
+    }
+
+    [data-theme="dark"] {
+      --bg: #1A1714;
+      --surface: #221E1A;
+      --surface-2: #2A2520;
+      --surface-3: #322C26;
+      --text: #F5F0E8;
+      --text-muted: #C8C0B6;
+      --text-subtle: #9A938A;
+      --accent: #E89572;
+      --accent-hover: #F2A87F;
+      --accent-soft: #3A2A22;
+      --accent-border: #5A3D2E;
+      --accent-strong: #F5B493;
+      --border: #2E2924;
+      --border-strong: #463F38;
+      --code-bg: #1E1B17;
+      --code-text: #E8E2D8;
+      --info: #93C5FD;
+      --info-soft: #1E2A3D;
+      --info-border: #2A4365;
+      --warn: #FBBF24;
+      --warn-soft: #332817;
+      --warn-border: #5C4520;
+      --danger: #FCA5A5;
+      --danger-soft: #3A1F1F;
+      --danger-border: #5C2A2A;
+      --success: #6EE7B7;
+      --success-soft: #1A3329;
+      --success-border: #1F5C45;
+      --decision: #C4B5FD;
+      --decision-soft: #2A1F40;
+      --decision-border: #4A3870;
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.25), 0 4px 12px rgba(0, 0, 0, 0.35);
+      --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.45);
+    }
+
+    /* ============================================================
+       BASE
+       ============================================================ */
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 80px; }
+    body {
+      margin: 0;
+      font-family: var(--font-sans);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      font-size: 16px;
+      -webkit-font-smoothing: antialiased;
+      transition: background-color 0.2s, color 0.2s;
+    }
+    ::selection { background: var(--accent-soft); color: var(--accent-strong); }
+
+    /* Skip link */
+    .skip-link {
+      position: absolute;
+      top: -100px; left: 8px;
+      padding: 10px 16px;
+      background: var(--accent);
+      color: #fff;
+      text-decoration: none;
+      border-radius: var(--radius-sm);
+      font-weight: 500;
+      z-index: 1000;
+      transition: top 0.15s;
+    }
+    .skip-link:focus { top: 8px; }
+
+    /* SVG sprite container (hidden) */
+    .icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+    .icon { display: inline-block; flex-shrink: 0; vertical-align: middle; stroke: currentColor; fill: none; }
+
+    /* Scroll progress bar */
+    .scroll-progress {
+      position: fixed;
+      top: 0; left: 0;
+      height: 2px;
+      width: 0;
+      background: var(--accent);
+      z-index: var(--z-progress);
+      transition: width 0.05s linear;
+    }
+
+    /* ============================================================
+       TOPBAR
+       ============================================================ */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: var(--z-topbar);
+      background: rgba(250, 250, 247, 0.85);
+      backdrop-filter: saturate(180%) blur(12px);
+      -webkit-backdrop-filter: saturate(180%) blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    [data-theme="dark"] .topbar { background: rgba(26, 23, 20, 0.85); }
+    .topbar-inner {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      color: var(--text);
+      font-size: 14px;
+    }
+    .brand-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 4px var(--accent-soft);
+      animation: brand-pulse 2.8s ease-in-out infinite;
+    }
+    @keyframes brand-pulse {
+      0%, 100% { box-shadow: 0 0 0 4px var(--accent-soft); }
+      50%      { box-shadow: 0 0 0 7px transparent; }
+    }
+    .topbar-actions { display: flex; gap: 6px; align-items: center; }
+    .icon-btn {
+      width: 40px; height: 40px;
+      display: inline-flex; align-items: center; justify-content: center;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-muted);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s, background-color 0.15s;
+      padding: 0;
+    }
+    .icon-btn .icon { width: 18px; height: 18px; stroke-width: 2; }
+    .icon-btn[hidden] { display: none; }
+
+    /* ============================================================
+       LAYOUT
+       ============================================================ */
+    .layout {
+      max-width: 1280px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      gap: 48px;
+      padding: 32px 24px 96px;
+    }
+    .content { min-width: 0; }
+
+    /* ============================================================
+       TOC (desktop + mobile drawer)
+       ============================================================ */
+    .toc {
+      position: sticky;
+      top: 80px;
+      align-self: start;
+      max-height: calc(100vh - 100px);
+      overflow-y: auto;
+      padding-right: 8px;
+    }
+    .toc::-webkit-scrollbar { width: 6px; }
+    .toc::-webkit-scrollbar-track { background: transparent; }
+    .toc::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+    .toc-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 12px 12px;
+    }
+    .toc-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-subtle);
+      margin: 0;
+    }
+    .toc-close { display: none; }
+    .toc-nav { display: flex; flex-direction: column; gap: 2px; }
+    .toc-nav a {
+      display: flex; align-items: center;
+      min-height: 36px;
+      padding: 8px 14px;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 13.5px;
+      border-left: 2px solid transparent;
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      transition: color 0.15s, background-color 0.15s, border-color 0.15s;
+      line-height: 1.4;
+    }
+    .toc-nav a.active {
+      color: var(--accent);
+      border-left-color: var(--accent);
+      background: var(--accent-soft);
+      font-weight: 500;
+    }
+    .toc-nav a.lvl-3 { padding-left: 26px; font-size: 12.5px; }
+    .toc-backdrop {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      z-index: var(--z-backdrop);
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    /* ============================================================
+       DOC HEADER
+       ============================================================ */
+    .doc-header {
+      margin-bottom: 40px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .doc-eyebrow {
+      display: inline-flex; align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      background: var(--accent-soft);
+      color: var(--accent-strong);
+      border: 1px solid var(--accent-border);
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      margin-bottom: 16px;
+    }
+    .doc-title {
+      font-size: clamp(28px, 3vw + 16px, 40px);
+      font-weight: 700;
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+      margin: 0 0 12px;
+      color: var(--text);
+      text-wrap: balance;
+    }
+    .doc-subtitle {
+      font-size: clamp(15px, 0.6vw + 13px, 18px);
+      color: var(--text-muted);
+      line-height: 1.55;
+      margin: 0 0 20px;
+      max-width: 75ch;
+      text-wrap: pretty;
+    }
+    .doc-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      font-size: 13px;
+      color: var(--text-subtle);
+    }
+    .doc-meta-item { display: inline-flex; align-items: center; gap: 6px; }
+    .doc-meta .icon { width: 14px; height: 14px; stroke-width: 2; }
+
+    /* ============================================================
+       CONTENT (typography)
+       ============================================================ */
+    .content h1, .content h2, .content h3, .content h4 {
+      color: var(--text);
+      line-height: 1.3;
+      letter-spacing: -0.01em;
+      scroll-margin-top: 80px;
+      text-wrap: balance;
+    }
+    .content h2 {
+      font-size: 26px;
+      font-weight: 600;
+      margin: 56px 0 16px;
+      padding-top: 8px;
+      position: relative;
+    }
+    .content h3 {
+      font-size: 19px;
+      font-weight: 600;
+      margin: 36px 0 12px;
+      position: relative;
+    }
+    .content h4 {
+      font-size: 13px;
+      font-weight: 600;
+      margin: 24px 0 8px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .content > p,
+    .content > ul,
+    .content > ol,
+    .content > blockquote { max-width: 75ch; }
+    .content p { margin: 0 0 16px; text-wrap: pretty; overflow-wrap: anywhere; }
+    .content a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-border); }
+    .content ul, .content ol { padding-left: 24px; margin: 0 0 16px; }
+    .content li { margin: 4px 0; }
+    .content strong { color: var(--text); font-weight: 600; }
+    .content em { color: var(--text-muted); }
+    .content hr { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+
+    /* Anchor links injected by JS on h2/h3 with id */
+    .anchor {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 24px; height: 24px;
+      margin-left: 6px;
+      color: var(--text-subtle);
+      opacity: 0;
+      transform: translateY(-1px);
+      transition: opacity 0.15s, color 0.15s;
+      border-bottom: none !important;
+      border-radius: var(--radius-sm);
+    }
+    .anchor .icon { width: 14px; height: 14px; stroke-width: 2; }
+
+    /* Images */
+    .content img {
+      max-width: 100%;
+      height: auto;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      margin: 20px 0;
+      display: block;
+    }
+    .content figure { margin: 20px 0; }
+    .content figure img { margin: 0; }
+    .content figcaption {
+      font-size: 13px;
+      color: var(--text-subtle);
+      margin-top: 8px;
+      text-align: center;
+    }
+
+    /* Task lists (- [ ] / - [x]) */
+    .content .task-list-item { list-style: none; margin-left: -22px; }
+    .content .task-list-item-checkbox {
+      margin-right: 8px;
+      vertical-align: -2px;
+      accent-color: var(--accent);
+    }
+
+    /* Footnotes */
+    .content .footnote-ref a,
+    .content sup a {
+      font-size: 0.75em;
+      vertical-align: super;
+      border-bottom: none;
+      padding: 0 2px;
+    }
+    .content .footnotes {
+      margin-top: 56px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    /* ============================================================
+       CODE
+       ============================================================ */
+    .content code {
+      font-family: var(--font-mono);
+      background: var(--code-bg);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.88em;
+      color: var(--code-text);
+      border: 1px solid var(--border);
+      overflow-wrap: anywhere;
+    }
+    .content pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      overflow-x: auto;
+      font-size: 13.5px;
+      line-height: 1.6;
+      margin: 16px 0;
+      position: relative;
+    }
+    .content pre code {
+      background: none; padding: 0; border: none;
+      color: var(--code-text);
+      font-size: inherit;
+    }
+    .copy-btn {
+      position: absolute;
+      top: 8px; right: 8px;
+      width: 32px; height: 32px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      color: var(--text-subtle);
+      opacity: 0;
+      transition: opacity 0.15s, color 0.15s, border-color 0.15s;
+      padding: 0;
+    }
+    .copy-btn .icon { width: 14px; height: 14px; stroke-width: 2; }
+    .copy-btn.copied { color: var(--success); border-color: var(--success-border); opacity: 1; }
+
+    /* ============================================================
+       TIMELINE / STEPS
+       ============================================================ */
+    .timeline {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin: 24px 0;
+      position: relative;
+    }
+    .timeline::before {
+      content: "";
+      position: absolute;
+      left: 19px;
+      top: 20px;
+      bottom: 20px;
+      width: 2px;
+      background: linear-gradient(180deg, var(--accent-border), var(--border));
+    }
+    .step {
+      display: grid;
+      grid-template-columns: 40px 1fr;
+      gap: 16px;
+      align-items: start;
+      padding: 16px 4px;
+      position: relative;
+      border-radius: var(--radius);
+      transition: background-color 0.15s;
+    }
+    .step-num {
+      width: 40px; height: 40px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: var(--surface);
+      border: 2px solid var(--accent);
+      color: var(--accent);
+      border-radius: 50%;
+      font-weight: 600;
+      font-size: 14px;
+      flex-shrink: 0;
+      box-shadow: var(--shadow-sm);
+      position: relative;
+      z-index: 1;
+      transition: background-color 0.15s, color 0.15s, transform 0.15s;
+    }
+    .step.done .step-num { background: var(--accent); color: #fff; }
+    .step-body { padding-top: 6px; min-width: 0; }
+    .step-body h3 {
+      margin: 0 0 6px;
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .step-body p { margin: 0 0 8px; color: var(--text-muted); font-size: 14.5px; max-width: 75ch; }
+    .step-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 11.5px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+
+    /* ============================================================
+       CALLOUTS
+       ============================================================ */
+    .callout {
+      display: grid;
+      grid-template-columns: 24px 1fr;
+      gap: 14px;
+      padding: 14px 18px;
+      border-radius: var(--radius);
+      border: 1px solid;
+      margin: 20px 0;
+      font-size: 14.5px;
+      line-height: 1.6;
+      max-width: 75ch;
+    }
+    .callout-icon { width: 20px; height: 20px; margin-top: 2px; stroke-width: 2; }
+    .callout-body { min-width: 0; }
+    .callout-title { font-weight: 600; margin: 0 0 4px; font-size: 14px; }
+    .callout-body p:last-child { margin-bottom: 0; }
+    .callout-body code { background: rgba(0,0,0,0.04); }
+    [data-theme="dark"] .callout-body code { background: rgba(255,255,255,0.06); }
+
+    .callout-info     { background: var(--info-soft);     border-color: var(--info-border);     color: var(--text); }
+    .callout-info     .callout-title, .callout-info     .callout-icon { color: var(--info); }
+    .callout-warn     { background: var(--warn-soft);     border-color: var(--warn-border);     color: var(--text); }
+    .callout-warn     .callout-title, .callout-warn     .callout-icon { color: var(--warn); }
+    .callout-danger   { background: var(--danger-soft);   border-color: var(--danger-border);   color: var(--text); }
+    .callout-danger   .callout-title, .callout-danger   .callout-icon { color: var(--danger); }
+    .callout-success  { background: var(--success-soft);  border-color: var(--success-border);  color: var(--text); }
+    .callout-success  .callout-title, .callout-success  .callout-icon { color: var(--success); }
+    .callout-decision { background: var(--decision-soft); border-color: var(--decision-border); color: var(--text); }
+    .callout-decision .callout-title, .callout-decision .callout-icon { color: var(--decision); }
+    .callout-tip      { background: var(--accent-soft);   border-color: var(--accent-border);   color: var(--text); }
+    .callout-tip      .callout-title, .callout-tip      .callout-icon { color: var(--accent-strong); }
+
+    /* ============================================================
+       KEY-POINT HIGHLIGHT
+       ============================================================ */
+    .highlight {
+      background: linear-gradient(135deg, var(--accent-soft), var(--surface-2));
+      border-left: 4px solid var(--accent);
+      padding: 18px 22px;
+      border-radius: 0 var(--radius) var(--radius) 0;
+      margin: 24px 0;
+      font-size: 16px;
+      line-height: 1.65;
+      max-width: 75ch;
+    }
+    .highlight-label {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent-strong);
+      margin-bottom: 6px;
+    }
+
+    /* ============================================================
+       MERMAID
+       ============================================================ */
+    .diagram {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      margin: 24px 0;
+      box-shadow: var(--shadow-sm);
+      overflow-x: auto;
+    }
+    .diagram-caption {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px dashed var(--border);
+      font-size: 13px;
+      color: var(--text-subtle);
+      text-align: center;
+    }
+    .mermaid { text-align: center; min-height: 80px; }
+    .mermaid svg { max-width: 100%; height: auto; }
+    .mermaid:not([data-processed]) {
+      opacity: 0.4;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-subtle);
+      white-space: pre-wrap;
+      text-align: left;
+    }
+
+    /* ============================================================
+       PROS / CONS
+       ============================================================ */
+    .proscons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin: 24px 0;
+    }
+    .proscons-col {
+      padding: 16px 20px;
+      border-radius: var(--radius);
+      border: 1px solid;
+    }
+    .proscons-col h4 {
+      margin: 0 0 12px;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .proscons-col ul { margin: 0; padding-left: 18px; }
+    .proscons-col li { margin: 6px 0; }
+    .pros { background: var(--success-soft); border-color: var(--success-border); }
+    .pros h4 { color: var(--success); }
+    .cons { background: var(--danger-soft); border-color: var(--danger-border); }
+    .cons h4 { color: var(--danger); }
+
+    /* ============================================================
+       COMPARISON CARDS
+       ============================================================ */
+    .compare {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+      margin: 24px 0;
+    }
+    .compare-card {
+      padding: 18px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      transition: border-color 0.18s, box-shadow 0.18s;
+      position: relative;
+    }
+    .compare-card.recommended { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+    .compare-card.recommended::before {
+      content: var(--rec-label, "★ Recommended");
+      position: absolute; top: -10px; right: 14px;
+      background: var(--accent); color: #fff;
+      padding: 2px 10px; border-radius: 999px;
+      font-size: 11px; font-weight: 600;
+    }
+    .compare-card h4 { margin: 0 0 8px; font-size: 15px; color: var(--text); text-transform: none; letter-spacing: normal; }
+    .compare-card p { margin: 0; color: var(--text-muted); font-size: 14px; }
+
+    /* ============================================================
+       COLLAPSIBLE
+       ============================================================ */
+    details.collapsible {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin: 16px 0;
+      background: var(--surface);
+      overflow: hidden;
+    }
+    details.collapsible[open] { box-shadow: var(--shadow-sm); }
+    details.collapsible > summary {
+      cursor: pointer;
+      padding: 14px 18px;
+      font-weight: 500;
+      color: var(--text);
+      list-style: none;
+      display: flex; align-items: center; gap: 10px;
+      user-select: none;
+      transition: background 0.15s;
+      min-height: 44px;
+    }
+    details.collapsible > summary::-webkit-details-marker { display: none; }
+    details.collapsible > summary::before {
+      content: "›";
+      display: inline-block;
+      transition: transform 0.18s;
+      color: var(--accent);
+      font-size: 18px;
+      font-weight: 700;
+    }
+    details.collapsible[open] > summary::before { transform: rotate(90deg); }
+    .collapsible-body { padding: 4px 18px 18px; border-top: 1px solid var(--border); }
+    .collapsible-body > *:first-child { margin-top: 12px; }
+
+    /* ============================================================
+       TABLES (wrapped via .table-wrap or naturally responsive)
+       ============================================================ */
+    .table-wrap {
+      overflow-x: auto;
+      margin: 20px 0;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      max-width: 100%;
+    }
+    .content table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      background: var(--surface);
+      margin: 0;
+    }
+    /* Standalone tables (not inside .table-wrap) keep visual border */
+    .content > table {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin: 20px 0;
+      display: block;
+      overflow-x: auto;
+    }
+    .content th {
+      background: var(--surface-2);
+      color: var(--text);
+      font-weight: 600;
+      text-align: left;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+    }
+    .content td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-muted);
+      vertical-align: top;
+    }
+    .content tr:last-child td { border-bottom: none; }
+
+    /* ============================================================
+       BLOCKQUOTE
+       ============================================================ */
+    .content blockquote {
+      margin: 20px 0;
+      padding: 4px 20px;
+      border-left: 3px solid var(--accent-border);
+      color: var(--text-muted);
+      font-style: italic;
+    }
+
+    /* ============================================================
+       FOOTER
+       ============================================================ */
+    .doc-footer {
+      margin-top: 80px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      font-size: 13px;
+      color: var(--text-subtle);
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .doc-footer a { color: var(--accent); text-decoration: none; }
+
+    /* ============================================================
+       FOCUS-VISIBLE (a11y)
+       ============================================================ */
+    *:focus { outline: none; }
+    *:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
+      border-radius: var(--radius-sm);
+    }
+    .toc-nav a:focus-visible { outline-offset: -2px; }
+    .icon-btn:focus-visible { outline-offset: 2px; }
+    .anchor:focus-visible { opacity: 1; outline-offset: 2px; }
+    details.collapsible > summary:focus-visible { outline-offset: -2px; }
+
+    /* ============================================================
+       HOVER (only on hover-capable devices to avoid sticky-tap on mobile)
+       ============================================================ */
+    @media (hover: hover) {
+      .icon-btn:hover { color: var(--accent); border-color: var(--accent-border); background: var(--accent-soft); }
+      .toc-nav a:hover { color: var(--accent); background: var(--accent-soft); }
+      .content a:hover { color: var(--accent-hover); border-bottom-color: var(--accent); }
+      .compare-card:hover { border-color: var(--accent-border); box-shadow: var(--shadow); }
+      .compare-card.recommended:hover { border-color: var(--accent); }
+      .content tr:hover td { background: var(--surface-2); }
+      details.collapsible > summary:hover { background: var(--surface-2); }
+      .step:hover { background: var(--surface-2); }
+      .step:hover .step-num { transform: scale(1.05); }
+      .anchor:hover { color: var(--accent); }
+      .content h2:hover .anchor,
+      .content h3:hover .anchor { opacity: 1; }
+      .copy-btn:hover { color: var(--accent); border-color: var(--accent-border); }
+      .content pre:hover .copy-btn { opacity: 1; }
+    }
+    /* On touch devices, copy-btn is always visible at low opacity */
+    @media (hover: none) {
+      .copy-btn { opacity: 0.6; }
+      .anchor { opacity: 0.4; }
+    }
+
+    /* ============================================================
+       MOBILE (≤900px) — TOC becomes off-canvas drawer
+       ============================================================ */
+    @media (max-width: 900px) {
+      .layout {
+        grid-template-columns: 1fr;
+        gap: 16px;
+        padding: 20px 16px 80px;
+      }
+      .topbar-inner { padding: 8px 12px; }
+      .doc-header { margin-bottom: 28px; padding-bottom: 20px; }
+
+      .toc-mobile-trigger { display: inline-flex !important; }
+
+      .toc {
+        position: fixed;
+        top: 0; left: 0;
+        width: min(300px, 82vw);
+        height: 100dvh;
+        max-height: 100dvh;
+        background: var(--surface);
+        z-index: var(--z-drawer);
+        padding: 16px 8px 24px 16px;
+        box-shadow: var(--shadow-lg);
+        transform: translateX(-105%);
+        transition: transform 0.25s ease;
+      }
+      .toc-head { padding: 4px 4px 12px 8px; }
+      .toc-close {
+        display: inline-flex !important;
+        width: 36px; height: 36px;
+        align-items: center; justify-content: center;
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: var(--radius-sm);
+        color: var(--text-muted);
+        cursor: pointer;
+        padding: 0;
+      }
+      .toc-close .icon { width: 18px; height: 18px; stroke-width: 2; }
+      body.toc-open .toc { transform: translateX(0); }
+      body.toc-open .toc-backdrop {
+        display: block;
+        opacity: 1;
+      }
+      .toc-backdrop {
+        display: block;
+        opacity: 0;
+        pointer-events: none;
+      }
+      body.toc-open .toc-backdrop { pointer-events: auto; }
+      body.toc-open { overflow: hidden; }
+    }
+    @media (min-width: 901px) {
+      .toc-mobile-trigger { display: none !important; }
+    }
+
+    /* ============================================================
+       REDUCED MOTION (a11y)
+       ============================================================ */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+      html { scroll-behavior: auto; }
+      .brand-dot { animation: none; box-shadow: 0 0 0 4px var(--accent-soft); }
+    }
+
+    /* ============================================================
+       PRINT
+       ============================================================ */
+    @media print {
+      .topbar, .toc, .toc-backdrop, .icon-btn, .copy-btn, .anchor, .scroll-progress { display: none !important; }
+      .layout { grid-template-columns: 1fr; padding: 0; max-width: 100%; }
+      body { background: #fff; color: #000; }
+      a { color: #000; }
+      .content pre, .callout, .compare-card, .step, .diagram { break-inside: avoid; }
+      .doc-footer { break-before: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Skip link for keyboard users -->
+  <a href="#main" class="skip-link">Bỏ qua menu</a>
+
+  <!-- Scroll progress -->
+  <div class="scroll-progress" id="scroll-progress" aria-hidden="true"></div>
+
+  <!-- SVG icon sprite (Lucide-style) -->
+  <svg class="icon-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></symbol>
+    <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+    <symbol id="i-danger" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></symbol>
+    <symbol id="i-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></symbol>
+    <symbol id="i-decision" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol>
+    <symbol id="i-tip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14a5 5 0 1 0-6.18 0 4 4 0 0 1 1.59 2h2.99a4 4 0 0 1 1.6-2Z"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+    <symbol id="i-printer" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="18" y2="18"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+  </svg>
+
+  <!-- Topbar -->
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <button class="icon-btn toc-mobile-trigger" id="toc-toggle" onclick="openToc()" aria-label="Mục lục" title="Mục lục">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-menu"/></svg>
+        </button>
+        <span class="brand-dot" aria-hidden="true"></span>
+        <span>Đặc tả</span>
+      </div>
+      <div class="topbar-actions">
+        <button class="icon-btn" onclick="window.print()" title="In / Lưu PDF" aria-label="In / Lưu PDF">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-printer"/></svg>
+        </button>
+        <button class="icon-btn" id="theme-toggle" onclick="toggleTheme()" title="Đổi theme" aria-label="Đổi theme">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use id="theme-icon-use" href="#i-moon"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- TOC drawer backdrop (mobile) -->
+  <div class="toc-backdrop" onclick="closeToc()" aria-hidden="true"></div>
+
+  <div class="layout">
+    <aside class="toc" id="toc" aria-label="Mục lục">
+      <div class="toc-head">
+        <p class="toc-title">Mục lục</p>
+        <button class="toc-close" onclick="closeToc()" aria-label="Đóng">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-x"/></svg>
+        </button>
+      </div>
+      <nav class="toc-nav" id="toc-nav">
+        <a href="#1-tom-tat" class="lvl-2">1. Tóm tắt</a>
+<a href="#2-van-de-can-giai-quyet" class="lvl-2">2. Vấn đề cần giải quyết</a>
+<a href="#3-muc-tieu" class="lvl-2">3. Mục tiêu</a>
+<a href="#3-1-muc-tieu-san-pham" class="lvl-3">3.1 Mục tiêu sản phẩm</a>
+<a href="#3-2-muc-tieu-ky-thuat" class="lvl-3">3.2 Mục tiêu kỹ thuật</a>
+<a href="#4-khong-lam-trong-mvp" class="lvl-2">4. Không làm trong MVP</a>
+<a href="#5-nguoi-dung-chinh" class="lvl-2">5. Người dùng chính</a>
+<a href="#5-1-developer-dung-hapi-tu-may-khac-hoac-dien-thoai" class="lvl-3">5.1 Developer dùng HAPI từ máy khác hoặc điện thoại</a>
+<a href="#5-2-pm-designer-ky-thuat-nhe" class="lvl-3">5.2 PM/designer kỹ thuật nhẹ</a>
+<a href="#5-3-agent-trong-hapi-session" class="lvl-3">5.3 Agent trong HAPI session</a>
+<a href="#6-khai-niem-cot-loi" class="lvl-2">6. Khái niệm cốt lõi</a>
+<a href="#6-1-visual-inspector" class="lvl-3">6.1 Visual Inspector</a>
+<a href="#6-2-browser-target" class="lvl-3">6.2 Browser Target</a>
+<a href="#6-3-latest-view" class="lvl-3">6.3 Latest View</a>
+<a href="#6-4-inspect-mode" class="lvl-3">6.4 Inspect Mode</a>
+<a href="#6-5-control-mode" class="lvl-3">6.5 Control Mode</a>
+<a href="#6-6-debug-card" class="lvl-3">6.6 Debug Card</a>
+<a href="#7-luong-chinh" class="lvl-2">7. Luồng chính</a>
+<a href="#7-1-mo-visual-inspector" class="lvl-3">7.1 Mở Visual Inspector</a>
+<a href="#7-2-inspect-loi-bang-mat" class="lvl-3">7.2 Inspect lỗi bằng mắt</a>
+<a href="#7-3-control-toi-thieu" class="lvl-3">7.3 Control tối thiểu</a>
+<a href="#7-4-agent-xu-ly-debug-card" class="lvl-3">7.4 Agent xử lý Debug Card</a>
+<a href="#8-giao-dien-mvp" class="lvl-2">8. Giao diện MVP</a>
+<a href="#8-1-entry-point" class="lvl-3">8.1 Entry point</a>
+<a href="#8-2-layout-desktop" class="lvl-3">8.2 Layout desktop</a>
+<a href="#8-3-layout-mobile" class="lvl-3">8.3 Layout mobile</a>
+<a href="#8-4-inspect-bottom-sheet" class="lvl-3">8.4 Inspect bottom sheet</a>
+<a href="#9-debug-card" class="lvl-2">9. Debug Card</a>
+<a href="#9-1-noi-dung-user-thay" class="lvl-3">9.1 Nội dung user thấy</a>
+<a href="#9-2-noi-dung-ky-thuat-agent-nhan" class="lvl-3">9.2 Nội dung kỹ thuật agent nhận</a>
+<a href="#9-3-evidence-nen-thu-trong-mvp" class="lvl-3">9.3 Evidence nên thu trong MVP</a>
+<a href="#10-kien-truc-he-thong" class="lvl-2">10. Kiến trúc hệ thống</a>
+<a href="#10-1-web" class="lvl-3">10.1 Web</a>
+<a href="#10-2-hub" class="lvl-3">10.2 Hub</a>
+<a href="#10-3-cli" class="lvl-3">10.3 CLI</a>
+<a href="#10-4-browser-engine" class="lvl-3">10.4 Browser Engine</a>
+<a href="#11-api-rpc-du-kien" class="lvl-2">11. API/RPC dự kiến</a>
+<a href="#12-bao-mat-va-quyen-rieng-tu" class="lvl-2">12. Bảo mật và quyền riêng tư</a>
+<a href="#13-rui-ro-va-cach-giam" class="lvl-2">13. Rủi ro và cách giảm</a>
+<a href="#14-kiem-chung-toi-thieu" class="lvl-2">14. Kiểm chứng tối thiểu</a>
+<a href="#14-1-tinh-huong-1-inspect-element-lech-ui" class="lvl-3">14.1 Tình huống 1: Inspect element lệch UI</a>
+<a href="#14-2-tinh-huong-2-control-click-tao-network-loi" class="lvl-3">14.2 Tình huống 2: Control click tạo network lỗi</a>
+<a href="#14-3-tinh-huong-3-mobile-viewport" class="lvl-3">14.3 Tình huống 3: Mobile viewport</a>
+<a href="#14-4-tinh-huong-4-mask-du-lieu-nhay-cam" class="lvl-3">14.4 Tình huống 4: Mask dữ liệu nhạy cảm</a>
+<a href="#15-pham-vi-khong-thay-doi" class="lvl-2">15. Phạm vi không thay đổi</a>
+<a href="#16-roadmap-de-xuat" class="lvl-2">16. Roadmap đề xuất</a>
+<a href="#phase-1-mvp-visual-inspector-co-ban" class="lvl-3">Phase 1 — MVP: Visual Inspector cơ bản</a>
+<a href="#phase-2-review-loop-tot-hon" class="lvl-3">Phase 2 — Review loop tốt hơn</a>
+<a href="#phase-3-tuong-tac-sau-hon" class="lvl-3">Phase 3 — Tương tác sâu hơn</a>
+<a href="#phase-4-devtools-nang-cao-co-chon-loc" class="lvl-3">Phase 4 — DevTools nâng cao có chọn lọc</a>
+<a href="#17-tieu-chi-thanh-cong" class="lvl-2">17. Tiêu chí thành công</a>
+<a href="#18-ket-luan" class="lvl-2">18. Kết luận</a>
+      </nav>
+    </aside>
+
+    <main class="content" id="main">
+      <header class="doc-header">
+        <span class="doc-eyebrow">SPEC</span>
+        <h1 class="doc-title">HAPI Visual Inspector PRD</h1>
+        <p class="doc-subtitle">PRD cho giao diện HAPI giúp user chỉ điểm lỗi web bằng screenshot, Inspect mode, Control mode tối thiểu và Debug Card cho agent.</p>
+        <div class="doc-meta">
+          <span class="doc-meta-item">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-file"/></svg>
+            2026-06-15-hapi-visual-inspector-prd.md
+          </span>
+          <span class="doc-meta-item">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-calendar"/></svg>
+            2026-06-15
+          </span>
+          <span class="doc-meta-item">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-clock"/></svg>
+            ~11 phút đọc
+          </span>
+        </div>
+      </header>
+
+      <!-- CONTENT_START -->
+<h2 id="1-tom-tat">1. Tóm tắt</h2>
+<p>HAPI cần một <strong>Visual Inspector</strong> để user chỉ điểm lỗi web bằng mắt và gửi ngữ cảnh debug chính xác cho agent. Feature này không thay thế Playwright, Chrome DevTools, hay HTML Preview skill. Giá trị chính là kết nối ba thứ HAPI đã có: phiên agent, web/PWA remote control, và CLI chạy local cùng workspace.</p>
+<p>MVP dùng <strong>screenshot-based browser panel</strong> trong HAPI. User mở một URL local, xem ảnh chụp mới nhất của browser thật, bật Inspect mode để tap/click vùng lỗi, hoặc bật Control mode tối thiểu để click/scroll/reload app thật. HAPI gom element context, screenshot crop, console errors, failed network requests, URL, viewport, và gửi thành <strong>Debug Card</strong> vào session chat cho agent xử lý.</p>
+<p>Quyết định MVP:</p>
+<ul>
+<li>Dùng screenshot/latest-view, chưa nhúng app thật bằng iframe.</li>
+<li>Có Inspect mode ngay từ đầu.</li>
+<li>Có Control mode tối thiểu: reload, click, scroll.</li>
+<li>Chưa làm DevTools đầy đủ, CSS editor, breakpoint debugger, performance profiler sâu.</li>
+<li>Playwright/Chrome DevTools Protocol có thể là engine bên dưới, nhưng sản phẩm là user-first debug workflow trong HAPI.</li>
+</ul>
+<h2 id="2-van-de-can-giai-quyet">2. Vấn đề cần giải quyết</h2>
+<p>Khi user thấy lỗi giao diện hoặc lỗi tương tác trong web app, feedback thường mơ hồ:</p>
+<ul>
+<li>“Nút này lệch.”</li>
+<li>“Bấm vào đây không chạy.”</li>
+<li>“Mobile bị vỡ layout.”</li>
+<li>“Có lỗi gì đó sau khi submit form.”</li>
+</ul>
+<p>Agent có thể dùng Playwright để tự kiểm tra, nhưng agent thường không biết chính xác user đang nhìn chỗ nào hoặc kỳ vọng gì. User cũng không muốn viết selector, mô tả DOM, copy console log, hay mở Chrome DevTools trên điện thoại.</p>
+<p>HAPI cần biến thao tác rất tự nhiên của user:</p>
+<figure class="diagram">
+<pre class="mermaid">
+flowchart LR
+  N1[&quot;Nhìn thấy lỗi&quot;]
+  N2[&quot;tap/click đúng chỗ&quot;]
+  N3[&quot;ghi chú ngắn&quot;]
+  N1 --&gt; N2
+  N2 --&gt; N3
+</pre>
+<figcaption class="diagram-caption">Luồng xử lý được mô tả trong PRD.</figcaption>
+</figure>
+<p>thành một gói debug đủ kỹ thuật để agent sửa đúng nguyên nhân.</p>
+<h2 id="3-muc-tieu">3. Mục tiêu</h2>
+<h3 id="3-1-muc-tieu-san-pham">3.1 Mục tiêu sản phẩm</h3>
+<ol>
+<li>Cho phép user mở và xem app web đang chạy local thông qua HAPI.</li>
+<li>Cho phép user chỉ điểm element/vùng lỗi bằng tap/click trên ảnh chụp.</li>
+<li>Tạo Debug Card có đủ ngữ cảnh để agent sửa lỗi mà không cần user mô tả kỹ thuật.</li>
+<li>Cho phép user điều khiển app thật ở mức tối thiểu: reload, click, scroll.</li>
+<li>Làm tốt trên mobile/PWA vì đây là lợi thế tự nhiên của HAPI.</li>
+<li>Lưu debug evidence trong session chat để user và agent cùng review được.</li>
+</ol>
+<h3 id="3-2-muc-tieu-ky-thuat">3.2 Mục tiêu kỹ thuật</h3>
+<ol>
+<li>Không clone Chrome DevTools.</li>
+<li>Không phụ thuộc vào framework frontend cụ thể.</li>
+<li>Không yêu cầu dev app hỗ trợ iframe hoặc thay đổi code.</li>
+<li>Tận dụng CLI local để điều khiển browser cùng máy với dev server.</li>
+<li>Che dữ liệu nhạy cảm trong console/network trước khi gửi lên Hub/Web.</li>
+<li>Giữ kết nối browser có thể reconnect khi tab/browser/dev server bị restart.</li>
+</ol>
+<h2 id="4-khong-lam-trong-mvp">4. Không làm trong MVP</h2>
+<ol>
+<li>Không làm live streaming video liên tục.</li>
+<li>Không nhúng app thật bằng iframe làm mặc định.</li>
+<li>Không làm full Chrome DevTools panel.</li>
+<li>Không làm CSS editor trực tiếp trên HAPI.</li>
+<li>Không làm JavaScript breakpoint debugger.</li>
+<li>Không làm performance profiler sâu.</li>
+<li>Không tự động sửa code chỉ vì user click inspect; agent vẫn cần phân tích và sửa trong session.</li>
+<li>Không public share preview link ngoài HAPI auth.</li>
+</ol>
+<h2 id="5-nguoi-dung-chinh">5. Người dùng chính</h2>
+<h3 id="5-1-developer-dung-hapi-tu-may-khac-hoac-dien-thoai">5.1 Developer dùng HAPI từ máy khác hoặc điện thoại</h3>
+<p>Muốn nhìn app, chỉ lỗi, và để agent sửa khi đang AFK hoặc không muốn mở laptop.</p>
+<h3 id="5-2-pm-designer-ky-thuat-nhe">5.2 PM/designer kỹ thuật nhẹ</h3>
+<p>Muốn comment vào vùng UI sai mà không cần biết selector, DOM, network tab.</p>
+<h3 id="5-3-agent-trong-hapi-session">5.3 Agent trong HAPI session</h3>
+<p>Cần nhận bằng chứng debug rõ ràng:</p>
+<ul>
+<li>user chỉ chỗ nào;</li>
+<li>element thật là gì;</li>
+<li>lỗi console/network nào xảy ra gần đó;</li>
+<li>ảnh trước/sau action;</li>
+<li>viewport và route tại thời điểm lỗi.</li>
+</ul>
+<h2 id="6-khai-niem-cot-loi">6. Khái niệm cốt lõi</h2>
+<h3 id="6-1-visual-inspector">6.1 Visual Inspector</h3>
+<p>Một panel/drawer trong session HAPI dùng để xem và tương tác với browser local qua ảnh chụp mới nhất.</p>
+<p>Trên desktop, panel có thể nằm cạnh chat hoặc mở dạng drawer lớn. Trên mobile, panel nên mở gần full-screen.</p>
+<h3 id="6-2-browser-target">6.2 Browser Target</h3>
+<p>Một tab/browser do CLI quản lý để mở URL cần debug.</p>
+<p>Ví dụ:</p>
+<ul>
+<li><code>http://localhost:5173</code></li>
+<li><code>http://localhost:3000/dashboard</code></li>
+<li>URL staging nếu user chỉ định</li>
+</ul>
+<h3 id="6-3-latest-view">6.3 Latest View</h3>
+<p>Ảnh screenshot mới nhất của Browser Target, kèm metadata:</p>
+<ul>
+<li>URL hiện tại;</li>
+<li>title;</li>
+<li>viewport;</li>
+<li>device scale factor;</li>
+<li>timestamp;</li>
+<li>scroll position nếu có;</li>
+<li>kích thước ảnh gốc.</li>
+</ul>
+<p>Latest View không phải video stream. Nó được cập nhật khi user reload, click, scroll, hoặc bấm refresh capture.</p>
+<h3 id="6-4-inspect-mode">6.4 Inspect Mode</h3>
+<p>Mode chỉ dùng để chỉ điểm lỗi. Tap/click trên screenshot không click thật vào app.</p>
+<p>HAPI quy đổi tọa độ ảnh sang tọa độ viewport thật, hỏi browser element tại điểm đó, rồi mở form comment ngắn cho user.</p>
+<h3 id="6-5-control-mode">6.5 Control Mode</h3>
+<p>Mode điều khiển app thật tối thiểu. Tap/click trên screenshot sẽ gửi action xuống CLI để click vào browser local thật. Scroll/reload cũng tác động lên browser thật. Sau mỗi action, HAPI chụp lại Latest View.</p>
+<h3 id="6-6-debug-card">6.6 Debug Card</h3>
+<p>Một message có cấu trúc được gửi vào session chat, chứa feedback của user và evidence kỹ thuật.</p>
+<p>Debug Card là sản phẩm chính của MVP.</p>
+<h2 id="7-luong-chinh">7. Luồng chính</h2>
+<h3 id="7-1-mo-visual-inspector">7.1 Mở Visual Inspector</h3>
+<pre><code>User ở session HAPI
+→ bấm Open Visual Inspector
+→ nhập/chọn URL
+→ Hub RPC xuống CLI
+→ CLI mở browser local
+→ CLI chụp screenshot
+→ Web hiển thị Latest View</code></pre>
+<h3 id="7-2-inspect-loi-bang-mat">7.2 Inspect lỗi bằng mắt</h3>
+<pre><code>User bật Inspect mode
+→ tap/click vùng lỗi trên screenshot
+→ Web gửi tọa độ ảnh lên Hub
+→ Hub RPC xuống CLI
+→ CLI map tọa độ sang viewport thật
+→ CLI lấy element context tại điểm đó
+→ HAPI mở form comment
+→ user nhập ghi chú
+→ HAPI tạo Debug Card gửi vào session chat</code></pre>
+<h3 id="7-3-control-toi-thieu">7.3 Control tối thiểu</h3>
+<pre><code>User bật Control mode
+→ tap/click trên screenshot
+→ Web gửi click action lên Hub
+→ Hub RPC xuống CLI
+→ CLI click vào browser thật
+→ CLI thu console/network mới phát sinh
+→ CLI chụp screenshot mới
+→ Web cập nhật Latest View</code></pre>
+<h3 id="7-4-agent-xu-ly-debug-card">7.4 Agent xử lý Debug Card</h3>
+<pre><code>Agent đọc Debug Card
+→ xác định file/source có khả năng liên quan
+→ sửa code
+→ chạy test/lint/build hoặc kiểm chứng phù hợp
+→ user mở lại Visual Inspector
+→ reload/capture lại để review</code></pre>
+<h2 id="8-giao-dien-mvp">8. Giao diện MVP</h2>
+<h3 id="8-1-entry-point">8.1 Entry point</h3>
+<p>Trong session header hoặc menu:</p>
+<pre><code class="language-text">Open Visual Inspector</code></pre>
+<p>Nếu session có workspace path và HAPI phát hiện dev server, có thể gợi ý URL. Nếu không, user nhập URL thủ công.</p>
+<h3 id="8-2-layout-desktop">8.2 Layout desktop</h3>
+<pre><code class="language-text">┌────────────────────────────────────────────────────┐
+│ URL: http://localhost:5173/settings  [Reload]      │
+│ Mode: [Inspect] [Control] [Refresh Capture]        │
+├────────────────────────────────────────────────────┤
+│                                                    │
+│                Latest View Screenshot              │
+│                                                    │
+├────────────────────────────────────────────────────┤
+│ Console: 2 errors    Network: 1 failed    Mobile   │
+└────────────────────────────────────────────────────┘</code></pre>
+<h3 id="8-3-layout-mobile">8.3 Layout mobile</h3>
+<p>Mobile dùng full-screen drawer:</p>
+<ul>
+<li>top bar: URL rút gọn, reload, close;</li>
+<li>mode switch rõ ràng;</li>
+<li>ảnh screenshot fit chiều ngang;</li>
+<li>bottom sheet khi inspect element;</li>
+<li>status chips: console errors, failed network, viewport.</li>
+</ul>
+<h3 id="8-4-inspect-bottom-sheet">8.4 Inspect bottom sheet</h3>
+<p>Khi user tap element trong Inspect mode:</p>
+<pre><code class="language-text">Element: button &quot;Save&quot;
+Selector: button[data-testid=&quot;save-settings&quot;]
+Vùng: 128x40 tại x=212,y=604
+
+Bạn muốn báo gì với agent?
+[ textarea ]
+
+[Send Debug Card] [Cancel]</code></pre>
+<p>Không cần hiển thị quá nhiều kỹ thuật mặc định. Chi tiết kỹ thuật có thể collapse.</p>
+<h2 id="9-debug-card">9. Debug Card</h2>
+<p>Debug Card cần đủ cho agent sửa lỗi, nhưng không làm user bị ngợp.</p>
+<h3 id="9-1-noi-dung-user-thay">9.1 Nội dung user thấy</h3>
+<pre><code class="language-text">User reported a UI issue
+Comment: &quot;Nút Save không bấm được trên mobile&quot;
+URL: /settings
+Element: button &quot;Save&quot;
+Viewport: 390x844
+Console: 1 error
+Network: PATCH /api/settings 500</code></pre>
+<h3 id="9-2-noi-dung-ky-thuat-agent-nhan">9.2 Nội dung kỹ thuật agent nhận</h3>
+<pre><code class="language-ts">type VisualInspectorDebugCard = {
+    id: string
+    sessionId: string
+    browserTargetId: string
+    createdAt: number
+    mode: &#x27;inspect&#x27; | &#x27;control&#x27;
+    userComment: string
+    page: {
+        url: string
+        title: string
+        viewport: {
+            width: number
+            height: number
+            deviceScaleFactor: number
+            isMobile: boolean
+        }
+        scroll: {
+            x: number
+            y: number
+        }
+    }
+    target: {
+        point: { x: number; y: number }
+        selector: string | null
+        text: string | null
+        tagName: string | null
+        role: string | null
+        testId: string | null
+        boundingBox: {
+            x: number
+            y: number
+            width: number
+            height: number
+        } | null
+        outerHtmlExcerpt: string | null
+        computedStyle: Record&lt;string, string&gt;
+    }
+    evidence: {
+        screenshotId: string
+        cropScreenshotId: string | null
+        console: BrowserConsoleEntry[]
+        network: BrowserNetworkEntry[]
+    }
+}</code></pre>
+<h3 id="9-3-evidence-nen-thu-trong-mvp">9.3 Evidence nên thu trong MVP</h3>
+<ul>
+<li>Screenshot toàn trang nhìn thấy.</li>
+<li>Crop quanh element nếu có target.</li>
+<li><code>console.error</code> và <code>console.warn</code> gần thời điểm action/inspect.</li>
+<li>Failed network requests hoặc status <code>&gt;= 400</code> gần thời điểm action/inspect.</li>
+<li>Basic request info: method, URL đã mask query nhạy cảm, status, timing.</li>
+<li>Response body chỉ lưu preview ngắn và phải mask dữ liệu nhạy cảm.</li>
+</ul>
+<h2 id="10-kien-truc-he-thong">10. Kiến trúc hệ thống</h2>
+<p>Luồng tổng thể:</p>
+<pre><code>HAPI Web/PWA
+→ Hub REST/RPC
+→ CLI Browser Debug Bridge
+→ Local Browser qua CDP/Playwright
+→ screenshot/DOM/log/network
+→ Hub
+→ Web + Session Chat</code></pre>
+<h3 id="10-1-web">10.1 Web</h3>
+<p>Web chịu trách nhiệm:</p>
+<ul>
+<li>render Visual Inspector panel;</li>
+<li>hiển thị Latest View;</li>
+<li>chuyển đổi tọa độ click trên ảnh sang tọa độ ảnh gốc;</li>
+<li>gửi inspect/control action;</li>
+<li>hiển thị status console/network;</li>
+<li>tạo comment form;</li>
+<li>hiển thị Debug Card trong chat.</li>
+</ul>
+<h3 id="10-2-hub">10.2 Hub</h3>
+<p>Hub chịu trách nhiệm:</p>
+<ul>
+<li>xác thực request;</li>
+<li>kiểm tra namespace/session/machine;</li>
+<li>route RPC xuống CLI đúng máy;</li>
+<li>lưu metadata Debug Card/message;</li>
+<li>phát SSE update cho web;</li>
+<li>không trực tiếp điều khiển browser.</li>
+</ul>
+<h3 id="10-3-cli">10.3 CLI</h3>
+<p>CLI chịu trách nhiệm:</p>
+<ul>
+<li>mở/attach browser;</li>
+<li>quản lý Browser Target;</li>
+<li>chụp screenshot;</li>
+<li>map tọa độ sang element;</li>
+<li>thực hiện click/scroll/reload;</li>
+<li>đọc console/network;</li>
+<li>mask dữ liệu nhạy cảm trước khi gửi lên Hub;</li>
+<li>reconnect khi browser/tab stale.</li>
+</ul>
+<h3 id="10-4-browser-engine">10.4 Browser Engine</h3>
+<p>Engine bên dưới có thể là Playwright hoặc Chrome DevTools Protocol. PRD không bắt buộc chọn engine cuối cùng, nhưng API nội bộ nên che chi tiết engine để sau này đổi được.</p>
+<h2 id="11-api-rpc-du-kien">11. API/RPC dự kiến</h2>
+<p>Tên chỉ là đề xuất, implementation có thể đổi nhưng cần giữ intent.</p>
+<pre><code class="language-ts">type BrowserTarget = {
+    id: string
+    sessionId: string
+    machineId: string
+    url: string
+    title: string | null
+    status: &#x27;starting&#x27; | &#x27;ready&#x27; | &#x27;stale&#x27; | &#x27;closed&#x27; | &#x27;error&#x27;
+    createdAt: number
+    updatedAt: number
+}</code></pre>
+<p>RPC từ Hub xuống CLI:</p>
+<pre><code class="language-ts">browser.openTarget({ sessionId, url, viewport? })
+browser.capture({ targetId })
+browser.inspectAt({ targetId, point })
+browser.controlClick({ targetId, point })
+browser.controlScroll({ targetId, deltaX, deltaY })
+browser.reload({ targetId })
+browser.closeTarget({ targetId })</code></pre>
+<p>HTTP/API từ Web lên Hub:</p>
+<pre><code class="language-text">POST /api/sessions/:id/browser-targets
+GET  /api/sessions/:id/browser-targets
+POST /api/sessions/:id/browser-targets/:targetId/capture
+POST /api/sessions/:id/browser-targets/:targetId/inspect
+POST /api/sessions/:id/browser-targets/:targetId/control
+POST /api/sessions/:id/debug-cards</code></pre>
+<h2 id="12-bao-mat-va-quyen-rieng-tu">12. Bảo mật và quyền riêng tư</h2>
+<p>Visual Inspector chạm vào browser và network payload, nên MVP phải xử lý như tính năng nhạy cảm.</p>
+<p>Yêu cầu:</p>
+<ol>
+<li>Mọi request phải scoped theo namespace, session, machine.</li>
+<li>Web client không được tự chọn máy hoặc tab ngoài session scope.</li>
+<li>Không expose cookie, authorization header, token, password, secret.</li>
+<li>Mask các header nhạy cảm: <code>authorization</code>, <code>cookie</code>, <code>set-cookie</code>, <code>x-api-key</code>.</li>
+<li>Mask field nhạy cảm trong body/query: <code>token</code>, <code>password</code>, <code>secret</code>, <code>key</code>, <code>authorization</code>, <code>session</code>.</li>
+<li>Control mode phải có UI mode rõ ràng để tránh click nhầm.</li>
+<li>Không public URL preview/debug khi chưa có auth.</li>
+<li>Debug Card nên lưu evidence vừa đủ, không lưu toàn bộ response body dài.</li>
+</ol>
+<h2 id="13-rui-ro-va-cach-giam">13. Rủi ro và cách giảm</h2>
+<div class="table-wrap"><table>
+<thead><tr>
+<th>Rủi ro</th>
+<th>Mức</th>
+<th>Cách giảm</th>
+</tr></thead><tbody>
+<tr>
+<td>Tính năng bị phình thành clone DevTools</td>
+<td>Cao</td>
+<td>MVP chỉ screenshot, inspect, reload/click/scroll, console/network lỗi</td>
+</tr>
+<tr>
+<td>Lộ token/cookie trong network evidence</td>
+<td>Cao</td>
+<td>Mask ở CLI trước khi gửi Hub</td>
+</tr>
+<tr>
+<td>Click nhầm gây thay đổi state app</td>
+<td>Trung bình</td>
+<td>Tách Inspect mode và Control mode, Control có trạng thái UI nổi bật</td>
+</tr>
+<tr>
+<td>Mapping tọa độ sai do scale/scroll/device pixel ratio</td>
+<td>Trung bình</td>
+<td>Lưu metadata ảnh gốc, viewport, scale; test mobile/desktop</td>
+</tr>
+<tr>
+<td>Browser/tab bị stale</td>
+<td>Trung bình</td>
+<td>Target status, reconnect, nút reopen/reload rõ ràng</td>
+</tr>
+<tr>
+<td>App local không truy cập được từ phone</td>
+<td>Thấp</td>
+<td>Browser chạy trên CLI machine; phone chỉ xem screenshot qua HAPI</td>
+</tr>
+<tr>
+<td>User kỳ vọng live browser mượt như remote desktop</td>
+<td>Trung bình</td>
+<td>Truyền thông rõ “latest view”, không phải video stream</td>
+</tr>
+</tbody></table></div>
+<h2 id="14-kiem-chung-toi-thieu">14. Kiểm chứng tối thiểu</h2>
+<h3 id="14-1-tinh-huong-1-inspect-element-lech-ui">14.1 Tình huống 1: Inspect element lệch UI</h3>
+<p>Cho trước app đang chạy ở <code>localhost:5173</code> và HAPI mở Visual Inspector. Khi user bật Inspect mode và tap vào một button trên screenshot, HAPI phải tạo Debug Card có selector/text/bounding box và screenshot crop.</p>
+<p>Nếu không test tình huống này, MVP không chứng minh được giá trị user-first.</p>
+<h3 id="14-2-tinh-huong-2-control-click-tao-network-loi">14.2 Tình huống 2: Control click tạo network lỗi</h3>
+<p>Cho trước một button submit gọi API trả <code>500</code>. Khi user bật Control mode và click button trên screenshot, HAPI phải click browser thật, bắt failed request, chụp screenshot mới, và đưa lỗi network vào Debug Card hoặc activity log.</p>
+<p>Nếu không test tình huống này, Control mode có thể chỉ là click mù không hỗ trợ debug.</p>
+<h3 id="14-3-tinh-huong-3-mobile-viewport">14.3 Tình huống 3: Mobile viewport</h3>
+<p>Cho trước viewport mobile 390x844. Khi user tap trên screenshot đã bị scale để fit màn hình điện thoại, HAPI phải map đúng tọa độ về element thật.</p>
+<p>Nếu không test tình huống này, feature mất lợi thế chính là dùng tốt trên PWA/mobile.</p>
+<h3 id="14-4-tinh-huong-4-mask-du-lieu-nhay-cam">14.4 Tình huống 4: Mask dữ liệu nhạy cảm</h3>
+<p>Cho trước request có <code>Authorization</code> header và query/body chứa <code>token</code>. Khi HAPI thu network evidence, Debug Card không được chứa giá trị thật.</p>
+<p>Nếu không test tình huống này, rủi ro bảo mật quá cao để bật mặc định.</p>
+<h2 id="15-pham-vi-khong-thay-doi">15. Phạm vi không thay đổi</h2>
+<p>Dự kiến không thay đổi trong MVP:</p>
+<ul>
+<li>Không thay đổi chat/session flow hiện có ngoài việc thêm Debug Card message.</li>
+<li>Không thay đổi file browser/editor hiện có.</li>
+<li>Không thay đổi permission mode của agent.</li>
+<li>Không yêu cầu dev app sửa code để được inspect.</li>
+<li>Không thay thế Playwright skill hoặc HTML Preview skill.</li>
+<li>Không thay đổi cách HAPI chạy dev server; user hoặc agent vẫn tự start dev server như hiện tại.</li>
+</ul>
+<p>Chưa xác nhận cho implementation:</p>
+<ul>
+<li>Engine cuối cùng dùng Playwright, CDP trực tiếp, hay wrapper hỗn hợp.</li>
+<li>Evidence screenshot lưu trong DB, filesystem HAPI_HOME, hay artifact store nội bộ.</li>
+<li>UI cuối cùng là route riêng hay drawer trong session route.</li>
+</ul>
+<h2 id="16-roadmap-de-xuat">16. Roadmap đề xuất</h2>
+<h3 id="phase-1-mvp-visual-inspector-co-ban">Phase 1 — MVP: Visual Inspector cơ bản</h3>
+<ul>
+<li>Open URL.</li>
+<li>Capture latest screenshot.</li>
+<li>Inspect mode: tap/click → element context → comment → Debug Card.</li>
+<li>Control mode tối thiểu: reload, click, scroll.</li>
+<li>Console errors và failed network requests.</li>
+<li>Mask dữ liệu nhạy cảm.</li>
+</ul>
+<h3 id="phase-2-review-loop-tot-hon">Phase 2 — Review loop tốt hơn</h3>
+<ul>
+<li>Capture before/after theo từng action.</li>
+<li>Gắn Debug Card với file/diff agent sửa.</li>
+<li>User mark resolved/unresolved.</li>
+<li>Lịch sử debug cards theo session.</li>
+<li>Auto-suggest URL từ dev server đang chạy.</li>
+</ul>
+<h3 id="phase-3-tuong-tac-sau-hon">Phase 3 — Tương tác sâu hơn</h3>
+<ul>
+<li>Fill input qua action sheet.</li>
+<li>Multi-step action recording.</li>
+<li>Basic accessibility snapshot.</li>
+<li>So sánh screenshot trước/sau.</li>
+<li>Optional live refresh interval.</li>
+</ul>
+<h3 id="phase-4-devtools-nang-cao-co-chon-loc">Phase 4 — DevTools nâng cao có chọn lọc</h3>
+<ul>
+<li>Performance summary nhẹ.</li>
+<li>CSS computed diff hữu ích cho layout bug.</li>
+<li>Source map hints nếu app hỗ trợ.</li>
+<li>Không làm full breakpoint debugger trừ khi có nhu cầu rõ.</li>
+</ul>
+<h2 id="17-tieu-chi-thanh-cong">17. Tiêu chí thành công</h2>
+<p>MVP được coi là thành công nếu:</p>
+<ol>
+<li>User trên mobile có thể mở app local qua HAPI mà không cần app đó public ra internet.</li>
+<li>User có thể tap vào vùng lỗi và gửi feedback trong dưới 10 giây.</li>
+<li>Agent nhận Debug Card đủ thông tin để biết element, route, viewport, và lỗi runtime/network liên quan.</li>
+<li>Control click/reload/scroll hoạt động ổn định với screenshot cập nhật sau action.</li>
+<li>Không lộ token/cookie/password trong Debug Card.</li>
+<li>Feature không làm session chat, terminal, file browser hiện có bị ảnh hưởng khi không dùng Visual Inspector.</li>
+</ol>
+<h2 id="18-ket-luan">18. Kết luận</h2>
+<p>HAPI Visual Inspector nên là năng lực core vì nó tận dụng đúng lợi thế của HAPI: local-first agent, web/PWA remote control, session context, và workflow user-agent cộng tác. Điểm khác Playwright không nằm ở engine điều khiển browser, mà ở trải nghiệm user-first: user nhìn thấy lỗi, tap đúng chỗ, HAPI tự đóng gói evidence kỹ thuật cho agent.</p>
+<p>MVP nên đi theo hướng screenshot-based latest view để tránh rủi ro iframe/live browser, đồng thời vẫn có Control mode tối thiểu đủ dùng cho debug tương tác.</p>
+<!-- CONTENT_END -->
+
+      <footer class="doc-footer">
+        <span>Generated by <a href="#">md2html</a></span>
+        <span>Nguồn: 2026-06-15-hapi-visual-inspector-prd.md</span>
+      </footer>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script>
+    // ---------- Theme ----------
+    const STORAGE_KEY = "md2html-theme";
+    function currentTheme() { return document.documentElement.dataset.theme || "light"; }
+    function applyThemeIcon() {
+      const use = document.getElementById("theme-icon-use");
+      if (use) use.setAttribute("href", currentTheme() === "dark" ? "#i-sun" : "#i-moon");
+    }
+    (function restoreTheme() {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) document.documentElement.dataset.theme = saved;
+    })();
+
+    // ---------- Mermaid ----------
+    const diagramSources = new Map();
+    function initMermaid() {
+      const isDark = currentTheme() === "dark";
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: isDark ? "dark" : "default",
+        themeVariables: {
+          primaryColor: isDark ? "#3A2A22" : "#FBEEE6",
+          primaryTextColor: isDark ? "#F5F0E8" : "#1A1A1A",
+          primaryBorderColor: isDark ? "#E89572" : "#D97757",
+          lineColor: isDark ? "#9A938A" : "#6B6B66",
+          secondaryColor: isDark ? "#2A2520" : "#F5F5F0",
+          tertiaryColor: isDark ? "#221E1A" : "#FFFFFF",
+          fontFamily: "Inter, system-ui, sans-serif",
+        },
+      });
+    }
+    async function renderMermaid() {
+      initMermaid();
+      const els = document.querySelectorAll(".mermaid");
+      els.forEach(el => {
+        if (!diagramSources.has(el)) diagramSources.set(el, el.textContent.trim());
+        el.textContent = diagramSources.get(el);
+        el.removeAttribute("data-processed");
+      });
+      try { await mermaid.run({ nodes: els }); } catch (e) { console.error(e); }
+    }
+    function toggleTheme() {
+      const next = currentTheme() === "light" ? "dark" : "light";
+      document.documentElement.dataset.theme = next;
+      localStorage.setItem(STORAGE_KEY, next);
+      applyThemeIcon();
+      renderMermaid();
+    }
+
+    // ---------- TOC drawer (mobile) ----------
+    function openToc()  { document.body.classList.add("toc-open"); }
+    function closeToc() { document.body.classList.remove("toc-open"); }
+    document.addEventListener("keydown", e => {
+      if (e.key === "Escape" && document.body.classList.contains("toc-open")) closeToc();
+    });
+
+    // ---------- TOC scrollspy ----------
+    function setupTocSpy() {
+      const links = document.querySelectorAll("#toc-nav a[href^='#']");
+      if (!links.length) {
+        const toc = document.getElementById("toc");
+        if (toc) toc.style.display = "none";
+        return;
+      }
+      const map = new Map();
+      links.forEach(a => {
+        const id = a.getAttribute("href").slice(1);
+        const el = document.getElementById(id);
+        if (el) map.set(el, a);
+        a.addEventListener("click", () => {
+          if (window.matchMedia("(max-width: 900px)").matches) closeToc();
+        });
+      });
+      const obs = new IntersectionObserver((entries) => {
+        entries.forEach(en => {
+          const link = map.get(en.target);
+          if (!link) return;
+          if (en.isIntersecting) {
+            links.forEach(l => l.classList.remove("active"));
+            link.classList.add("active");
+          }
+        });
+      }, { rootMargin: "-80px 0px -70% 0px", threshold: 0 });
+      map.forEach((_, el) => obs.observe(el));
+    }
+
+    // ---------- Anchor links on h2/h3 ----------
+    function injectAnchors() {
+      document.querySelectorAll(".content h2[id], .content h3[id]").forEach(h => {
+        if (h.querySelector(".anchor")) return;
+        const a = document.createElement("a");
+        a.className = "anchor";
+        a.href = "#" + h.id;
+        a.setAttribute("aria-label", "Permalink");
+        a.innerHTML = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-link"/></svg>';
+        h.appendChild(a);
+      });
+    }
+
+    // ---------- Copy-to-clipboard on <pre> ----------
+    function injectCopyButtons() {
+      document.querySelectorAll(".content pre").forEach(pre => {
+        if (pre.classList.contains("mermaid")) return;
+        if (pre.querySelector(".copy-btn")) return;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "copy-btn";
+        btn.setAttribute("aria-label", "Copy code");
+        btn.innerHTML = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-copy"/></svg>';
+        btn.addEventListener("click", async () => {
+          const code = pre.querySelector("code")?.textContent ?? pre.textContent;
+          try {
+            await navigator.clipboard.writeText(code);
+            btn.classList.add("copied");
+            btn.innerHTML = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg>';
+            setTimeout(() => {
+              btn.classList.remove("copied");
+              btn.innerHTML = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-copy"/></svg>';
+            }, 1500);
+          } catch (e) { console.error(e); }
+        });
+        pre.appendChild(btn);
+      });
+    }
+
+    // ---------- Scroll progress ----------
+    function setupScrollProgress() {
+      const bar = document.getElementById("scroll-progress");
+      if (!bar) return;
+      const onScroll = () => {
+        const h = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+        const p = h > 0 ? (document.documentElement.scrollTop / h * 100) : 0;
+        bar.style.width = p + "%";
+      };
+      window.addEventListener("scroll", onScroll, { passive: true });
+      onScroll();
+    }
+
+    // ---------- Boot ----------
+    document.addEventListener("DOMContentLoaded", () => {
+      applyThemeIcon();
+      injectAnchors();
+      injectCopyButtons();
+      renderMermaid();
+      setupTocSpy();
+      setupScrollProgress();
+    });
+  </script>
+</body>
+</html>
