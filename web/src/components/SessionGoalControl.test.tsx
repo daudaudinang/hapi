@@ -126,4 +126,24 @@ describe('SessionGoalControl', () => {
 
         expect(onGoalCommand).not.toHaveBeenCalled()
     })
+
+    it('keeps the goal button icon-only and uses objective as title', () => {
+        render(<SessionGoalControl goal={makeGoal()} onGoalCommand={vi.fn()} />)
+
+        const button = screen.getByRole('button', { name: 'Codex goal' })
+        expect(button).toHaveAttribute('title', 'Ship Codex goal UI')
+        expect(button).toHaveTextContent('🎯')
+        expect(button).not.toHaveTextContent('Ship Codex goal UI')
+    })
+
+    it('flashes the goal button when the goal updates', () => {
+        const { rerender } = render(<SessionGoalControl goal={makeGoal({ updatedAt: 2 })} onGoalCommand={vi.fn()} />)
+
+        const button = screen.getByRole('button', { name: 'Codex goal' })
+        expect(button).not.toHaveAttribute('data-flashing', 'true')
+
+        rerender(<SessionGoalControl goal={makeGoal({ updatedAt: 3 })} onGoalCommand={vi.fn()} />)
+
+        expect(button).toHaveAttribute('data-flashing', 'true')
+    })
 })

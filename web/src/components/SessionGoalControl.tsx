@@ -58,10 +58,30 @@ export function SessionGoalControl(props: {
 }) {
     const { goal, onGoalCommand, disabled = false, compact = false } = props
     const [error, setError] = React.useState<string | null>(null)
+    const [flashing, setFlashing] = React.useState(false)
+    const previousUpdateRef = React.useRef<number | null>(goal?.updatedAt ?? null)
 
     React.useEffect(() => {
         setError(null)
     }, [goal?.updatedAt])
+
+    React.useEffect(() => {
+        if (goal === null) {
+            previousUpdateRef.current = null
+            setFlashing(false)
+            return
+        }
+
+        const previousUpdatedAt = previousUpdateRef.current
+        previousUpdateRef.current = goal.updatedAt
+        if (previousUpdatedAt === null || previousUpdatedAt === goal.updatedAt) {
+            return
+        }
+
+        setFlashing(true)
+        const timeout = window.setTimeout(() => setFlashing(false), 1600)
+        return () => window.clearTimeout(timeout)
+    }, [goal])
 
     if (goal === null) {
         return null
@@ -105,9 +125,14 @@ export function SessionGoalControl(props: {
                     type="button"
                     variant="outline"
                     size="sm"
-                    className={cn('h-8 w-8 p-0', compact ? 'text-xs' : 'text-sm')}
+                    className={cn(
+                        'relative h-8 w-8 p-0',
+                        compact ? 'text-xs' : 'text-sm',
+                        flashing ? 'animate-pulse ring-2 ring-blue-400 ring-offset-1 ring-offset-[var(--app-bg)]' : null
+                    )}
                     aria-label="Codex goal"
                     title={goal.objective}
+                    data-flashing={flashing ? 'true' : undefined}
                 >
                     <span aria-hidden="true">🎯</span>
                 </Button>
