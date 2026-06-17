@@ -12,6 +12,20 @@ function FolderIcon(props: { className?: string }) {
     )
 }
 
+export function formatRecentPathLabel(path: string): string {
+    const trimmed = path.trim().replace(/[\\/]+$/, '')
+    if (!trimmed) return path
+
+    const separatorIndex = Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\'))
+    if (separatorIndex < 0) return trimmed
+
+    const tail = trimmed.slice(separatorIndex + 1)
+    const parent = separatorIndex === 0 ? trimmed[0] : trimmed.slice(0, separatorIndex)
+    if (!tail || !parent) return trimmed
+
+    return `${tail} — ${parent}`
+}
+
 export function DirectorySection(props: {
     directory: string
     suggestions: readonly Suggestion[]
@@ -87,7 +101,7 @@ export function DirectorySection(props: {
                                 className="rounded bg-[var(--app-subtle-bg)] px-2 py-1 text-xs text-[var(--app-fg)] hover:bg-[var(--app-secondary-bg)] transition-colors truncate max-w-[200px] disabled:opacity-50"
                                 title={path}
                             >
-                                {path}
+                                {formatRecentPathLabel(path)}
                             </button>
                         ))}
                     </div>
