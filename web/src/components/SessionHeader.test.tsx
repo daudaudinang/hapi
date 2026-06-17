@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { CodexGoalState } from '@/chat/types'
 import type { Session, TeamChat, TeamParticipant } from '@/types/api'
 import { SessionHeader } from './SessionHeader'
 
@@ -85,6 +86,20 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     }
 }
 
+function makeGoal(overrides: Partial<CodexGoalState> = {}): CodexGoalState {
+    return {
+        threadId: 'thread-1',
+        objective: 'Ship Codex goal header control',
+        status: 'active',
+        tokenBudget: 200_000,
+        tokensUsed: 12_000,
+        timeUsedSeconds: 90,
+        createdAt: 1,
+        updatedAt: 2,
+        ...overrides
+    }
+}
+
 function setDesktopViewport(isDesktop: boolean) {
     Object.defineProperty(window, 'matchMedia', {
         configurable: true,
@@ -146,6 +161,59 @@ describe('SessionHeader editor entry point', () => {
         render(<QueryClientProvider client={qc}><SessionHeader session={makeSession({ metadata: { path: '/repo', host: 'host' } })} onBack={vi.fn()} api={null} /></QueryClientProvider>)
 
         expect(screen.queryByRole('button', { name: 'Open in Editor' })).not.toBeInTheDocument()
+    })
+
+    it('does not show the Codex goal button when no goal is available', () => {
+        const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        render(<QueryClientProvider client={qc}><SessionHeader session={makeSession()} onBack={vi.fn()} api={null} onGoalCommand={vi.fn()} /></QueryClientProvider>)
+
+        expect(screen.queryByRole('button', { name: 'Codex goal' })).not.toBeInTheDocument()
+    })
+
+    it('shows the Codex goal button when a Codex session has goal state', () => {
+        const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        render(<QueryClientProvider client={qc}><SessionHeader session={makeSession()} onBack={vi.fn()} api={null} codexGoal={makeGoal()} onGoalCommand={vi.fn()} /></QueryClientProvider>)
+
+        const button = screen.getByRole('button', { name: 'Codex goal' })
+        expect(button).toBeInTheDocument()
+        expect(button).toHaveAttribute('title', 'Ship Codex goal header control')
+    })
+
+    it('sends a clear goal command from the header goal modal', () => {
+        const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        const onGoalCommand = vi.fn()
+        render(<QueryClientProvider client={qc}><SessionHeader session={makeSession()} onBack={vi.fn()} api={null} codexGoal={makeGoal()} onGoalCommand={onGoalCommand} /></QueryClientProvider>)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Codex goal' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Unset goal' }))
+
+        expect(onGoalCommand).toHaveBeenCalledWith('/goal clear')
+    })
+
+    it('keeps an accidentally passed non-Codex goal viewable but disables actions', () => {
+        const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        const onGoalCommand = vi.fn()
+        render(
+            <QueryClientProvider client={qc}>
+                <SessionHeader
+                    session={makeSession({ metadata: { path: '/repo', host: 'host', machineId: 'machine-1', flavor: 'claude' } })}
+                    onBack={vi.fn()}
+                    api={null}
+                    codexGoal={makeGoal()}
+                    onGoalCommand={onGoalCommand}
+                />
+            </QueryClientProvider>
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: 'Codex goal' }))
+
+        expect(screen.getByRole('dialog')).toBeInTheDocument()
+        expect(screen.getByDisplayValue('Ship Codex goal header control')).toBeDisabled()
+        expect(screen.getByRole('button', { name: 'Unset goal' })).toBeDisabled()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Unset goal' }))
+
+        expect(onGoalCommand).not.toHaveBeenCalled()
     })
 
     it('shows this sessions Team Chat aliases near the session title', () => {

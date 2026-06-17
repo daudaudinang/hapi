@@ -412,6 +412,10 @@ export function SessionChat(props: {
         setForceScrollToken((token) => token + 1)
     }, [props.onSend])
 
+    const handleGoalCommand = useCallback((command: string) => {
+        handleSend(command)
+    }, [handleSend])
+
     const attachmentAdapter = useMemo(() => {
         if (!props.session.active) {
             return undefined
@@ -442,6 +446,8 @@ export function SessionChat(props: {
                     compactMode={props.compactMode}
                     pinIndex={props.pinIndex}
                     onFocusSession={props.onFocusSession}
+                    codexGoal={agentFlavor === 'codex' ? reduced.latestGoal : null}
+                    onGoalCommand={handleGoalCommand}
                 />
             )}
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
+import type { CodexGoalState } from '@/chat/types'
 import type { Machine, Session } from '@/types/api'
 import type { ApiClient } from '@/api/client'
 import { isTelegramApp } from '@/hooks/useTelegram'
@@ -8,6 +9,7 @@ import { useTeamChats } from '@/hooks/queries/useTeamChats'
 import { useSessionTeamMemberships } from '@/hooks/queries/useSessionTeamMemberships'
 import { useSessionActions } from '@/hooks/mutations/useSessionActions'
 import { SessionActionMenu } from '@/components/SessionActionMenu'
+import { SessionGoalControl } from '@/components/SessionGoalControl'
 import { RenameSessionDialog } from '@/components/RenameSessionDialog'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { getSessionModelLabel } from '@/lib/sessionModelLabel'
@@ -172,6 +174,8 @@ export function SessionHeader(props: {
     compactMode?: boolean
     pinIndex?: number
     onFocusSession?: () => void
+    codexGoal?: CodexGoalState | null
+    onGoalCommand?: (command: string) => void
 }) {
     const { t } = useTranslation()
     const navigate = useNavigate()
@@ -180,6 +184,7 @@ export function SessionHeader(props: {
     const worktreeBranch = session.metadata?.worktree?.branch
     const modelLabel = getSessionModelLabel(session)
     const agentFlavor = session.metadata?.flavor ?? 'claude'
+    const canControlGoal = agentFlavor === 'codex' && typeof props.onGoalCommand === 'function'
     const sessionStatus = session.thinking ? 'thinking' : !session.active ? 'archived' : 'active'
     const editorSearch = session.metadata?.machineId && session.metadata?.path
         ? { machine: session.metadata.machineId, project: session.metadata.path }
@@ -358,6 +363,14 @@ export function SessionHeader(props: {
                                     <EditorIcon className="w-4 h-4" />
                                 </button>
                             ) : null}
+                            {props.codexGoal ? (
+                                <SessionGoalControl
+                                    goal={props.codexGoal}
+                                    onGoalCommand={(command) => props.onGoalCommand?.(command)}
+                                    disabled={!canControlGoal}
+                                    compact
+                                />
+                            ) : null}
                             {api ? (
                                 <button
                                     type="button"
@@ -534,6 +547,14 @@ export function SessionHeader(props: {
                         >
                             <EditorIcon className="w-5 h-5" />
                         </button>
+                    ) : null}
+
+                    {props.codexGoal ? (
+                        <SessionGoalControl
+                            goal={props.codexGoal}
+                            onGoalCommand={(command) => props.onGoalCommand?.(command)}
+                            disabled={!canControlGoal}
+                        />
                     ) : null}
 
                     {api ? (
