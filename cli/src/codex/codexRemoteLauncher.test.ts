@@ -25,6 +25,7 @@ type Harness = {
         updatedAt: number;
     };
     failGoalApi: boolean;
+    clearGoalReturnsFalse: boolean;
     suppressTurnCompletion: boolean;
     remainingThreadSystemErrors: number;
 };
@@ -45,6 +46,7 @@ function getHarness(): Harness {
         clearGoalCalls: [],
         currentGoal: null,
         failGoalApi: false,
+        clearGoalReturnsFalse: false,
         suppressTurnCompletion: false,
         remainingThreadSystemErrors: 0
     };
@@ -184,6 +186,9 @@ vi.mock('./codexAppServerClient', () => {
             if (harness.failGoalApi) throw new Error('goal api unavailable');
             const threadId = params?.threadId ?? 'thread-unknown';
             harness.clearGoalCalls.push(threadId);
+            if (harness.clearGoalReturnsFalse) {
+                return { cleared: false };
+            }
             harness.currentGoal = null;
             const payload = { threadId };
             harness.notifications.push({ method: 'thread/goal/cleared', params: payload });
@@ -335,6 +340,7 @@ describe('codexRemoteLauncher', () => {
         harness.clearGoalCalls = [];
         harness.currentGoal = null;
         harness.failGoalApi = false;
+        harness.clearGoalReturnsFalse = false;
         harness.suppressTurnCompletion = false;
         harness.remainingThreadSystemErrors = 0;
     });
@@ -460,6 +466,24 @@ describe('codexRemoteLauncher', () => {
             message: 'Context was reset'
         });
         expect(session.thinking).toBe(false);
+    });
+
+    it('clears visible goal state when resetting codex context', async () => {
+        const { session, codexMessages } = createSessionStub(['/goal ship the feature', '/clear']);
+
+        const exitReason = await codexRemoteLauncher(session as never);
+
+        expect(exitReason).toBe('exit');
+        expect(codexMessages).toContainEqual(expect.objectContaining({
+            type: 'codex_goal',
+            action: 'updated',
+            goal: expect.objectContaining({ objective: 'ship the feature' })
+        }));
+        expect(codexMessages).toContainEqual(expect.objectContaining({
+            type: 'codex_goal',
+            action: 'cleared',
+            threadId: 'thread-1'
+        }));
     });
 
     it('compacts the current thread without starting a turn', async () => {
@@ -648,6 +672,25 @@ describe('codexRemoteLauncher', () => {
             type: 'message',
             message: expect.stringMatching(/^Goal (active|paused|cleared)/)
         }));
+    });
+
+    it('reports when goal clear is a no-op and Codex sends no cleared notification', async () => {
+        harness.clearGoalReturnsFalse = true;
+        const { session, sessionEvents, codexMessages } = createSessionStub(['/goal clear']);
+        session.sessionId = 'thread-1';
+
+        const exitReason = await codexRemoteLauncher(session as never);
+
+        expect(exitReason).toBe('exit');
+        expect(harness.clearGoalCalls).toEqual(['thread-1']);
+        expect(codexMessages).not.toContainEqual(expect.objectContaining({
+            type: 'codex_goal',
+            action: 'cleared'
+        }));
+        expect(sessionEvents).toContainEqual({
+            type: 'message',
+            message: 'No active goal to clear'
+        });
     });
 
     it('does not interrupt an in-flight turn before applying goal control', async () => {

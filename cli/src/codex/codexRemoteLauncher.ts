@@ -719,6 +719,15 @@ ${formatGoalUsage(goal)}`;
             session.sendSessionEvent({ type: 'message', message });
         };
 
+        const sendGoalCleared = (threadId: string) => {
+            session.sendAgentMessage({
+                type: 'codex_goal',
+                action: 'cleared',
+                threadId,
+                id: randomUUID()
+            });
+        };
+
         const resetCurrentTurnState = () => {
             turnInFlight = false;
             allowAnonymousTerminalEvent = false;
@@ -875,7 +884,10 @@ ${formatGoalUsage(goal)}`;
                 }
 
                 if (slash.action === 'clear') {
-                    await appServerClient.clearThreadGoal({ threadId }, { signal: this.abortController.signal });
+                    const response = await appServerClient.clearThreadGoal({ threadId }, { signal: this.abortController.signal });
+                    if (!response.cleared) {
+                        sendVisibleStatus('No active goal to clear');
+                    }
                     return;
                 }
 
@@ -904,11 +916,19 @@ ${formatGoalUsage(goal)}`;
             if (specialCommand.type === 'clear') {
                 await interruptActiveTurn();
                 resetCurrentTurnState();
+                const clearedThreadId = this.currentThreadId && this.currentThreadId !== invalidThreadId
+                    ? this.currentThreadId
+                    : session.sessionId && session.sessionId !== invalidThreadId
+                        ? session.sessionId
+                        : null;
                 this.currentThreadId = null;
                 invalidThreadId = null;
                 hasThread = false;
                 hasSummary = false;
                 session.resetCodexThread();
+                if (clearedThreadId) {
+                    sendGoalCleared(clearedThreadId);
+                }
                 sendVisibleStatus('Context was reset');
                 return true;
             }
