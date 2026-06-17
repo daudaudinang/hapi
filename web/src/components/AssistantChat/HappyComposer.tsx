@@ -13,6 +13,7 @@ import {
     useState
 } from 'react'
 import type { AgentState, CodexCollaborationMode, PermissionMode } from '@/types/api'
+import type { CodexGoalState } from '@/chat/types'
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
 import type { ConversationStatus } from '@/realtime/types'
 import { useActiveWord } from '@/hooks/useActiveWord'
@@ -75,6 +76,7 @@ export function HappyComposer(props: {
     contextSize?: number
     contextCacheRead?: number
     contextWindow?: number | null
+    codexGoal?: CodexGoalState | null
     controlledByUser?: boolean
     agentFlavor?: string | null
     availableModelOptions?: Array<{ value: string | null; label: string }>
@@ -114,6 +116,7 @@ export function HappyComposer(props: {
         contextSize,
         contextCacheRead,
         contextWindow,
+        codexGoal,
         controlledByUser = false,
         agentFlavor,
         availableModelOptions,
@@ -639,6 +642,7 @@ export function HappyComposer(props: {
                         contextSize={contextSize}
                         contextCacheRead={contextCacheRead}
                         contextWindow={contextWindow}
+                        codexGoal={codexGoal}
                         model={model}
                         modelReasoningEffort={modelReasoningEffort}
                         permissionMode={permissionMode}

@@ -58,6 +58,40 @@ function formatTokenCount(value: number): string {
     return String(value)
 }
 
+function formatGoalTokenCount(value: number): string {
+    return formatTokenCount(value).replace(/\.0([kM])$/, '$1')
+}
+
+function formatElapsedSeconds(seconds: number): string {
+    if (seconds < 60) return `${seconds}s`
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    if (secs === 0) return `${mins}m`
+    return `${mins}m ${secs}s`
+}
+
+function formatGoalProgress(event: AgentEvent): EventPresentation {
+    const record = event as Record<string, unknown>
+    if (record.action === 'cleared') return { icon: '🎯', text: 'Goal cleared' }
+
+    const goal = asRecord(record.goal)
+    if (!goal) return { icon: '🎯', text: 'Goal updated' }
+
+    const status = typeof goal.status === 'string' ? goal.status : 'active'
+    const objective = typeof goal.objective === 'string' ? goal.objective : 'Goal'
+    const tokensUsed = asNumber(goal.tokensUsed) ?? 0
+    const tokenBudget = asNumber(goal.tokenBudget)
+    const timeUsedSeconds = asNumber(goal.timeUsedSeconds) ?? 0
+    const tokenText = tokenBudget !== null
+        ? `${formatGoalTokenCount(tokensUsed)}/${formatGoalTokenCount(tokenBudget)} tokens`
+        : `${formatGoalTokenCount(tokensUsed)} tokens`
+
+    return {
+        icon: '🎯',
+        text: `Goal ${status}: ${objective} · ${tokenText} · ${formatElapsedSeconds(timeUsedSeconds)}`
+    }
+}
+
 function formatTokenCountEvent(event: AgentEvent): EventPresentation {
     const info = asRecord((event as Record<string, unknown>).info)
     const total = asRecord(info?.total) ?? info
@@ -150,6 +184,9 @@ export function getEventPresentation(event: AgentEvent): EventPresentation {
     }
     if (event.type === 'token-count') {
         return formatTokenCountEvent(event)
+    }
+    if (event.type === 'codex-goal') {
+        return formatGoalProgress(event)
     }
     try {
         return { icon: null, text: JSON.stringify(event) }

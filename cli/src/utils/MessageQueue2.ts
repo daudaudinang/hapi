@@ -147,6 +147,44 @@ export class MessageQueue2<T> {
         logger.debug(`[MessageQueue2] pushIsolateAndClear() completed. Queue size: ${this.queue.length}`);
     }
 
+
+    /**
+     * Push a message that must be processed in complete isolation.
+     * Keeps existing pending messages queued before it.
+     * Used for commands that must not batch but must not discard user text.
+     */
+    pushIsolate(message: string, mode: T, localId?: string): void {
+        if (this.closed) {
+            throw new Error('Cannot push to closed queue');
+        }
+
+        const modeHash = this.modeHasher(mode);
+        logger.debug(`[MessageQueue2] pushIsolate() called with mode hash: ${modeHash}`);
+
+        this.queue.push({
+            message,
+            mode,
+            modeHash,
+            localId,
+            isolate: true
+        });
+
+        // Trigger message handler if set
+        if (this.onMessageHandler) {
+            this.onMessageHandler(message, mode);
+        }
+
+        // Notify waiter if any
+        if (this.waiter) {
+            logger.debug(`[MessageQueue2] Notifying waiter for isolated message`);
+            const waiter = this.waiter;
+            this.waiter = null;
+            waiter(true);
+        }
+
+        logger.debug(`[MessageQueue2] pushIsolate() completed. Queue size: ${this.queue.length}`);
+    }
+
     /**
      * Push a message to the beginning of the queue with a mode.
      */

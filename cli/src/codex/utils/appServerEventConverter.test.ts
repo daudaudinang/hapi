@@ -389,4 +389,50 @@ describe('AppServerEventConverter', () => {
 
         expect(events).toEqual([{ type: 'task_failed', error: 'fatal' }]);
     });
+    it('maps thread goal updated notifications', () => {
+        const converter = new AppServerEventConverter();
+        const events = converter.handleNotification('thread/goal/updated', {
+            threadId: 'thread-1',
+            turnId: null,
+            goal: {
+                threadId: 'thread-1',
+                objective: 'ship it',
+                status: 'active',
+                tokenBudget: 200000,
+                tokensUsed: 12000,
+                timeUsedSeconds: 90,
+                createdAt: 1776272400,
+                updatedAt: 1776272490
+            }
+        });
+
+        expect(events).toEqual([{
+            type: 'codex_goal',
+            action: 'updated',
+            threadId: 'thread-1',
+            turnId: null,
+            goal: {
+                threadId: 'thread-1',
+                objective: 'ship it',
+                status: 'active',
+                tokenBudget: 200000,
+                tokensUsed: 12000,
+                timeUsedSeconds: 90,
+                createdAt: 1776272400,
+                updatedAt: 1776272490
+            }
+        }]);
+    });
+
+    it('maps thread goal cleared notifications', () => {
+        const converter = new AppServerEventConverter();
+        const events = converter.handleNotification('thread/goal/cleared', { threadId: 'thread-1' });
+
+        expect(events).toEqual([{
+            type: 'codex_goal',
+            action: 'cleared',
+            threadId: 'thread-1'
+        }]);
+    });
+
 });

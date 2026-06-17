@@ -24,6 +24,40 @@ function asNumber(value: unknown): number | null {
     return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
+
+function normalizeGoalStatus(value: unknown): string | null {
+    const status = asString(value);
+    if (!status) return null;
+    return ['active', 'paused', 'blocked', 'usageLimited', 'budgetLimited', 'complete'].includes(status)
+        ? status
+        : null;
+}
+
+function normalizeThreadGoal(value: unknown): Record<string, unknown> | null {
+    const goal = asRecord(value);
+    if (!goal) return null;
+    const threadId = asString(goal.threadId ?? goal.thread_id);
+    const objective = asString(goal.objective);
+    const status = normalizeGoalStatus(goal.status);
+    const tokensUsed = asNumber(goal.tokensUsed ?? goal.tokens_used);
+    const timeUsedSeconds = asNumber(goal.timeUsedSeconds ?? goal.time_used_seconds);
+    const createdAt = asNumber(goal.createdAt ?? goal.created_at);
+    const updatedAt = asNumber(goal.updatedAt ?? goal.updated_at);
+    if (!threadId || !objective || !status || tokensUsed === null || timeUsedSeconds === null || createdAt === null || updatedAt === null) {
+        return null;
+    }
+    return {
+        threadId,
+        objective,
+        status,
+        tokenBudget: asNumber(goal.tokenBudget ?? goal.token_budget),
+        tokensUsed,
+        timeUsedSeconds,
+        createdAt,
+        updatedAt
+    };
+}
+
 function extractItemId(params: Record<string, unknown>): string | null {
     const direct = asString(params.itemId ?? params.item_id ?? params.id);
     if (direct) return direct;
@@ -332,6 +366,32 @@ export class AppServerEventConverter {
                     error
                 });
             }
+            return events;
+        }
+
+        if (method === 'thread/goal/updated') {
+            const threadId = asString(paramsRecord.threadId ?? paramsRecord.thread_id);
+            const turnId = asString(paramsRecord.turnId ?? paramsRecord.turn_id);
+            const goal = normalizeThreadGoal(paramsRecord.goal);
+            if (!threadId || !goal) return events;
+            events.push({
+                type: 'codex_goal',
+                action: 'updated',
+                threadId,
+                turnId,
+                goal
+            });
+            return events;
+        }
+
+        if (method === 'thread/goal/cleared') {
+            const threadId = asString(paramsRecord.threadId ?? paramsRecord.thread_id);
+            if (!threadId) return events;
+            events.push({
+                type: 'codex_goal',
+                action: 'cleared',
+                threadId
+            });
             return events;
         }
 

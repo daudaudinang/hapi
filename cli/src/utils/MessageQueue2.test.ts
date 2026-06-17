@@ -426,6 +426,28 @@ describe('MessageQueue2', () => {
         expect(batch3?.mode.type).toBe('A');
     });
 
+
+    it('should isolate messages without clearing pending messages', async () => {
+        const queue = new MessageQueue2<{ type: string }>((mode) => mode.type);
+
+        queue.push('before1', { type: 'A' });
+        queue.push('before2', { type: 'A' });
+        queue.pushIsolate('goal command', { type: 'A' });
+        queue.push('after', { type: 'A' });
+
+        const batch1 = await queue.waitForMessagesAndGetAsString();
+        expect(batch1?.message).toBe('before1\nbefore2');
+        expect(batch1?.isolate).toBe(false);
+
+        const batch2 = await queue.waitForMessagesAndGetAsString();
+        expect(batch2?.message).toBe('goal command');
+        expect(batch2?.isolate).toBe(true);
+
+        const batch3 = await queue.waitForMessagesAndGetAsString();
+        expect(batch3?.message).toBe('after');
+        expect(batch3?.isolate).toBe(false);
+    });
+
     it('should call onBatchConsumed with collected localIds', async () => {
         const queue = new MessageQueue2<string>(mode => mode);
         const received: string[][] = [];

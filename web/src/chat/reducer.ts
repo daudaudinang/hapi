@@ -1,6 +1,6 @@
 import type { AgentState } from '@/types/api'
 import type { TeamMentionRequest } from '@/types/api'
-import type { ChatBlock, NormalizedMessage, UsageData } from '@/chat/types'
+import type { ChatBlock, CodexGoalState, NormalizedMessage, UsageData } from '@/chat/types'
 import { traceMessages, type TracedMessage } from '@/chat/tracer'
 import { dedupeAgentEvents, foldApiErrorEvents } from '@/chat/reducerEvents'
 import { collectTitleChanges, collectToolIdsFromMessages, ensureToolBlock, getPermissions } from '@/chat/reducerTools'
@@ -28,7 +28,7 @@ export function reduceChatBlocks(
     normalized: NormalizedMessage[],
     agentState: AgentState | null | undefined,
     teamMentionRequests: TeamMentionRequest[] = []
-): { blocks: ChatBlock[]; hasReadyEvent: boolean; latestUsage: LatestUsage | null } {
+): { blocks: ChatBlock[]; hasReadyEvent: boolean; latestUsage: LatestUsage | null; latestGoal: CodexGoalState | null } {
     const permissionsById = getPermissions(agentState)
     const toolIdsInMessages = collectToolIdsFromMessages(normalized)
     const titleChangesByToolUseId = collectTitleChanges(normalized)
@@ -115,5 +115,18 @@ export function reduceChatBlocks(
         }
     }
 
-    return { blocks: dedupeAgentEvents(foldApiErrorEvents(rootResult.blocks)), hasReadyEvent, latestUsage }
+    let latestGoal: CodexGoalState | null = null
+    for (const msg of normalized) {
+        if (msg.role !== 'event' || msg.content.type !== 'codex-goal') continue
+        const goalEvent = msg.content as
+            | { type: 'codex-goal'; action: 'updated'; goal: CodexGoalState }
+            | { type: 'codex-goal'; action: 'cleared'; threadId: string }
+        if (goalEvent.action === 'updated') {
+            latestGoal = goalEvent.goal
+        } else if (goalEvent.action === 'cleared') {
+            latestGoal = null
+        }
+    }
+
+    return { blocks: dedupeAgentEvents(foldApiErrorEvents(rootResult.blocks)), hasReadyEvent, latestUsage, latestGoal }
 }

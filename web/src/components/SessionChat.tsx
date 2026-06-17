@@ -589,6 +589,7 @@ export function SessionChat(props: {
                         contextSize={reduced.latestUsage?.contextSize}
                         contextCacheRead={reduced.latestUsage?.cacheRead}
                         contextWindow={reduced.latestUsage?.contextWindow}
+                        codexGoal={reduced.latestGoal}
                         controlledByUser={controlledByUser}
                         onCollaborationModeChange={
                             codexCollaborationModeSupported && !controlledByUser

@@ -10,6 +10,19 @@ export type UsageData = {
     service_tier?: string
 }
 
+export type CodexGoalStatus = 'active' | 'paused' | 'blocked' | 'usageLimited' | 'budgetLimited' | 'complete'
+
+export type CodexGoalState = {
+    threadId: string
+    objective: string
+    status: CodexGoalStatus
+    tokenBudget: number | null
+    tokensUsed: number
+    timeUsedSeconds: number
+    createdAt: number
+    updatedAt: number
+}
+
 export type AgentEvent =
     | { type: 'switch'; mode: 'local' | 'remote' }
     | { type: 'message'; message: string }
@@ -21,6 +34,8 @@ export type AgentEvent =
     | { type: 'turn-duration'; durationMs: number }
     | { type: 'microcompact'; trigger: string; preTokens: number; tokensSaved: number }
     | { type: 'compact'; trigger: string; preTokens: number }
+    | { type: 'codex-goal'; action: 'updated'; goal: CodexGoalState }
+    | { type: 'codex-goal'; action: 'cleared'; threadId: string }
     | ({ type: string } & Record<string, unknown>)
 
 export type ToolResultPermission = {

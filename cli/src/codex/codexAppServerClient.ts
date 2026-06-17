@@ -15,7 +15,13 @@ import type {
     TurnInterruptParams,
     TurnInterruptResponse,
     ThreadCompactStartParams,
-    ThreadCompactStartResponse
+    ThreadCompactStartResponse,
+    ThreadGoalSetParams,
+    ThreadGoalSetResponse,
+    ThreadGoalGetParams,
+    ThreadGoalGetResponse,
+    ThreadGoalClearParams,
+    ThreadGoalClearResponse
 } from './appServerTypes';
 
 type JsonRpcLiteRequest = {
@@ -184,6 +190,39 @@ export class CodexAppServerClient {
             timeoutMs: CodexAppServerClient.DEFAULT_TIMEOUT_MS
         });
         return response as ThreadCompactStartResponse;
+    }
+
+    async setThreadGoal(
+        params: ThreadGoalSetParams,
+        options?: { signal?: AbortSignal }
+    ): Promise<ThreadGoalSetResponse> {
+        const response = await this.sendRequest('thread/goal/set', params, {
+            signal: options?.signal,
+            timeoutMs: 30_000
+        });
+        return response as ThreadGoalSetResponse;
+    }
+
+    async getThreadGoal(
+        params: ThreadGoalGetParams,
+        options?: { signal?: AbortSignal }
+    ): Promise<ThreadGoalGetResponse> {
+        const response = await this.sendRequest('thread/goal/get', params, {
+            signal: options?.signal,
+            timeoutMs: 30_000
+        });
+        return response as ThreadGoalGetResponse;
+    }
+
+    async clearThreadGoal(
+        params: ThreadGoalClearParams,
+        options?: { signal?: AbortSignal }
+    ): Promise<ThreadGoalClearResponse> {
+        const response = await this.sendRequest('thread/goal/clear', params, {
+            signal: options?.signal,
+            timeoutMs: 30_000
+        });
+        return response as ThreadGoalClearResponse;
     }
 
     async disconnect(): Promise<void> {

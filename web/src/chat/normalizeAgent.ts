@@ -60,6 +60,48 @@ function normalizeCodexTokenUsage(value: unknown) {
     }
 }
 
+function normalizeCodexGoalStatus(value: unknown) {
+    const status = asString(value)
+    if (
+        status === 'active'
+        || status === 'paused'
+        || status === 'blocked'
+        || status === 'usageLimited'
+        || status === 'budgetLimited'
+        || status === 'complete'
+    ) {
+        return status
+    }
+    return null
+}
+
+function normalizeCodexGoal(value: unknown) {
+    const goal = isObject(value) ? value : null
+    if (!goal) return null
+
+    const threadId = asString(goal.threadId ?? goal.thread_id)
+    const objective = asString(goal.objective)
+    const status = normalizeCodexGoalStatus(goal.status)
+    const tokensUsed = asNumber(goal.tokensUsed ?? goal.tokens_used)
+    const timeUsedSeconds = asNumber(goal.timeUsedSeconds ?? goal.time_used_seconds)
+    const createdAt = asNumber(goal.createdAt ?? goal.created_at)
+    const updatedAt = asNumber(goal.updatedAt ?? goal.updated_at)
+    if (!threadId || !objective || !status || tokensUsed === null || timeUsedSeconds === null || createdAt === null || updatedAt === null) {
+        return null
+    }
+
+    return {
+        threadId,
+        objective,
+        status,
+        tokenBudget: asNumber(goal.tokenBudget ?? goal.token_budget),
+        tokensUsed,
+        timeUsedSeconds,
+        createdAt,
+        updatedAt
+    }
+}
+
 function normalizePlanStatus(value: unknown): 'pending' | 'in_progress' | 'completed' {
     const raw = typeof value === 'string' ? value.trim().toLowerCase().replace(/[\s-]/g, '_') : ''
     if (raw === 'completed' || raw === 'complete' || raw === 'done') return 'completed'
@@ -458,6 +500,34 @@ export function normalizeAgentRecord(
                 meta,
                 usage
             } : null
+        }
+
+        if (data.type === 'codex_goal') {
+            const action = asString(data.action)
+            if (action === 'updated') {
+                const goal = normalizeCodexGoal(data.goal)
+                return goal ? {
+                    id: messageId,
+                    localId,
+                    createdAt,
+                    role: 'event',
+                    content: { type: 'codex-goal', action: 'updated', goal },
+                    isSidechain: false,
+                    meta
+                } : null
+            }
+            if (action === 'cleared') {
+                const threadId = asString(data.threadId ?? data.thread_id)
+                return threadId ? {
+                    id: messageId,
+                    localId,
+                    createdAt,
+                    role: 'event',
+                    content: { type: 'codex-goal', action: 'cleared', threadId },
+                    isSidechain: false,
+                    meta
+                } : null
+            }
         }
 
         if (data.type === 'tool-call' && typeof data.callId === 'string') {

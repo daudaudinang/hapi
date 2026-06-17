@@ -485,6 +485,66 @@ describe('normalizeDecryptedMessage', () => {
         })
     })
 
+    it('normalizes Codex goal progress events', () => {
+        const message = makeMessage({
+            role: 'agent',
+            content: {
+                type: 'codex',
+                data: {
+                    type: 'codex_goal',
+                    action: 'updated',
+                    goal: {
+                        threadId: 'thread-1',
+                        objective: 'ship it',
+                        status: 'active',
+                        tokenBudget: 200000,
+                        tokensUsed: 12000,
+                        timeUsedSeconds: 90,
+                        createdAt: 1776272400,
+                        updatedAt: 1776272490
+                    }
+                }
+            }
+        })
+
+        expect(normalizeDecryptedMessage(message)).toMatchObject({
+            role: 'event',
+            content: {
+                type: 'codex-goal',
+                action: 'updated',
+                goal: {
+                    objective: 'ship it',
+                    status: 'active',
+                    tokenBudget: 200000,
+                    tokensUsed: 12000
+                }
+            }
+        })
+    })
+
+    it('normalizes Codex goal cleared events', () => {
+        const message = makeMessage({
+            role: 'agent',
+            content: {
+                type: 'codex',
+                data: {
+                    type: 'codex_goal',
+                    action: 'cleared',
+                    threadId: 'thread-1'
+                }
+            }
+        })
+
+        expect(normalizeDecryptedMessage(message)).toMatchObject({
+            role: 'event',
+            content: {
+                type: 'codex-goal',
+                action: 'cleared',
+                threadId: 'thread-1'
+            }
+        })
+    })
+
 
     it('preserves Team Chat mention metadata on synthetic user messages', () => {
         const message = makeMessage({

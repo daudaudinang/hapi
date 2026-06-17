@@ -96,6 +96,55 @@ describe('getEventPresentation — token-count', () => {
     })
 })
 
+describe('getEventPresentation — Codex goal', () => {
+    it('formats Codex goal progress events without token budget', () => {
+        const result = getEventPresentation({
+            type: 'codex-goal',
+            action: 'updated',
+            goal: {
+                threadId: 'thread-1',
+                objective: 'ship it',
+                status: 'active',
+                tokenBudget: null,
+                tokensUsed: 12000,
+                timeUsedSeconds: 90,
+                createdAt: 1776272400,
+                updatedAt: 1776272490
+            }
+        })
+
+        expect(result.icon).toBe('🎯')
+        expect(result.text).toBe('Goal active: ship it · 12k tokens · 1m 30s')
+    })
+
+    it('formats Codex goal progress events with explicit token budget', () => {
+        const result = getEventPresentation({
+            type: 'codex-goal',
+            action: 'updated',
+            goal: {
+                threadId: 'thread-1',
+                objective: 'ship it',
+                status: 'active',
+                tokenBudget: 200000,
+                tokensUsed: 12000,
+                timeUsedSeconds: 90,
+                createdAt: 1776272400,
+                updatedAt: 1776272490
+            }
+        })
+
+        expect(result.text).toBe('Goal active: ship it · 12k/200k tokens · 1m 30s')
+    })
+
+    it('formats Codex goal clear events', () => {
+        expect(getEventPresentation({
+            type: 'codex-goal',
+            action: 'cleared',
+            threadId: 'thread-1'
+        }).text).toBe('Goal cleared')
+    })
+})
+
 describe('formatResetTime', () => {
     it('formats a unix timestamp to a non-empty string', () => {
         const result = formatResetTime(1774278000)
