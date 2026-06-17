@@ -96,6 +96,7 @@ export function SessionGoalControl(props: {
 
     const isPaused = goal.status === 'paused'
     const progress = formatGoalProgress(goal)
+    const objectiveErrorId = 'codex-goal-objective-error'
 
     return (
         <Dialog>
@@ -107,7 +108,6 @@ export function SessionGoalControl(props: {
                     className={cn('h-8 w-8 p-0', compact ? 'text-xs' : 'text-sm')}
                     aria-label="Codex goal"
                     title={goal.objective}
-                    disabled={disabled}
                 >
                     <span aria-hidden="true">🎯</span>
                 </Button>
@@ -140,8 +140,14 @@ export function SessionGoalControl(props: {
                                 onChange={handleObjectiveChange}
                                 onInput={handleObjectiveChange}
                                 disabled={disabled}
+                                aria-invalid={!!error}
+                                aria-describedby={error ? objectiveErrorId : undefined}
                             />
-                            {error ? <p className="text-sm text-red-500">{error}</p> : null}
+                            {error ? (
+                                <p id={objectiveErrorId} className="text-sm text-red-500">
+                                    {error}
+                                </p>
+                            ) : null}
                         </div>
 
                         <div className="flex flex-wrap justify-end gap-2">

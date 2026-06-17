@@ -96,6 +96,34 @@ describe('SessionGoalControl', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Update goal' }))
 
         expect(onGoalCommand).not.toHaveBeenCalled()
-        expect(screen.getByText('Goal objective cannot be empty.')).toBeInTheDocument()
+        const error = screen.getByText('Goal objective cannot be empty.')
+        expect(error).toHaveAttribute('id', 'codex-goal-objective-error')
+        expect(objectiveInput).toHaveAttribute('aria-invalid', 'true')
+        expect(objectiveInput).toHaveAttribute('aria-describedby', 'codex-goal-objective-error')
+    })
+
+    it('keeps the goal modal viewable while disabled but blocks edits and actions', () => {
+        const onGoalCommand = vi.fn()
+        render(<SessionGoalControl goal={makeGoal()} onGoalCommand={onGoalCommand} disabled />)
+
+        const trigger = screen.getByRole('button', { name: 'Codex goal' })
+        expect(trigger).not.toBeDisabled()
+        fireEvent.click(trigger)
+
+        expect(screen.getByRole('dialog')).toBeInTheDocument()
+        expect(screen.getByDisplayValue('Ship Codex goal UI')).toBeInTheDocument()
+        expect(screen.getByText('active · 12k/200k tokens · 1m 30s')).toBeInTheDocument()
+
+        const objectiveInput = screen.getByLabelText('Goal objective')
+        expect(objectiveInput).toBeDisabled()
+        expect(screen.getByRole('button', { name: 'Update goal' })).toBeDisabled()
+        expect(screen.getByRole('button', { name: 'Pause goal' })).toBeDisabled()
+        expect(screen.getByRole('button', { name: 'Unset goal' })).toBeDisabled()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Update goal' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Pause goal' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Unset goal' }))
+
+        expect(onGoalCommand).not.toHaveBeenCalled()
     })
 })
