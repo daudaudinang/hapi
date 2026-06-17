@@ -446,7 +446,7 @@ export function SessionChat(props: {
                     compactMode={props.compactMode}
                     pinIndex={props.pinIndex}
                     onFocusSession={props.onFocusSession}
-                    codexGoal={agentFlavor === 'codex' ? reduced.latestGoal : null}
+                    codexGoal={reduced.latestGoal}
                     onGoalCommand={handleGoalCommand}
                 />
             )}
@@ -511,7 +511,7 @@ export function SessionChat(props: {
             <AssistantRuntimeProvider runtime={runtime}>
                 <div className="relative flex min-h-0 flex-1 flex-col">
                     <HappyThread
-                        key={props.session.id}
+                        key={`thread-${props.session.id}`}
                         api={props.api}
                         sessionId={props.session.id}
                         metadata={props.session.metadata}
@@ -566,7 +566,7 @@ export function SessionChat(props: {
                     </div>
 
                     <HappyComposer
-                        key={props.session.id}
+                        key={`composer-${props.session.id}`}
                         sessionId={props.session.id}
                         disabled={props.isSending}
                         permissionMode={props.session.permissionMode}
