@@ -184,7 +184,7 @@ export function SessionHeader(props: {
     const worktreeBranch = session.metadata?.worktree?.branch
     const modelLabel = getSessionModelLabel(session)
     const agentFlavor = session.metadata?.flavor ?? 'claude'
-    const canControlGoal = agentFlavor === 'codex' && typeof props.onGoalCommand === 'function'
+    const canControlGoal = session.active && agentFlavor === 'codex' && typeof props.onGoalCommand === 'function'
     const sessionStatus = session.thinking ? 'thinking' : !session.active ? 'archived' : 'active'
     const editorSearch = session.metadata?.machineId && session.metadata?.path
         ? { machine: session.metadata.machineId, project: session.metadata.path }

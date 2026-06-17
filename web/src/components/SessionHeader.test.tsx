@@ -216,6 +216,34 @@ describe('SessionHeader editor entry point', () => {
         expect(onGoalCommand).not.toHaveBeenCalled()
     })
 
+    it('keeps an inactive Codex goal viewable but disables actions', () => {
+        const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        const onGoalCommand = vi.fn()
+        render(
+            <QueryClientProvider client={qc}>
+                <SessionHeader
+                    session={makeSession({ active: false })}
+                    onBack={vi.fn()}
+                    api={null}
+                    codexGoal={makeGoal()}
+                    onGoalCommand={onGoalCommand}
+                />
+            </QueryClientProvider>
+        )
+
+        const button = screen.getByRole('button', { name: 'Codex goal' })
+        expect(button).toBeInTheDocument()
+        fireEvent.click(button)
+
+        expect(screen.getByRole('dialog')).toBeInTheDocument()
+        expect(screen.getByDisplayValue('Ship Codex goal header control')).toBeDisabled()
+        expect(screen.getByRole('button', { name: 'Unset goal' })).toBeDisabled()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Unset goal' }))
+
+        expect(onGoalCommand).not.toHaveBeenCalled()
+    })
+
     it('shows this sessions Team Chat aliases near the session title', () => {
         useSessionTeamMembershipsMock.mockReturnValue({
             memberships: [{
