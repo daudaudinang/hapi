@@ -1,0 +1,152 @@
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Machine } from '@/types/api'
+import { NewSession } from './index'
+
+const spawnSessionMock = vi.fn()
+const checkPathsExistsMock = vi.fn()
+
+vi.mock('@/lib/use-translation', () => ({
+    useTranslation: () => ({ t: (key: string) => key })
+}))
+
+vi.mock('@/hooks/usePlatform', () => ({
+    usePlatform: () => ({ haptic: { notification: vi.fn() } })
+}))
+
+vi.mock('@/hooks/mutations/useSpawnSession', () => ({
+    useSpawnSession: () => ({ spawnSession: spawnSessionMock, isPending: false, error: null })
+}))
+
+vi.mock('@/hooks/queries/useSessions', () => ({
+    useSessions: () => ({ sessions: [] })
+}))
+
+vi.mock('@/hooks/useRecentPaths', () => ({
+    useRecentPaths: () => ({
+        getRecentPaths: () => [],
+        addRecentPath: vi.fn(),
+        getLastUsedMachineId: () => null,
+        setLastUsedMachineId: vi.fn()
+    })
+}))
+
+vi.mock('@/hooks/useMachinePathsExists', () => ({
+    useMachinePathsExists: () => ({
+        pathExistence: { '/repo': true },
+        checkPathsExists: checkPathsExistsMock
+    })
+}))
+
+vi.mock('@/hooks/useDirectorySuggestions', () => ({
+    useDirectorySuggestions: () => []
+}))
+
+vi.mock('@/hooks/useActiveSuggestions', () => ({
+    useActiveSuggestions: () => [[], -1, vi.fn(), vi.fn(), vi.fn()]
+}))
+
+vi.mock('@/hooks/queries/useCodexModels', () => ({
+    useCodexModels: () => ({ models: [], isLoading: false, error: null })
+}))
+
+vi.mock('@/hooks/queries/useOpencodeModelsForCwd', () => ({
+    useOpencodeModelsForCwd: () => ({
+        availableModels: [],
+        availableEfforts: [],
+        currentModelId: null,
+        isLoading: false,
+        error: null,
+        refetch: vi.fn()
+    })
+}))
+
+function makeMachine(): Machine {
+    return {
+        id: 'machine-1',
+        active: true,
+        metadata: {
+            host: 'localhost',
+            platform: 'darwin',
+            happyCliVersion: '1.0.0',
+            workspaceRoot: '/repo'
+        },
+        runnerState: null
+    }
+}
+
+describe('NewSession Codex resume', () => {
+    beforeEach(() => {
+        localStorage.clear()
+        vi.clearAllMocks()
+        checkPathsExistsMock.mockResolvedValue({ '/repo': true })
+        spawnSessionMock.mockResolvedValue({ type: 'success', sessionId: 'session-1' })
+    })
+
+    afterEach(() => {
+        cleanup()
+    })
+
+    it('sends trimmed resumeSessionId when creating a Codex resume session', async () => {
+        render(
+            <NewSession
+                api={{} as never}
+                machines={[makeMachine()]}
+                initialMachineId="machine-1"
+                initialDirectory="/repo"
+                onSuccess={vi.fn()}
+                onCancel={vi.fn()}
+            />
+        )
+
+        fireEvent.click(screen.getByLabelText('codex'))
+        fireEvent.click(screen.getByRole('checkbox', { name: /newSession.codexResume.title/ }))
+        fireEvent.change(screen.getByLabelText('newSession.codexResume.sessionId'), {
+            target: { value: ' 019ed35e-db26-7770-abb3-1c7ee3c92f52 ' }
+        })
+        fireEvent.click(screen.getByRole('button', { name: 'newSession.create' }))
+
+        await waitFor(() => {
+            expect(spawnSessionMock).toHaveBeenCalledWith(expect.objectContaining({
+                agent: 'codex',
+                directory: '/repo',
+                resumeSessionId: '019ed35e-db26-7770-abb3-1c7ee3c92f52'
+            }))
+        })
+    })
+
+    it('does not show Codex resume controls for non-Codex agents', () => {
+        render(
+            <NewSession
+                api={{} as never}
+                machines={[makeMachine()]}
+                initialMachineId="machine-1"
+                initialDirectory="/repo"
+                onSuccess={vi.fn()}
+                onCancel={vi.fn()}
+            />
+        )
+
+        expect(screen.queryByRole('checkbox', { name: /newSession.codexResume.title/ })).not.toBeInTheDocument()
+        expect(screen.queryByLabelText('newSession.codexResume.sessionId')).not.toBeInTheDocument()
+    })
+
+    it('requires a Codex session id when resume mode is enabled', () => {
+        render(
+            <NewSession
+                api={{} as never}
+                machines={[makeMachine()]}
+                initialMachineId="machine-1"
+                initialDirectory="/repo"
+                onSuccess={vi.fn()}
+                onCancel={vi.fn()}
+            />
+        )
+
+        fireEvent.click(screen.getByLabelText('codex'))
+        fireEvent.click(screen.getByRole('checkbox', { name: /newSession.codexResume.title/ }))
+
+        expect(screen.getByRole('button', { name: 'newSession.create' })).toBeDisabled()
+    })
+
+})

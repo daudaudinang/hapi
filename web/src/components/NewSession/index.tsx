@@ -19,6 +19,7 @@ import { MachineSelector } from './MachineSelector'
 import { ModelSelector } from './ModelSelector'
 import { OpencodeModelSelector } from './OpencodeModelSelector'
 import { ClaudeEffortSelector } from './ClaudeEffortSelector'
+import { CodexResumeSection } from './CodexResumeSection'
 import { shouldEnableOpencodeModelDiscovery } from './opencodeModelsGate'
 import { ReasoningEffortSelector } from './ReasoningEffortSelector'
 import {
@@ -61,6 +62,8 @@ export function NewSession(props: {
     const [yoloMode, setYoloMode] = useState(loadPreferredYoloMode)
     const [sessionType, setSessionType] = useState<SessionType>('simple')
     const [worktreeName, setWorktreeName] = useState('')
+    const [resumeCodex, setResumeCodex] = useState(false)
+    const [resumeCodexSessionId, setResumeCodexSessionId] = useState('')
     const [directoryCreationConfirmed, setDirectoryCreationConfirmed] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const worktreeInputRef = useRef<HTMLInputElement>(null)
@@ -83,6 +86,13 @@ export function NewSession(props: {
     useEffect(() => {
         savePreferredYoloMode(yoloMode)
     }, [yoloMode])
+
+    useEffect(() => {
+        if (agent !== 'codex') {
+            setResumeCodex(false)
+            setResumeCodexSessionId('')
+        }
+    }, [agent])
 
     useEffect(() => {
         if (props.machines.length === 0) return
@@ -339,6 +349,7 @@ export function NewSession(props: {
             const resolvedModelReasoningEffort = (agent === 'codex' || agent === 'opencode') && modelReasoningEffort !== 'default'
                 ? modelReasoningEffort
                 : undefined
+            const trimmedResumeCodexSessionId = resumeCodexSessionId.trim()
             const result = await spawnSession({
                 machineId,
                 directory: trimmedDirectory,
@@ -348,7 +359,10 @@ export function NewSession(props: {
                 modelReasoningEffort: resolvedModelReasoningEffort,
                 yolo: yoloMode,
                 sessionType,
-                worktreeName: sessionType === 'worktree' ? (worktreeName.trim() || undefined) : undefined
+                worktreeName: sessionType === 'worktree' ? (worktreeName.trim() || undefined) : undefined,
+                resumeSessionId: agent === 'codex' && resumeCodex && trimmedResumeCodexSessionId
+                    ? trimmedResumeCodexSessionId
+                    : undefined
             })
 
             if (result.type === 'success') {
@@ -367,7 +381,15 @@ export function NewSession(props: {
         }
     }
 
-    const canCreate = Boolean(machineId && trimmedDirectory && !isFormDisabled && !missingWorktreeDirectory && (props.canCreateExtra ?? true))
+    const resumeCodexSessionIdRequired = agent === 'codex' && resumeCodex
+    const canCreate = Boolean(
+        machineId
+        && trimmedDirectory
+        && !isFormDisabled
+        && !missingWorktreeDirectory
+        && (!resumeCodexSessionIdRequired || resumeCodexSessionId.trim())
+        && (props.canCreateExtra ?? true)
+    )
 
     return (
         <div className="flex flex-col divide-y divide-[var(--app-divider)]">
@@ -412,6 +434,15 @@ export function NewSession(props: {
                 isDisabled={isFormDisabled}
                 onAgentChange={setAgent}
             />
+            {agent === 'codex' ? (
+                <CodexResumeSection
+                    enabled={resumeCodex}
+                    sessionId={resumeCodexSessionId}
+                    isDisabled={isFormDisabled}
+                    onEnabledChange={setResumeCodex}
+                    onSessionIdChange={setResumeCodexSessionId}
+                />
+            ) : null}
             {agent === 'opencode' ? (
                 <OpencodeModelSelector
                     cwd={deferredDirectory}

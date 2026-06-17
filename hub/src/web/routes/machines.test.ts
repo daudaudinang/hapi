@@ -120,4 +120,49 @@ describe('machines routes', () => {
             currentModelId: 'ollama/exaone:4.5-33b-q8'
         })
     })
+
+    it('forwards resumeSessionId from spawn requests', async () => {
+        const machine = createMachine()
+        const calls: Array<{ resumeSessionId?: string }> = []
+        const engine = {
+            getMachine: () => machine,
+            getMachineByNamespace: () => machine,
+            spawnSession: async (
+                _machineId: string,
+                _directory: string,
+                _agent?: 'claude' | 'codex' | 'cursor' | 'gemini' | 'opencode',
+                _model?: string,
+                _modelReasoningEffort?: string,
+                _yolo?: boolean,
+                _sessionType?: 'simple' | 'worktree',
+                _worktreeName?: string,
+                resumeSessionId?: string
+            ) => {
+                calls.push({ resumeSessionId })
+                return { type: 'success', sessionId: 'session-1' }
+            }
+        } as Partial<SyncEngine>
+
+        const app = new Hono<WebAppEnv>()
+        app.use('*', async (c, next) => {
+            c.set('namespace', 'default')
+            await next()
+        })
+        app.route('/api', createMachinesRoutes(() => engine as SyncEngine))
+
+        const response = await app.request('/api/machines/machine-1/spawn', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                directory: '/repo',
+                agent: 'codex',
+                resumeSessionId: '019ed35e-db26-7770-abb3-1c7ee3c92f52'
+            })
+        })
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toEqual({ type: 'success', sessionId: 'session-1' })
+        expect(calls).toEqual([{ resumeSessionId: '019ed35e-db26-7770-abb3-1c7ee3c92f52' }])
+    })
+
 })
