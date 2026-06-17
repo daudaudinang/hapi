@@ -63,7 +63,7 @@ export function reduceTimeline(
                 hasReadyEvent = true
                 continue
             }
-            if (msg.content.type === 'token-count') {
+            if (msg.content.type === 'token-count' || msg.content.type === 'codex-goal') {
                 continue
             }
             blocks.push({

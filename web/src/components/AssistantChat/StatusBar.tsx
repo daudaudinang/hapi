@@ -7,7 +7,6 @@ import {
 import type { PermissionModeTone } from '@hapi/protocol'
 import { useMemo } from 'react'
 import type { AgentState, CodexCollaborationMode, PermissionMode } from '@/types/api'
-import type { CodexGoalState } from '@/chat/types'
 import type { ConversationStatus } from '@/realtime/types'
 import { getContextBudgetTokens } from '@/chat/modelConfig'
 import { useTranslation } from '@/lib/use-translation'
@@ -123,27 +122,6 @@ function formatTokenCount(value: number): string {
     return String(value)
 }
 
-function formatGoalElapsed(seconds: number): string {
-    if (seconds < 60) return `${seconds}s`
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return secs === 0 ? `${mins}m` : `${mins}m ${secs}s`
-}
-
-function formatGoalLabel(goal: CodexGoalState): string {
-    const tokenText = goal.tokenBudget !== null
-        ? `${formatTokenCount(goal.tokensUsed)}/${formatTokenCount(goal.tokenBudget)} tokens`
-        : `${formatTokenCount(goal.tokensUsed)} tokens`
-    return `goal ${goal.status} · ${tokenText} · ${formatGoalElapsed(goal.timeUsedSeconds)}`
-}
-
-function getGoalColor(status: CodexGoalState['status']): string {
-    if (status === 'active') return 'text-blue-500'
-    if (status === 'complete') return 'text-[#34C759]'
-    if (status === 'blocked' || status === 'usageLimited' || status === 'budgetLimited') return 'text-amber-500'
-    return 'text-[var(--app-hint)]'
-}
-
 function formatCodexReasoningLabel(effort?: string | null): string {
     const normalized = effort?.trim().toLowerCase()
     if (!normalized || normalized === 'default') return 'reasoning default'
@@ -174,7 +152,6 @@ export function StatusBar(props: {
     collaborationMode?: CodexCollaborationMode
     agentFlavor?: string | null
     voiceStatus?: ConversationStatus
-    codexGoal?: CodexGoalState | null
 }) {
     const { t } = useTranslation()
     const connectionStatus = useMemo(
@@ -246,14 +223,6 @@ export function StatusBar(props: {
                 {cacheHitLabel ? (
                     <span className="text-[10px] text-[var(--app-hint)]">
                         {cacheHitLabel}
-                    </span>
-                ) : null}
-                {props.codexGoal ? (
-                    <span
-                        className={`max-w-[16rem] truncate text-[10px] ${getGoalColor(props.codexGoal.status)}`}
-                        title={props.codexGoal.objective}
-                    >
-                        {formatGoalLabel(props.codexGoal)}
                     </span>
                 ) : null}
             </div>

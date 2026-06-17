@@ -40,6 +40,19 @@ describe('reduceChatBlocks Codex goal state', () => {
         })
     })
 
+    it('keeps goal progress as state without rendering it in the timeline', () => {
+        const reduced = reduceChatBlocks([
+            goalMessage('g1', 'active', 1000)
+        ], null)
+
+        expect((reduced as any).latestGoal).toMatchObject({
+            objective: 'ship it',
+            status: 'active',
+            tokensUsed: 1000
+        })
+        expect(reduced.blocks).toEqual([])
+    })
+
     it('clears latest goal after a cleared event', () => {
         const reduced = reduceChatBlocks([
             goalMessage('g1', 'active', 1000),
