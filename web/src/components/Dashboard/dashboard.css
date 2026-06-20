@@ -353,6 +353,49 @@
     opacity: 1;
 }
 
+/* ─── Mobile Session Switcher Handle ─────────────────────────────────────── */
+
+.db__mobile-session-switcher {
+    position: fixed;
+    right: 0;
+    display: none;
+    width: 28px;
+    height: 48px;
+    transform: translateY(-50%);
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-right: 0;
+    border-radius: 14px 0 0 14px;
+    background: rgba(99, 102, 241, 0.92);
+    color: #fff;
+    box-shadow: 0 8px 22px rgba(99, 102, 241, 0.28);
+    cursor: grab;
+    touch-action: none;
+    z-index: 55;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.db__mobile-session-switcher:active {
+    cursor: grabbing;
+}
+
+.db__mobile-session-switcher:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.9);
+    outline-offset: 2px;
+}
+
+.db__mobile-session-switcher-dot {
+    width: 3px;
+    height: 3px;
+    border-radius: 999px;
+    background: currentColor;
+    opacity: 0.92;
+}
+
 /* ─── Overview Trigger & Drawer (3-4 pins) ───────────────────────────────── */
 
 .db__overview-trigger {
@@ -571,6 +614,10 @@
     .db__pinned-focus-backdrop,
     .db__pinned-focus-close {
         display: none;
+    }
+
+    .db__mobile-session-switcher {
+        display: flex;
     }
 
     .db__pinned-panel--focused {

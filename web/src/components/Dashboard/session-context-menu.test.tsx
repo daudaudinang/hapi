@@ -192,6 +192,12 @@ function renderDashboard() {
     )
 }
 
+function dispatchPointer(target: Window | Document | Element, type: string, init: { pointerId: number; clientY: number }) {
+    const event = new MouseEvent(type, { bubbles: true, clientY: init.clientY })
+    Object.defineProperty(event, 'pointerId', { value: init.pointerId })
+    fireEvent(target, event)
+}
+
 describe('Dashboard session context menu', () => {
     beforeEach(() => {
         navigate.mockClear()
@@ -434,5 +440,57 @@ describe('Dashboard session context menu', () => {
 
         fireEvent.click(screen.getByTitle('dashboard.unpinSession'))
         expect(sessionStorage.getItem('mc-pinned-ids')).toBe('[]')
+    })
+})
+
+describe('Dashboard mobile session switcher handle', () => {
+    beforeEach(() => {
+        navigate.mockClear()
+        sessionChatUnmounts.mockClear()
+        sessionStorage.clear()
+        localStorage.clear()
+        setMockSessions(3)
+        mobileMedia = null
+        setMediaMatches({ coarsePointer: true, mobileViewport: true })
+    })
+
+    afterEach(() => {
+        cleanup()
+        sessionStorage.clear()
+        localStorage.clear()
+    })
+
+    it('shows a small right-edge handle when a session is pinned and opens the overview drawer on tap', () => {
+        renderDashboard()
+        fireEvent.click(screen.getByText('Build app 1'))
+
+        const handle = screen.getByRole('button', { name: 'Open session switcher' })
+        expect(handle).toBeInTheDocument()
+
+        fireEvent.click(handle)
+
+        expect(screen.getAllByText('3 sessions').length).toBeGreaterThan(1)
+        expect(screen.getAllByText('Build app 2').length).toBeGreaterThan(1)
+    })
+
+    it('drags the right-edge handle vertically and stores the clamped position without opening the drawer', () => {
+        Object.defineProperty(window, 'innerHeight', { configurable: true, value: 700 })
+        renderDashboard()
+        fireEvent.click(screen.getByText('Build app 1'))
+
+        const handle = screen.getByRole('button', { name: 'Open session switcher' })
+        dispatchPointer(handle, 'pointerdown', { pointerId: 1, clientY: 260 })
+        dispatchPointer(window, 'pointermove', { pointerId: 1, clientY: 360 })
+        dispatchPointer(window, 'pointerup', { pointerId: 1, clientY: 360 })
+        fireEvent.click(handle)
+
+        expect(localStorage.getItem('hapi:mobile-session-switcher-top')).toBe('360')
+        expect(screen.getAllByText('3 sessions')).toHaveLength(1)
+    })
+
+    it('keeps the handle hidden before any session is pinned', () => {
+        renderDashboard()
+
+        expect(screen.queryByRole('button', { name: 'Open session switcher' })).not.toBeInTheDocument()
     })
 })

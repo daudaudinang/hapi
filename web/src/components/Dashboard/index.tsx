@@ -14,9 +14,11 @@ import { fetchLatestMessages, seedMessageWindowFromSession } from '@/lib/message
 import { clearDraftsAfterSend } from '@/lib/clearDraftsAfterSend'
 import { compareSessionGroupOrder } from '@/lib/session-group-order'
 import { SessionChat } from '@/components/SessionChat'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import type { ApiClient } from '@/api/client'
 import type { SessionSummary, AttachmentMetadata, Machine } from '@/types/api'
 import { useTranslation } from '@/lib/use-translation'
+import { MobileSessionSwitcherHandle } from './MobileSessionSwitcherHandle'
 import './dashboard.css'
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -937,6 +939,8 @@ export function Dashboard({ api }: DashboardProps) {
     const [pendingReplacePin, setPendingReplacePin] = useState<string | null>(null)
     const [focusedPinnedSessionId, setFocusedPinnedSessionId] = useState<string | null>(null)
     const [pinnedAction, setPinnedAction] = useState<{ id: string, x: number, y: number } | null>(null)
+    const isMobileViewport = useMediaQuery('(max-width: 768px)')
+    const hasCoarsePointer = useMediaQuery('(pointer: coarse)')
     const focusedPanelRef = useRef<HTMLDivElement | null>(null)
     const focusedCloseButtonRef = useRef<HTMLButtonElement | null>(null)
     const previouslyFocusedElementRef = useRef<HTMLElement | null>(null)
@@ -1157,6 +1161,7 @@ export function Dashboard({ api }: DashboardProps) {
 
     const pinCount = pinnedIds.length
     const hasPins = pinCount > 0
+    const showMobileSessionSwitcher = hasPins && isMobileViewport && hasCoarsePointer
     const hasOverflowSidebar = pinCount <= 2
     const unarchivedCount = archivedSessions.length - addedArchivedIds.size
     const sidebarCardLimit = pinCount === 1 ? 8 : 4
@@ -1556,6 +1561,10 @@ export function Dashboard({ api }: DashboardProps) {
                     })}
                 </div>
             )}
+
+            {showMobileSessionSwitcher ? (
+                <MobileSessionSwitcherHandle onOpen={() => setShowOverviewDrawer(true)} />
+            ) : null}
 
             {/* Main content area */}
             <div className={`db__content ${layoutClass}`}>
