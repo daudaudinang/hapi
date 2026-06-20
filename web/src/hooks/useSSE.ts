@@ -30,6 +30,18 @@ const RECONNECT_MAX_DELAY_MS = 30_000
 const RECONNECT_JITTER_MS = 500
 const INVALIDATION_BATCH_MS = 16
 
+export function shouldReconnectOnVisibilityRestore(args: {
+    hiddenAt: number | null
+    lastActivityAt: number
+    now: number
+    heartbeatStaleMs?: number
+}): boolean {
+    if (args.hiddenAt !== null) {
+        return true
+    }
+    return args.now - args.lastActivityAt >= (args.heartbeatStaleMs ?? HEARTBEAT_STALE_MS)
+}
+
 type SessionPatch = Partial<Pick<Session, 'active' | 'thinking' | 'activeAt' | 'updatedAt' | 'model' | 'modelReasoningEffort' | 'effort' | 'permissionMode' | 'collaborationMode'>>
 
 function sortSessionSummaries(left: SessionSummary, right: SessionSummary): number {
@@ -199,6 +211,7 @@ export function useSSE(options: {
     const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const reconnectAttemptRef = useRef(0)
     const lastActivityAtRef = useRef(0)
+    const hiddenAtRef = useRef<number | null>(null)
     const [reconnectNonce, setReconnectNonce] = useState(0)
     const [subscriptionId, setSubscriptionId] = useState<string | null>(null)
 
@@ -259,7 +272,7 @@ export function useSSE(options: {
         eventSourceRef.current = eventSource
         lastActivityAtRef.current = Date.now()
 
-        const scheduleReconnect = () => {
+        const scheduleReconnect = (immediate = false) => {
             const attempt = reconnectAttemptRef.current
             const exponentialDelay = Math.min(RECONNECT_MAX_DELAY_MS, RECONNECT_BASE_DELAY_MS * (2 ** attempt))
             const jitter = Math.floor(Math.random() * (RECONNECT_JITTER_MS + 1))
@@ -270,7 +283,7 @@ export function useSSE(options: {
             reconnectTimerRef.current = setTimeout(() => {
                 reconnectTimerRef.current = null
                 setReconnectNonce((value) => value + 1)
-            }, exponentialDelay + jitter)
+            }, immediate ? 0 : exponentialDelay + jitter)
         }
 
         const notifyDisconnect = (reason: string) => {
@@ -281,7 +294,7 @@ export function useSSE(options: {
             onDisconnectRef.current?.(reason)
         }
 
-        const requestReconnect = (reason: string) => {
+        const requestReconnect = (reason: string, options: { immediate?: boolean } = {}) => {
             if (reconnectRequested) {
                 return
             }
@@ -292,7 +305,7 @@ export function useSSE(options: {
                 eventSourceRef.current = null
             }
             setSubscriptionId(null)
-            scheduleReconnect()
+            scheduleReconnect(Boolean(options.immediate))
         }
 
         const flushInvalidations = () => {
@@ -604,22 +617,48 @@ export function useSSE(options: {
             requestReconnect('heartbeat-timeout')
         }, HEARTBEAT_WATCHDOG_INTERVAL_MS)
 
-        // When the tab becomes visible again, check immediately whether the
-        // SSE connection went stale while hidden (the watchdog skips checks
-        // for hidden tabs).  This avoids the user having to wait up to
-        // HEARTBEAT_WATCHDOG_INTERVAL_MS after switching back.
-        const onVisibilityChange = () => {
-            if (getVisibilityState() !== 'visible') return
+        // Mobile browsers often freeze background tabs/apps.  The EventSource
+        // object can still look open when the app returns, but streamed events
+        // from the frozen period may be missing.  Reconnect immediately after
+        // an observed hidden period so onConnect refreshes the visible session.
+        const onVisibilityHidden = () => {
+            hiddenAtRef.current = Date.now()
+        }
+
+        const onVisibilityVisible = () => {
             if (eventSourceRef.current !== eventSource) return
-            if (Date.now() - lastActivityAtRef.current >= HEARTBEAT_STALE_MS) {
-                requestReconnect('visibility-recovery')
+            const now = Date.now()
+            const hiddenAt = hiddenAtRef.current
+            hiddenAtRef.current = null
+            if (shouldReconnectOnVisibilityRestore({
+                hiddenAt,
+                lastActivityAt: lastActivityAtRef.current,
+                now,
+                heartbeatStaleMs: HEARTBEAT_STALE_MS
+            })) {
+                requestReconnect('visibility-recovery', { immediate: true })
             }
         }
+
+        const onVisibilityChange = () => {
+            if (getVisibilityState() === 'hidden') {
+                onVisibilityHidden()
+                return
+            }
+            onVisibilityVisible()
+        }
+
         document.addEventListener('visibilitychange', onVisibilityChange)
+        window.addEventListener('pagehide', onVisibilityHidden)
+        window.addEventListener('pageshow', onVisibilityVisible)
+        window.addEventListener('focus', onVisibilityVisible)
 
         return () => {
             clearInterval(watchdogTimer)
             document.removeEventListener('visibilitychange', onVisibilityChange)
+            window.removeEventListener('pagehide', onVisibilityHidden)
+            window.removeEventListener('pageshow', onVisibilityVisible)
+            window.removeEventListener('focus', onVisibilityVisible)
             if (invalidationTimerRef.current) {
                 clearTimeout(invalidationTimerRef.current)
                 invalidationTimerRef.current = null

@@ -19,6 +19,7 @@ import { useActiveWord } from '@/hooks/useActiveWord'
 import { useActiveSuggestions } from '@/hooks/useActiveSuggestions'
 import { applySuggestion } from '@/utils/applySuggestion'
 import { usePlatform } from '@/hooks/usePlatform'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { usePWAInstall } from '@/hooks/usePWAInstall'
 import { supportsEffort, supportsModelChange } from '@hapi/protocol'
 import { markSkillUsed } from '@/lib/recent-skills'
@@ -33,6 +34,7 @@ import { useTranslation } from '@/lib/use-translation'
 import { getModelOptionsForFlavor, getNextModelForFlavor } from './modelOptions'
 import { getClaudeComposerEffortOptions } from './claudeEffortOptions'
 import { getCodexComposerReasoningEffortOptions } from './codexReasoningEffortOptions'
+import { shouldSendComposerOnEnter } from './composerKeyboard'
 
 export interface TextInputState {
     text: string
@@ -230,6 +232,7 @@ export function HappyComposer(props: {
     }, [controlledByUser])
 
     const { haptic: platformHaptic, isTouch } = usePlatform()
+    const hasCoarsePointer = useMediaQuery('(pointer: coarse)')
     const { isStandalone, isIOS } = usePWAInstall()
     const isIOSPWA = isIOS && isStandalone
     const bottomPaddingClass = isIOSPWA ? 'pb-0' : 'pb-2'
@@ -357,9 +360,15 @@ export function HappyComposer(props: {
             return
         }
 
-        // Shift+Enter inserts a newline (standard behavior)
+        // Mobile/tablet keyboard Enter should insert a newline; users can send
+        // with the explicit send button. Desktop keeps plain Enter-to-send.
+        if (key === 'Enter' && isTouch && hasCoarsePointer) {
+            return
+        }
+
+        // Shift+Enter inserts a newline (standard desktop behavior)
         if (key === 'Enter' && e.shiftKey) {
-            return // let default textarea behavior handle newline
+            return
         }
 
         // Enter with suggestions visible: select the suggestion
@@ -370,10 +379,10 @@ export function HappyComposer(props: {
             return
         }
 
-        // Only plain Enter (no modifiers) sends; other modifier combos are ignored
+        // Only plain desktop Enter sends; other modifier combos are ignored
         if (key === 'Enter') {
             e.preventDefault()
-            if (!e.ctrlKey && !e.altKey && !e.metaKey && canSend) {
+            if (shouldSendComposerOnEnter(e, { isTouch, hasCoarsePointer }) && canSend) {
                 api.composer().send()
                 setShowContinueHint(false)
             }
@@ -432,6 +441,8 @@ export function HappyComposer(props: {
         permissionModes,
         canSend,
         api,
+        isTouch,
+        hasCoarsePointer,
         haptic
     ])
 
