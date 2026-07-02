@@ -36,9 +36,6 @@ export function shouldReconnectOnVisibilityRestore(args: {
     now: number
     heartbeatStaleMs?: number
 }): boolean {
-    if (args.hiddenAt !== null) {
-        return true
-    }
     return args.now - args.lastActivityAt >= (args.heartbeatStaleMs ?? HEARTBEAT_STALE_MS)
 }
 
@@ -211,7 +208,6 @@ export function useSSE(options: {
     const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const reconnectAttemptRef = useRef(0)
     const lastActivityAtRef = useRef(0)
-    const hiddenAtRef = useRef<number | null>(null)
     const [reconnectNonce, setReconnectNonce] = useState(0)
     const [subscriptionId, setSubscriptionId] = useState<string | null>(null)
 
@@ -617,21 +613,14 @@ export function useSSE(options: {
             requestReconnect('heartbeat-timeout')
         }, HEARTBEAT_WATCHDOG_INTERVAL_MS)
 
-        // Mobile browsers often freeze background tabs/apps.  The EventSource
-        // object can still look open when the app returns, but streamed events
-        // from the frozen period may be missing.  Reconnect immediately after
-        // an observed hidden period so onConnect refreshes the visible session.
-        const onVisibilityHidden = () => {
-            hiddenAtRef.current = Date.now()
-        }
-
-        const onVisibilityVisible = () => {
+        // Visibility/focus events are only health-check triggers.  Do not
+        // reconnect solely because the app returned from background; quick tab
+        // switches should be no-ops while the SSE stream is still fresh.
+        const reconnectIfStale = () => {
             if (eventSourceRef.current !== eventSource) return
             const now = Date.now()
-            const hiddenAt = hiddenAtRef.current
-            hiddenAtRef.current = null
             if (shouldReconnectOnVisibilityRestore({
-                hiddenAt,
+                hiddenAt: null,
                 lastActivityAt: lastActivityAtRef.current,
                 now,
                 heartbeatStaleMs: HEARTBEAT_STALE_MS
@@ -641,24 +630,19 @@ export function useSSE(options: {
         }
 
         const onVisibilityChange = () => {
-            if (getVisibilityState() === 'hidden') {
-                onVisibilityHidden()
-                return
-            }
-            onVisibilityVisible()
+            if (getVisibilityState() !== 'visible') return
+            reconnectIfStale()
         }
 
         document.addEventListener('visibilitychange', onVisibilityChange)
-        window.addEventListener('pagehide', onVisibilityHidden)
-        window.addEventListener('pageshow', onVisibilityVisible)
-        window.addEventListener('focus', onVisibilityVisible)
+        window.addEventListener('pageshow', reconnectIfStale)
+        window.addEventListener('focus', reconnectIfStale)
 
         return () => {
             clearInterval(watchdogTimer)
             document.removeEventListener('visibilitychange', onVisibilityChange)
-            window.removeEventListener('pagehide', onVisibilityHidden)
-            window.removeEventListener('pageshow', onVisibilityVisible)
-            window.removeEventListener('focus', onVisibilityVisible)
+            window.removeEventListener('pageshow', reconnectIfStale)
+            window.removeEventListener('focus', reconnectIfStale)
             if (invalidationTimerRef.current) {
                 clearTimeout(invalidationTimerRef.current)
                 invalidationTimerRef.current = null
