@@ -4,17 +4,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EditorTab } from '@/hooks/useEditorState'
 import { EditorTerminal } from './EditorTerminal'
 
-const mocks = vi.hoisted(() => ({
+var mocks = {
     useSession: vi.fn(),
     useTerminalSocket: vi.fn(),
     isRemoteTerminalSupported: vi.fn(),
     onMountTerminal: vi.fn(),
     onResizeTerminal: vi.fn(),
     terminalViewProps: [] as Array<{ compactFontSize?: boolean }>,
+    sessionTabsProps: [] as unknown[],
     disconnectsByTerminalId: new Map<string, ReturnType<typeof vi.fn>>(),
     closesByTerminalId: new Map<string, ReturnType<typeof vi.fn>>(),
     writesByTerminalId: new Map<string, ReturnType<typeof vi.fn>>()
-}))
+}
 
 vi.mock('@/lib/app-context', () => ({
     useAppContext: () => ({ token: 'token-1', baseUrl: 'http://hub.local' })
@@ -42,6 +43,13 @@ vi.mock('@/hooks/useTerminalSocket', () => ({
 
 vi.mock('@/utils/terminalSupport', () => ({
     isRemoteTerminalSupported: (...args: unknown[]) => mocks.isRemoteTerminalSupported(...args)
+}))
+
+vi.mock('@/components/Terminal/SessionTerminalTabs', () => ({
+    SessionTerminalTabs: (props: unknown) => {
+        mocks.sessionTabsProps.push(props)
+        return <div data-testid="session-terminal-tabs" />
+    }
 }))
 
 vi.mock('@/components/Terminal/TerminalView', () => ({
@@ -80,6 +88,7 @@ describe('EditorTerminal', () => {
     beforeEach(() => {
         vi.clearAllMocks()
         mocks.terminalViewProps = []
+        mocks.sessionTabsProps = []
         mocks.useSession.mockReturnValue({
             session: { id: 'session-1', active: true, metadata: { os: 'linux', path: '/repo', host: 'dev' } },
             isLoading: false,
@@ -131,7 +140,7 @@ describe('EditorTerminal', () => {
         expect(screen.getByText('No terminal open')).toBeInTheDocument()
     })
 
-    it('renders only terminal tabs and tab actions', () => {
+    it('renders session terminal tabs through the shared component and closes editor tab only', () => {
         const onSelectTab = vi.fn()
         const onCloseTab = vi.fn()
         const onOpenTerminal = vi.fn()
@@ -153,19 +162,20 @@ describe('EditorTerminal', () => {
         expect(screen.queryByText('App.tsx')).not.toBeInTheDocument()
         expect(screen.getByText('Terminal: bash')).toBeInTheDocument()
         expect(screen.getAllByText('Terminal: zsh')).toHaveLength(1)
-        expect(screen.getAllByTestId('terminal-view')).toHaveLength(2)
-        expect(mocks.useTerminalSocket).toHaveBeenCalledWith(expect.objectContaining({
-            token: 'token-1',
-            baseUrl: 'http://hub.local',
+        expect(screen.getAllByTestId('session-terminal-tabs')).toHaveLength(1)
+        expect(screen.queryByTestId('terminal-view')).not.toBeInTheDocument()
+        expect(mocks.sessionTabsProps[0]).toEqual(expect.objectContaining({
             sessionId: 'session-1',
-            terminalId: 'term-2'
+            active: true,
+            terminalSupported: true
         }))
+        expect(mocks.useTerminalSocket).not.toHaveBeenCalled()
 
         fireEvent.click(screen.getByRole('button', { name: 'Select terminal Terminal: bash' }))
         expect(onSelectTab).toHaveBeenCalledWith('term-1')
 
         fireEvent.click(screen.getByRole('button', { name: 'Close terminal Terminal: zsh' }))
-        expect(mocks.closesByTerminalId.get('term-2')).toHaveBeenCalled()
+        expect(mocks.closesByTerminalId.get('term-2')).toBeUndefined()
         expect(onCloseTab).toHaveBeenCalledWith('term-2')
 
         fireEvent.click(screen.getByRole('button', { name: 'Open terminal' }))
@@ -175,7 +185,7 @@ describe('EditorTerminal', () => {
         expect(onToggleCollapsed).toHaveBeenCalledWith()
     })
 
-    it('keeps inactive terminal sockets mounted when switching tabs and collapsed', () => {
+    it('renders one shared component for multiple editor session terminal tabs', () => {
         const { rerender } = render(
             <EditorTerminal
                 tabs={tabs}
@@ -189,22 +199,8 @@ describe('EditorTerminal', () => {
             />
         )
 
-        expect(screen.getAllByTestId('terminal-view')).toHaveLength(2)
-
-        rerender(
-            <EditorTerminal
-                tabs={tabs}
-                activeTabId="term-2"
-                isCollapsed={false}
-                api={null}
-                onSelectTab={vi.fn()}
-                onCloseTab={vi.fn()}
-                onOpenTerminal={vi.fn()}
-                onToggleCollapsed={vi.fn()}
-            />
-        )
-
-        expect(mocks.disconnectsByTerminalId.get('term-1')).not.toHaveBeenCalled()
+        expect(screen.getAllByTestId('session-terminal-tabs')).toHaveLength(1)
+        expect(mocks.useTerminalSocket).not.toHaveBeenCalled()
 
         rerender(
             <EditorTerminal
@@ -219,8 +215,8 @@ describe('EditorTerminal', () => {
             />
         )
 
-        expect(mocks.disconnectsByTerminalId.get('term-1')).not.toHaveBeenCalled()
-        expect(mocks.disconnectsByTerminalId.get('term-2')).not.toHaveBeenCalled()
+        expect(screen.getAllByTestId('session-terminal-tabs')).toHaveLength(1)
+        expect(mocks.useTerminalSocket).not.toHaveBeenCalled()
     })
 
     it('connects machine-scoped terminals without session lookup', () => {
@@ -245,6 +241,42 @@ describe('EditorTerminal', () => {
             terminalId: 'term-machine'
         }))
         expect(screen.getByTestId('terminal-view')).toBeInTheDocument()
+        expect(screen.queryByTestId('session-terminal-tabs')).not.toBeInTheDocument()
+        expect(mocks.sessionTabsProps).toHaveLength(0)
+        expect(screen.queryByText(/\b[0-9]+\/3\b/)).not.toBeInTheDocument()
+    })
+
+    it('keeps a mixed active machine editor terminal on the legacy hook path', () => {
+        const onOpenTerminal = vi.fn()
+
+        render(
+            <EditorTerminal
+                tabs={[
+                    { id: 'term-session', type: 'terminal', label: 'Terminal: session', shell: 'bash', sessionId: 'session-1' },
+                    { id: 'term-machine', type: 'terminal', label: 'Terminal: bash', shell: 'bash', machineId: 'machine-1', cwd: '/repo' }
+                ]}
+                activeTabId="term-machine"
+                isCollapsed={false}
+                api={null}
+                onSelectTab={vi.fn()}
+                onCloseTab={vi.fn()}
+                onOpenTerminal={onOpenTerminal}
+                onToggleCollapsed={vi.fn()}
+            />
+        )
+
+        expect(screen.getByTestId('terminal-view')).toBeInTheDocument()
+        expect(screen.queryByTestId('session-terminal-tabs')).not.toBeInTheDocument()
+        expect(mocks.useTerminalSocket).toHaveBeenCalledWith(expect.objectContaining({
+            machineId: 'machine-1',
+            sessionId: '',
+            cwd: '/repo',
+            terminalId: 'term-machine'
+        }))
+        expect(screen.queryByText(/\b[0-9]+\/3\b/)).not.toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open terminal' }))
+        expect(onOpenTerminal).toHaveBeenCalledWith()
     })
 
     it('hides terminal body content when collapsed and exposes expand action', () => {
@@ -261,7 +293,7 @@ describe('EditorTerminal', () => {
             />
         )
 
-        expect(screen.queryAllByTestId('terminal-view')).toHaveLength(2)
+        expect(screen.queryAllByTestId('session-terminal-tabs')).toHaveLength(1)
         expect(screen.getByRole('button', { name: 'Expand terminal' })).toBeInTheDocument()
     })
 
@@ -283,7 +315,7 @@ describe('EditorTerminal', () => {
         expect(screen.queryByRole('button', { name: 'Expand terminal' })).not.toBeInTheDocument()
         expect(screen.queryByRole('button', { name: 'Collapse terminal' })).not.toBeInTheDocument()
         expect(screen.queryByRole('button', { name: 'Open terminal' })).not.toBeInTheDocument()
-        expect(mocks.terminalViewProps).toContainEqual({ compactFontSize: true })
+        expect(mocks.sessionTabsProps[0]).toEqual(expect.objectContaining({ compactFontSize: true }))
     })
 
     it('confirms before closing a mobile terminal', () => {
@@ -291,8 +323,8 @@ describe('EditorTerminal', () => {
 
         render(
             <EditorTerminal
-                tabs={tabs}
-                activeTabId="term-2"
+                tabs={[{ id: 'term-machine', type: 'terminal', label: 'Terminal: bash', shell: 'bash', machineId: 'machine-1', cwd: '/repo' }]}
+                activeTabId="term-machine"
                 isCollapsed={true}
                 mobileMode={true}
                 api={null}
@@ -303,9 +335,9 @@ describe('EditorTerminal', () => {
             />
         )
 
-        expect(screen.getAllByTestId('terminal-view')).toHaveLength(2)
+        expect(screen.getAllByTestId('terminal-view')).toHaveLength(1)
 
-        fireEvent.click(screen.getByRole('button', { name: 'Close terminal Terminal: zsh' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Close terminal Terminal: bash' }))
 
         const dialog = screen.getByRole('dialog', { name: 'Close terminal?' })
         expect(dialog).toBeInTheDocument()
@@ -314,19 +346,19 @@ describe('EditorTerminal', () => {
         expect(screen.getByRole('button', { name: 'Stop process and close' })).toHaveClass('w-full', 'py-2')
         expect(screen.getByRole('button', { name: 'Cancel' }).parentElement).toHaveClass('flex-col')
         expect(onCloseTab).not.toHaveBeenCalled()
-        expect(mocks.closesByTerminalId.get('term-2')).not.toHaveBeenCalled()
+        expect(mocks.closesByTerminalId.get('term-machine')).not.toHaveBeenCalled()
 
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
         expect(screen.queryByRole('dialog', { name: 'Close terminal?' })).not.toBeInTheDocument()
         expect(onCloseTab).not.toHaveBeenCalled()
 
-        fireEvent.click(screen.getByRole('button', { name: 'Close terminal Terminal: zsh' }))
-        const closeTerminal = mocks.closesByTerminalId.get('term-2')
+        fireEvent.click(screen.getByRole('button', { name: 'Close terminal Terminal: bash' }))
+        const closeTerminal = mocks.closesByTerminalId.get('term-machine')
         fireEvent.click(screen.getByRole('button', { name: 'Stop process and close' }))
 
         expect(closeTerminal).toHaveBeenCalled()
-        expect(onCloseTab).toHaveBeenCalledWith('term-2')
+        expect(onCloseTab).toHaveBeenCalledWith('term-machine')
     })
 
     it('shows mobile terminal quick keys and writes their escape sequences', () => {

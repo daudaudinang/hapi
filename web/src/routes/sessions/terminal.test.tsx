@@ -1,21 +1,16 @@
+import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { I18nProvider } from '@/lib/i18n-context'
 import TerminalPage from './terminal'
 
-const writeMock = vi.fn()
-const closeMock = vi.fn()
+const sharedTabsMock = vi.fn()
+const legacyCloseMock = vi.fn()
 
 vi.mock('@tanstack/react-router', () => ({
     useParams: () => ({ sessionId: 'session-1' })
 }))
 
 vi.mock('@/lib/app-context', () => ({
-    useAppContext: () => ({
-        api: null,
-        token: 'test-token',
-        baseUrl: 'http://localhost:3000'
-    })
+    useAppContext: () => ({ api: null, token: 'test-token', baseUrl: 'http://localhost:3000' })
 }))
 
 vi.mock('@/hooks/useAppGoBack', () => ({
@@ -24,93 +19,44 @@ vi.mock('@/hooks/useAppGoBack', () => ({
 
 vi.mock('@/hooks/queries/useSession', () => ({
     useSession: () => ({
-        session: {
-            id: 'session-1',
-            active: true,
-            metadata: { path: '/tmp/project' }
-        }
+        session: { id: 'session-1', active: true, metadata: { path: '/tmp/project' } }
     })
 }))
 
 vi.mock('@/hooks/useTerminalSocket', () => ({
-    useTerminalSocket: () => ({
-        state: { status: 'connected' as const },
-        connect: vi.fn(),
-        write: writeMock,
-        resize: vi.fn(),
-        disconnect: vi.fn(),
-        close: closeMock,
-        onOutput: vi.fn(),
-        onExit: vi.fn()
-    })
+    useTerminalSocket: () => ({ close: legacyCloseMock })
 }))
 
-vi.mock('@/hooks/useLongPress', () => ({
-    useLongPress: ({ onClick }: { onClick: () => void }) => ({
-        onClick
-    })
+vi.mock('@/components/Terminal/SessionTerminalTabs', () => ({
+    SessionTerminalTabs: (props: unknown) => {
+        sharedTabsMock(props)
+        return <div data-testid="session-terminal-tabs" />
+    }
 }))
 
-vi.mock('@/components/Terminal/TerminalView', () => ({
-    TerminalView: () => <div data-testid="terminal-view" />
-}))
-
-function renderWithProviders() {
-    return render(
-        <I18nProvider>
-            <TerminalPage />
-        </I18nProvider>
-    )
-}
-
-describe('TerminalPage paste behavior', () => {
+describe('TerminalPage session terminal tabs', () => {
     beforeEach(() => {
         vi.clearAllMocks()
     })
 
-    it('does not open manual paste dialog when clipboard text is empty', async () => {
-        const readText = vi.fn(async () => '')
-        Object.defineProperty(navigator, 'clipboard', {
-            configurable: true,
-            value: { readText }
-        })
+    it('renders shared session terminal tabs with session state', () => {
+        render(<TerminalPage />)
 
-        renderWithProviders()
-        fireEvent.click(screen.getAllByRole('button', { name: 'Paste' })[0])
-
-        await waitFor(() => {
-            expect(readText).toHaveBeenCalledTimes(1)
-        })
-        expect(writeMock).not.toHaveBeenCalled()
-        expect(screen.queryByText('Paste input')).not.toBeInTheDocument()
+        expect(screen.getByTestId('session-terminal-tabs')).toBeInTheDocument()
+        expect(sharedTabsMock).toHaveBeenCalledWith(expect.objectContaining({
+            sessionId: 'session-1',
+            title: 'Terminal',
+            subtitle: '/tmp/project',
+            active: true,
+            terminalSupported: true
+        }))
     })
 
-    it('opens manual paste dialog when clipboard read fails', async () => {
-        const readText = vi.fn(async () => {
-            throw new Error('blocked')
-        })
-        Object.defineProperty(navigator, 'clipboard', {
-            configurable: true,
-            value: { readText }
-        })
-
-        renderWithProviders()
-        fireEvent.click(screen.getAllByRole('button', { name: 'Paste' })[0])
-
-        expect(await screen.findByText('Paste input')).toBeInTheDocument()
-    })
-
-    it('does not close the remote terminal on initial render', () => {
-        renderWithProviders()
-
-        expect(closeMock).not.toHaveBeenCalled()
-    })
-
-    it('closes the remote terminal when leaving the page', () => {
-        const rendered = renderWithProviders()
+    it('unmounts through shared tabs without legacy close', () => {
+        const rendered = render(<TerminalPage />)
 
         rendered.unmount()
 
-        expect(closeMock).toHaveBeenCalled()
+        expect(legacyCloseMock).not.toHaveBeenCalled()
     })
 })

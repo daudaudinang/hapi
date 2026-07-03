@@ -28,6 +28,7 @@ import { ServerChanChannel } from './serverchan/channel'
 import QRCode from 'qrcode'
 import type { Server as BunServer } from 'bun'
 import type { WebSocketData } from '@socket.io/bun-engine'
+import { closeSessionTerminalsInternal } from './socket/internalTerminalControl'
 
 /** Format config source for logging */
 function formatSource(source: ConfigSource | 'generated'): string {
@@ -195,7 +196,16 @@ async function main() {
         onAgentTextMessage: (input) => syncEngine?.autoReportSessionReply(input)
     })
 
-    syncEngine = new SyncEngine(store, socketServer.io, socketServer.rpcRegistry, sseManager)
+    syncEngine = new SyncEngine(
+        store,
+        socketServer.io,
+        socketServer.rpcRegistry,
+        sseManager,
+        (input) => closeSessionTerminalsInternal({
+            io: socketServer.io,
+            terminalRegistry: socketServer.terminalRegistry
+        }, input)
+    )
 
     const notificationChannels: NotificationChannel[] = [
         new PushNotificationChannel(pushService, sseManager, visibilityTracker, config.publicUrl)
@@ -226,6 +236,7 @@ async function main() {
         getSyncEngine: () => syncEngine,
         getSseManager: () => sseManager,
         getVisibilityTracker: () => visibilityTracker,
+        getTerminalLiveCount: (sessionId, namespace) => socketServer.terminalSessionState.countLiveSessionTerminals(sessionId, namespace),
         jwtSecret,
         store,
         vapidPublicKey: vapidKeys.publicKey,

@@ -6,7 +6,7 @@ import type { SessionSummary } from '@/types/api'
 import { EditorLayout } from './EditorLayout'
 import { ActiveChatSessionProvider } from '@/lib/active-chat-session'
 
-const mocks = vi.hoisted(() => ({
+var mocks = {
     createSession: vi.fn(),
     lastNewSessionArgs: null as null | { onCreated: (sessionId: string) => void },
     navigate: vi.fn(),
@@ -21,7 +21,7 @@ const mocks = vi.hoisted(() => ({
     sessions: [] as SessionSummary[],
     sessionsLoading: false,
     sessionsError: null as string | null
-}))
+}
 
 vi.mock('@tanstack/react-router', async () => {
     const actual = await vi.importActual<typeof import('@tanstack/react-router')>('@tanstack/react-router')
@@ -35,6 +35,16 @@ vi.mock('@tanstack/react-router', async () => {
 
 vi.mock('@/hooks/useMediaQuery', () => ({
     useMediaQuery: () => mocks.isMobile
+}))
+
+
+vi.mock('@/lib/use-translation', () => ({
+    useTranslation: () => ({
+        t: (key: string, params?: Record<string, string | number>) => {
+            if (!params) return key
+            return `${key} ${JSON.stringify(params)}`
+        }
+    })
 }))
 
 vi.mock('@/hooks/queries/useSessions', () => ({
@@ -119,7 +129,10 @@ vi.mock('./EditorTerminal', () => ({
             <div>Active terminal: {props.activeTabId ?? ''}</div>
             <button type="button" onClick={() => props.onOpenTerminal()}>Mock open terminal</button>
             <button type="button" onClick={() => props.onToggleCollapsed()}>Mock toggle terminal</button>
-            <button type="button" onClick={() => props.onRegisterTerminalClose?.('mock-terminal', mocks.terminalClose)}>Mock register terminal close</button>
+            <button type="button" onClick={() => {
+                const machineTab = props.tabs.find((tab) => tab.machineId)
+                if (machineTab) props.onRegisterTerminalClose?.(machineTab.id, mocks.terminalClose)
+            }}>Mock register machine terminal close</button>
         </div>
     )
 }))
@@ -493,22 +506,82 @@ describe('EditorLayout', () => {
         expect(screen.getByTestId('editor-terminal').parentElement).toHaveStyle({ height: '32px' })
     })
 
-    it('closes editor terminals and clears project state when switching project', () => {
+    it('closes legacy machine editor terminals and clears project state when switching project', () => {
         renderEditorLayout({} as ApiClient)
 
         fireEvent.click(screen.getByText('Mock open terminal'))
-        fireEvent.click(screen.getByText('Mock register terminal close'))
+        fireEvent.click(screen.getByText('Mock register machine terminal close'))
         fireEvent.click(screen.getByText('Select project'))
 
         expect(mocks.terminalClose).toHaveBeenCalledTimes(1)
         expect(screen.getByTestId('editor-terminal')).not.toHaveTextContent('Terminal: bash')
     })
 
-    it('closes editor terminals and clears persisted state on page unload', () => {
+    it('closes legacy machine editor terminals and clears persisted state on page unload', () => {
         renderEditorLayout({} as ApiClient)
 
         fireEvent.click(screen.getByText('Mock open terminal'))
-        fireEvent.click(screen.getByText('Mock register terminal close'))
+        fireEvent.click(screen.getByText('Mock register machine terminal close'))
+        window.dispatchEvent(new Event('pagehide'))
+
+        expect(mocks.terminalClose).toHaveBeenCalledTimes(1)
+        expect(mocks.clearPersistedEditorState).toHaveBeenCalledTimes(1)
+    })
+
+
+
+    it('clears persisted state on page unload without session terminal close callback', () => {
+        render(
+            <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}>
+                <EditorLayout
+                    api={{} as ApiClient}
+                    initialMachineId="machine-1"
+                    initialProjectPath="/repo"
+                    initialState={{
+                        machineId: 'machine-1',
+                        projectPath: '/repo',
+                        tabs: [{ id: 'term-session', type: 'terminal', label: 'Terminal: session', shell: 'bash', sessionId: 'session-1' }],
+                        activeTabId: 'term-session',
+                        activeSessionId: 'session-1',
+                        isTerminalCollapsed: false
+                    }}
+                />
+            </QueryClientProvider>
+        )
+
+        fireEvent.click(screen.getByText('Mock register machine terminal close'))
+        window.dispatchEvent(new Event('pagehide'))
+
+        expect(mocks.terminalClose).not.toHaveBeenCalled()
+        expect(mocks.clearPersistedEditorState).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps mixed pagehide cleanup non-destructive for session terminals while closing legacy machine terminals', () => {
+        render(
+            <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}>
+                <EditorLayout
+                    api={{} as ApiClient}
+                    initialMachineId="machine-1"
+                    initialProjectPath="/repo"
+                    initialState={{
+                        machineId: 'machine-1',
+                        projectPath: '/repo',
+                        tabs: [
+                            { id: 'term-session', type: 'terminal', label: 'Terminal: session', shell: 'bash', sessionId: 'session-1' },
+                            { id: 'term-machine', type: 'terminal', label: 'Terminal: bash', shell: 'bash', machineId: 'machine-1', cwd: '/repo' }
+                        ],
+                        activeTabId: 'term-session',
+                        activeSessionId: 'session-1',
+                        isTerminalCollapsed: false
+                    }}
+                />
+            </QueryClientProvider>
+        )
+
+        expect(screen.getByTestId('editor-terminal')).toHaveTextContent('Terminal: session:session-1:')
+        expect(screen.getByTestId('editor-terminal')).toHaveTextContent('Terminal: bash:machine-1:/repo')
+
+        fireEvent.click(screen.getByText('Mock register machine terminal close'))
         window.dispatchEvent(new Event('pagehide'))
 
         expect(mocks.terminalClose).toHaveBeenCalledTimes(1)

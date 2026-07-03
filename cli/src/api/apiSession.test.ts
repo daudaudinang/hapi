@@ -15,28 +15,12 @@ vi.mock('axios', () => ({
     }
 }))
 
-vi.mock('@/api/rpc/RpcHandlerManager', () => ({
-    RpcHandlerManager: class {
-        onSocketConnect(): void { }
-        onSocketDisconnect(): void { }
-        registerHandler(): void { }
-        handleRequest(): Promise<string> {
-            return Promise.resolve('{}')
-        }
-    }
-}))
-
 vi.mock('../modules/common/registerCommonHandlers', () => ({
     registerCommonHandlers: () => { }
 }))
 
-vi.mock('@/terminal/TerminalManager', () => ({
-    TerminalManager: class {
-        closeAll(): void { }
-    }
-}))
-
 import { ApiSessionClient, isExternalUserMessage } from './apiSession'
+import { TerminalManager } from '@/terminal/TerminalManager'
 import { configuration } from '@/configuration'
 import type { Metadata, Session } from './types'
 
@@ -142,19 +126,29 @@ describe('ApiSessionClient.updateMetadata', () => {
     const now = 1_710_000_000_000
 
     beforeEach(() => {
+        vi.restoreAllMocks()
         ioMock.mockReset()
         axiosGetMock.mockReset()
         axiosPostMock.mockReset()
     })
 
     function makeSocket() {
+        const handlers = new Map<string, (...args: unknown[]) => void>()
         return {
-            on: vi.fn(),
+            handlers,
+            on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+                handlers.set(event, handler)
+            }),
             off: vi.fn(),
             connect: vi.fn(),
             emit: vi.fn(),
             emitWithAck: vi.fn(async () => ({ result: 'success', version: 2, metadata: { path: '/tmp/project', host: 'test-host' } })),
-            volatile: { emit: vi.fn() }
+            volatile: { emit: vi.fn() },
+            trigger(event: string, payload: unknown): void {
+                const handler = handlers.get(event)
+                if (!handler) throw new Error(`No handler registered for ${event}`)
+                handler(payload)
+            }
         }
     }
 
@@ -240,6 +234,163 @@ describe('ApiSessionClient.updateMetadata', () => {
                 timeout: 15_000
             })
         )
+    })
+
+
+
+
+
+    it('does not close session terminals when the CLI socket disconnects', () => {
+        const fakeSocket = makeSocket()
+        ioMock.mockReturnValue(fakeSocket)
+        const closeAllSpy = vi.spyOn(TerminalManager.prototype, 'closeAll')
+        new ApiSessionClient('cli-token', makeSession({ path: '/tmp/project', host: 'test-host' }))
+
+        fakeSocket.trigger('disconnect', 'transport close')
+
+        expect(closeAllSpy).not.toHaveBeenCalled()
+        closeAllSpy.mockRestore()
+    })
+
+    it('emits terminal list when hub requests session terminal list', () => {
+        const fakeSocket = makeSocket()
+        ioMock.mockReturnValue(fakeSocket)
+        new ApiSessionClient('cli-token', makeSession({ path: '/tmp/project', host: 'test-host' }))
+
+        fakeSocket.trigger('terminal:list', { scopeType: 'session', sessionId: 'session-1' })
+
+        expect(fakeSocket.emit).toHaveBeenCalledWith('terminal:list', {
+            scopeType: 'session',
+            sessionId: 'session-1',
+            terminals: []
+        })
+    })
+
+    it('handles terminal keepalive without shell input and re-emits updated list', () => {
+        const fakeSocket = makeSocket()
+        ioMock.mockReturnValue(fakeSocket)
+        new ApiSessionClient('cli-token', makeSession({ path: '/tmp/project', host: 'test-host' }))
+
+        fakeSocket.trigger('terminal:keepalive', { scopeType: 'session', sessionId: 'session-1', terminalId: 't1' })
+
+        expect(fakeSocket.emit).toHaveBeenCalledWith('terminal:list', {
+            scopeType: 'session',
+            sessionId: 'session-1',
+            terminals: []
+        })
+        expect(fakeSocket.emit).not.toHaveBeenCalledWith('terminal:write', expect.anything())
+    })
+
+    it('emits updated terminal list with closed_user after explicit close-one', () => {
+        const fakeSocket = makeSocket()
+        ioMock.mockReturnValue(fakeSocket)
+        const closedTerminal = {
+            scopeType: 'session' as const,
+            sessionId: 'session-1',
+            terminalId: 't1',
+            label: 'Terminal 1',
+            cwd: 'project',
+            cols: 80,
+            rows: 24,
+            status: 'closed_user' as const,
+            closeReason: 'user_close' as const,
+            createdAt: 1,
+            lastActivityAt: 2,
+            idleWarningAt: null,
+            hardExpiresAt: 3
+        }
+        const liveT2 = { ...closedTerminal, terminalId: 't2', label: 'Terminal 2', status: 'running' as const, closeReason: null }
+        const liveT3 = { ...closedTerminal, terminalId: 't3', label: 'Terminal 3', status: 'detached' as const, closeReason: null }
+        const closeSpy = vi.spyOn(TerminalManager.prototype, 'close').mockImplementation(() => {})
+        vi.spyOn(TerminalManager.prototype, 'list').mockReturnValue([closedTerminal, liveT2, liveT3])
+        new ApiSessionClient('cli-token', makeSession({ path: '/tmp/project', host: 'test-host' }))
+
+        fakeSocket.trigger('terminal:close', { sessionId: 'session-1', terminalId: 't1' })
+
+        expect(closeSpy).toHaveBeenCalledWith('t1')
+        expect(fakeSocket.emit).toHaveBeenCalledWith('terminal:list', {
+            scopeType: 'session',
+            sessionId: 'session-1',
+            terminals: [closedTerminal, liveT2, liveT3]
+        })
+    })
+
+
+
+    it('handles valid internal close-all by closing terminals and emitting archived list', () => {
+        const fakeSocket = makeSocket()
+        ioMock.mockReturnValue(fakeSocket)
+        const closeAllSpy = vi.spyOn(TerminalManager.prototype, 'closeAll').mockImplementation(() => {})
+        const archivedTerminal = {
+            scopeType: 'session' as const,
+            sessionId: 'session-1',
+            terminalId: 'terminal-1',
+            label: 'Terminal 1',
+            cwd: '/tmp/project',
+            cols: 80,
+            rows: 24,
+            status: 'closed_archive' as const,
+            closeReason: 'archive' as const,
+            createdAt: 1,
+            lastActivityAt: 2,
+            idleWarningAt: null,
+            hardExpiresAt: 3
+        }
+        vi.spyOn(TerminalManager.prototype, 'list').mockReturnValue([archivedTerminal])
+        new ApiSessionClient('cli-token', makeSession({ path: '/tmp/project', host: 'test-host' }))
+
+        fakeSocket.trigger('terminal:close-all', {
+            scopeType: 'session',
+            sessionId: 'session-1',
+            reason: 'archive'
+        })
+
+        expect(closeAllSpy).toHaveBeenCalledTimes(1)
+        expect(fakeSocket.emit).toHaveBeenCalledWith('terminal:list', {
+            scopeType: 'session',
+            sessionId: 'session-1',
+            terminals: [archivedTerminal]
+        })
+    })
+
+    it('ignores invalid internal close-all payloads', () => {
+        const fakeSocket = makeSocket()
+        ioMock.mockReturnValue(fakeSocket)
+        const closeAllSpy = vi.spyOn(TerminalManager.prototype, 'closeAll').mockImplementation(() => {})
+        new ApiSessionClient('cli-token', makeSession({ path: '/tmp/project', host: 'test-host' }))
+
+        for (const payload of [
+            { scopeType: 'session', sessionId: 'other-session', reason: 'archive' },
+            { scopeType: 'session', sessionId: 'session-1' },
+            { scopeType: 'machine', machineId: 'machine-1', reason: 'archive' },
+            { scopeType: 'session', sessionId: 'session-1', reason: 'archive', extra: true },
+            'not-an-object'
+        ]) {
+            fakeSocket.trigger('terminal:close-all', payload)
+        }
+
+        expect(closeAllSpy).not.toHaveBeenCalled()
+        expect(fakeSocket.emit).not.toHaveBeenCalledWith('terminal:list', expect.anything())
+    })
+
+    it('emits terminal:warning when TerminalManager reports a session warning', () => {
+        const fakeSocket = makeSocket()
+        ioMock.mockReturnValue(fakeSocket)
+        const client = new ApiSessionClient('cli-token', makeSession({ path: '/tmp/project', host: 'test-host' }))
+        const payload = {
+            scopeType: 'session' as const,
+            sessionId: 'session-1',
+            terminalId: 't1',
+            reason: 'idle' as const,
+            message: 'Terminal has been idle and will stop if no activity occurs.',
+            closesAt: 123
+        }
+
+        ;(client as unknown as { terminalManager: { onWarning?: (value: typeof payload) => void } })
+            .terminalManager
+            .onWarning?.(payload)
+
+        expect(fakeSocket.emit).toHaveBeenCalledWith('terminal:warning', payload)
     })
 
     it('posts ReportToTeam through the CLI session-scoped route', async () => {

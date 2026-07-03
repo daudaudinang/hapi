@@ -10,7 +10,8 @@ import { registerCliHandlers } from './handlers/cli'
 import { registerTerminalHandlers } from './handlers/terminal'
 import { RpcRegistry } from './rpcRegistry'
 import type { SyncEvent } from '../sync/syncEngine'
-import { TerminalRegistry } from './terminalRegistry'
+import { TerminalRegistry, type TerminalRegistryEntry } from './terminalRegistry'
+import { TerminalSessionStateStore } from './terminalSessionState'
 import type { CliSocketWithData, SocketData, SocketServer } from './socketTypes'
 
 const jwtPayloadSchema = z.object({
@@ -20,6 +21,7 @@ const jwtPayloadSchema = z.object({
 
 const DEFAULT_IDLE_TIMEOUT_MS = 0
 const DEFAULT_MAX_TERMINALS = 4
+const DEFAULT_SESSION_MAX_TERMINALS = 3
 
 function resolveEnvNumber(name: string, fallback: number): number {
     const raw = process.env[name]
@@ -28,6 +30,33 @@ function resolveEnvNumber(name: string, fallback: number): number {
     }
     const parsed = Number.parseInt(raw, 10)
     return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+export function resolveTerminalLimitConfig(): { maxTerminalsPerSocket: number; maxTerminalsPerSession: number } {
+    return {
+        maxTerminalsPerSocket: resolveEnvNumber('HAPI_TERMINAL_MAX_TERMINALS', DEFAULT_MAX_TERMINALS),
+        maxTerminalsPerSession: DEFAULT_SESSION_MAX_TERMINALS
+    }
+}
+
+type SocketNamespace = ReturnType<SocketServer['of']>
+
+export function handleTerminalRegistryIdle(entry: TerminalRegistryEntry, terminalNs: SocketNamespace, cliNs: SocketNamespace): void {
+    if (entry.sessionId) {
+        return
+    }
+
+    const terminalSocket = terminalNs.sockets.get(entry.socketId)
+    terminalSocket?.emit('terminal:error', {
+        terminalId: entry.terminalId,
+        message: 'Terminal closed due to inactivity.'
+    })
+
+    const cliSocket = cliNs.sockets.get(entry.cliSocketId)
+    cliSocket?.emit('terminal:close', {
+        ...(entry.machineId ? { machineId: entry.machineId } : {}),
+        terminalId: entry.terminalId
+    })
 }
 
 export type SocketServerDeps = {
@@ -49,6 +78,8 @@ export function createSocketServer(deps: SocketServerDeps): {
     io: SocketServer
     engine: Engine
     rpcRegistry: RpcRegistry
+    terminalRegistry: TerminalRegistry
+    terminalSessionState: TerminalSessionStateStore
 } {
     const corsOrigins = deps.corsOrigins ?? configuration.corsOrigins
     const allowAllOrigins = corsOrigins.includes('*')
@@ -78,26 +109,14 @@ export function createSocketServer(deps: SocketServerDeps): {
 
     const rpcRegistry = new RpcRegistry()
     const idleTimeoutMs = resolveEnvNumber('HAPI_TERMINAL_IDLE_TIMEOUT_MS', DEFAULT_IDLE_TIMEOUT_MS)
-    const maxTerminals = resolveEnvNumber('HAPI_TERMINAL_MAX_TERMINALS', DEFAULT_MAX_TERMINALS)
-    const maxTerminalsPerSocket = maxTerminals
-    const maxTerminalsPerSession = maxTerminals
+    const { maxTerminalsPerSocket, maxTerminalsPerSession } = resolveTerminalLimitConfig()
     const cliNs = io.of('/cli')
     const terminalNs = io.of('/terminal')
     const terminalRegistry = new TerminalRegistry({
         idleTimeoutMs,
-        onIdle: (entry) => {
-            const terminalSocket = terminalNs.sockets.get(entry.socketId)
-            terminalSocket?.emit('terminal:error', {
-                terminalId: entry.terminalId,
-                message: 'Terminal closed due to inactivity.'
-            })
-            const cliSocket = cliNs.sockets.get(entry.cliSocketId)
-            cliSocket?.emit('terminal:close', {
-                ...(entry.sessionId ? { sessionId: entry.sessionId } : { machineId: entry.machineId }),
-                terminalId: entry.terminalId
-            })
-        }
+        onIdle: (entry) => handleTerminalRegistryIdle(entry, terminalNs, cliNs)
     })
+    const terminalSessionState = new TerminalSessionStateStore()
 
     cliNs.use((socket, next) => {
         const auth = socket.handshake.auth as Record<string, unknown> | undefined
@@ -114,6 +133,7 @@ export function createSocketServer(deps: SocketServerDeps): {
         store: deps.store,
         rpcRegistry,
         terminalRegistry,
+        terminalSessionState,
         onSessionAlive: deps.onSessionAlive,
         onSessionEnd: deps.onSessionEnd,
         onMachineAlive: deps.onMachineAlive,
@@ -154,9 +174,10 @@ export function createSocketServer(deps: SocketServerDeps): {
             return deps.store.machines.getMachine(machineId)
         },
         terminalRegistry,
+        terminalSessionState,
         maxTerminalsPerSocket,
         maxTerminalsPerSession
     }))
 
-    return { io, engine, rpcRegistry }
+    return { io, engine, rpcRegistry, terminalRegistry, terminalSessionState }
 }

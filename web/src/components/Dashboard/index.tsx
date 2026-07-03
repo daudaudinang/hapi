@@ -18,6 +18,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import type { ApiClient } from '@/api/client'
 import type { SessionSummary, AttachmentMetadata, Machine } from '@/types/api'
 import { useTranslation } from '@/lib/use-translation'
+import { getArchiveAllDescription, getArchiveSessionDescription, getTotalKnownTerminalLiveCount } from '@/lib/archiveConfirmation'
 import { MobileSessionSwitcherHandle } from './MobileSessionSwitcherHandle'
 import './dashboard.css'
 
@@ -1240,7 +1241,15 @@ export function Dashboard({ api }: DashboardProps) {
 
     const handleArchiveSession = useCallback(async (sessionId: string): Promise<boolean> => {
         if (!api) return false
-        if (!window.confirm(t('dashboard.confirmArchiveSingle'))) return false
+        const session = sessions.find(s => s.id === sessionId)
+        const sessionName = session ? getSessionTitle(session) : sessionId
+        const description = session
+            ? getArchiveSessionDescription(t, {
+                name: sessionName,
+                terminalLiveCount: session.terminalLiveCount
+            })
+            : t('dashboard.confirmArchiveSingle')
+        if (!window.confirm(description)) return false
         try {
             await api.archiveSession(sessionId)
             void queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
@@ -1249,7 +1258,7 @@ export function Dashboard({ api }: DashboardProps) {
             console.error('Archive failed:', err)
             return false
         }
-    }, [api, queryClient, t])
+    }, [api, queryClient, sessions, t])
 
     const handleDeleteSession = useCallback(async (sessionId: string): Promise<boolean> => {
         if (!api) return false
@@ -1338,9 +1347,12 @@ export function Dashboard({ api }: DashboardProps) {
                             </button>
                             {pendingConfirm?.key === key ? (
                                 <div className={`db__inline-confirm ${pendingConfirm.action === 'delete' ? 'db__inline-confirm--danger' : ''}`}>
-                                    <span className="db__inline-confirm-text">
+                                    <span className="db__inline-confirm-text whitespace-pre-line">
                                         {pendingConfirm.action === 'archive'
-                                            ? t('dashboard.confirmArchive', { n: pendingConfirm.targetSessions.length })
+                                            ? getArchiveAllDescription(t, {
+                                                sessionCount: pendingConfirm.targetSessions.length,
+                                                terminalLiveCount: getTotalKnownTerminalLiveCount(pendingConfirm.targetSessions)
+                                            })
                                             : t('dashboard.confirmDelete', { n: pendingConfirm.targetSessions.length })}
                                     </span>
                                     <button type="button" className="db__inline-confirm-yes" onClick={() => void handleExecuteConfirm()}>{t('dashboard.confirm')}</button>

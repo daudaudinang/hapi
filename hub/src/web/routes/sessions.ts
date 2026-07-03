@@ -53,7 +53,27 @@ function estimateBase64Bytes(base64: string): number {
     return Math.floor((len * 3) / 4) - padding
 }
 
-export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Hono<WebAppEnv> {
+export type SessionsRoutesOptions = {
+    getTerminalLiveCount?: (sessionId: string, namespace: string) => number | undefined
+}
+
+function withKnownTerminalCount<T extends { terminalLiveCount?: number }>(
+    summary: T,
+    terminalLiveCount: number | undefined
+): T {
+    if (terminalLiveCount === undefined || !Number.isInteger(terminalLiveCount) || terminalLiveCount < 0) {
+        return summary
+    }
+    return {
+        ...summary,
+        terminalLiveCount
+    }
+}
+
+export function createSessionsRoutes(
+    getSyncEngine: () => SyncEngine | null,
+    options: SessionsRoutesOptions = {}
+): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
     app.get('/sessions', (c) => {
@@ -80,7 +100,10 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
                 // Then by updatedAt
                 return b.updatedAt - a.updatedAt
             })
-            .map(toSessionSummary)
+            .map((session) => withKnownTerminalCount(
+                toSessionSummary(session),
+                options.getTerminalLiveCount?.(session.id, namespace)
+            ))
 
         return c.json({ sessions })
     })
@@ -142,7 +165,13 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
             return sessionResult
         }
 
-        return c.json({ session: sessionResult.session })
+        const namespace = c.get('namespace')
+        return c.json({
+            session: withKnownTerminalCount(
+                sessionResult.session,
+                options.getTerminalLiveCount?.(sessionResult.session.id, namespace)
+            )
+        })
     })
 
     app.post('/sessions/:id/resume', async (c) => {

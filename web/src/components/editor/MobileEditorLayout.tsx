@@ -8,6 +8,8 @@ import { EditorFileTree } from './EditorFileTree'
 import { EditorGitPanel } from './EditorGitPanel'
 import { EditorTabs } from './EditorTabs'
 import { EditorTerminal } from './EditorTerminal'
+import { useTranslation } from '@/lib/use-translation'
+import { getArchiveSessionDescription } from '@/lib/archiveConfirmation'
 
 export type MobileEditorView = 'files' | 'editor' | 'git' | 'chat' | 'terminal'
 
@@ -145,18 +147,25 @@ function MobileConfirmModal(props: {
     onCancel: () => void
     onConfirm: () => Promise<void>
 }) {
+    const { t } = useTranslation()
     if (!props.pending) return null
     const isDelete = props.pending.type === 'delete'
+    const archiveDescription = !isDelete
+        ? getArchiveSessionDescription(t, {
+            name: getSessionTabTitle(props.pending.session),
+            terminalLiveCount: props.pending.session.terminalLiveCount
+        })
+        : null
     return (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3" role="presentation">
             <div className="w-full max-w-sm rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)] p-4 shadow-xl" role="dialog" aria-modal="true">
                 <div className="text-sm font-semibold text-[var(--app-fg)]">
                     {isDelete ? 'Delete archived session?' : 'Archive session?'}
                 </div>
-                <div className="mt-1 text-xs text-[var(--app-hint)]">
+                <div className="mt-1 whitespace-pre-line text-xs text-[var(--app-hint)]">
                     {isDelete
                         ? 'This permanently removes the archived session and its messages.'
-                        : 'You can still find this session in archived sessions.'}
+                        : archiveDescription}
                 </div>
                 <div className="mt-4 flex justify-end gap-2">
                     <button

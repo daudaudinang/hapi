@@ -498,18 +498,18 @@ export class ApiMachineClient {
             callback(await this.rpcHandlerManager.handleRequest(data))
         })
 
-        const handleTerminalEvent = <T extends { machineId?: string }>(
+        const handleTerminalEvent = <T extends { terminalId: string }>(
             schema: { safeParse: (data: unknown) => { success: true; data: T } | { success: false } },
-            handler: (payload: T) => void | Promise<void>
+            handler: (payload: T & { machineId: string }) => void | Promise<void>
         ) => (data: unknown) => {
             const parsed = schema.safeParse(data)
             if (!parsed.success) {
                 return
             }
-            if (parsed.data.machineId !== this.machine.id) {
+            if (!('machineId' in parsed.data) || parsed.data.machineId !== this.machine.id) {
                 return
             }
-            void handler(parsed.data)
+            void handler(parsed.data as T & { machineId: string })
         }
 
         this.socket.on('terminal:open', handleTerminalEvent(TerminalOpenPayloadSchema, async (payload) => {

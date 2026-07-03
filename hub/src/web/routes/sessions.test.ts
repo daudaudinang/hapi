@@ -52,6 +52,7 @@ function createSession(overrides?: Partial<Session>): Session {
 
 function createApp(session: Session, opts?: {
     resumeSession?: (sessionId: string, namespace: string, resumeOpts?: { permissionMode?: string }) => Promise<{ type: string; sessionId?: string; message?: string; code?: string }>
+    getTerminalLiveCount?: (sessionId: string, namespace: string) => number | undefined
 }) {
     const applySessionConfigCalls: Array<[string, Record<string, unknown>]> = []
     const applySessionConfig = async (sessionId: string, config: Record<string, unknown>) => {
@@ -81,6 +82,7 @@ function createApp(session: Session, opts?: {
     }
     const resumeSession = opts?.resumeSession ?? (async (sessionId: string) => ({ type: 'success', sessionId }))
     const engine = {
+        getSessionsByNamespace: (namespace: string) => session.namespace === namespace ? [session] : [],
         resolveSessionAccess: () => ({ ok: true, sessionId: session.id, session }),
         applySessionConfig,
         listCodexModelsForSession,
@@ -92,15 +94,70 @@ function createApp(session: Session, opts?: {
 
     const app = new Hono<WebAppEnv>()
     app.use('*', async (c, next) => {
-        c.set('namespace', 'default')
+        c.set('namespace', session.namespace)
         await next()
     })
-    app.route('/api', createSessionsRoutes(() => engine as SyncEngine))
+    app.route('/api', createSessionsRoutes(() => engine as SyncEngine, {
+        getTerminalLiveCount: opts?.getTerminalLiveCount
+    }))
 
     return { app, applySessionConfigCalls, cacheCodexModelsForSessionCalls, cacheOpencodeModelsForSessionCalls }
 }
 
 describe('sessions routes', () => {
+    it('includes known namespace-scoped live terminal count in session summaries', async () => {
+        const session = createSession({ namespace: 'ns-a' })
+        const { app } = createApp(session, {
+            getTerminalLiveCount: (sessionId, namespace) => (
+                sessionId === 'session-1' && namespace === 'ns-a' ? 2 : undefined
+            )
+        })
+
+        const response = await app.request('/api/sessions')
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toMatchObject({
+            sessions: [
+                {
+                    id: 'session-1',
+                    terminalLiveCount: 2
+                }
+            ]
+        })
+    })
+
+    it('omits terminal count when live terminal count is unknown', async () => {
+        const { app } = createApp(createSession(), {
+            getTerminalLiveCount: () => undefined
+        })
+
+        const response = await app.request('/api/sessions')
+        const body = await response.json() as { sessions: Array<{ terminalLiveCount?: number }> }
+
+        expect(response.status).toBe(200)
+        expect(body.sessions[0].terminalLiveCount).toBeUndefined()
+    })
+
+    it('includes known live terminal count in session detail responses', async () => {
+        const session = createSession({ namespace: 'ns-a' })
+        const { app } = createApp(session, {
+            getTerminalLiveCount: (sessionId, namespace) => (
+                sessionId === 'session-1' && namespace === 'ns-a' ? 2 : undefined
+            )
+        })
+
+        const response = await app.request('/api/sessions/session-1')
+
+        expect(response.status).toBe(200)
+        expect(await response.json()).toMatchObject({
+            session: {
+                id: 'session-1',
+                terminalLiveCount: 2
+            }
+        })
+    })
+
+
     it('rejects collaboration mode changes for local Codex sessions', async () => {
         const session = createSession({
             agentState: {

@@ -65,6 +65,8 @@ export type ResumeSessionResult =
     | { type: 'success'; sessionId: string }
     | { type: 'error'; message: string; code: 'session_not_found' | 'access_denied' | 'no_machine_online' | 'resume_unavailable' | 'resume_failed' }
 
+type CloseSessionTerminals = (input: { namespace: string; sessionId: string }) => void
+
 const MAX_AUTO_RESUME_ATTEMPTS = 3
 
 /**
@@ -98,7 +100,8 @@ export class SyncEngine {
         store: Store,
         io: Server,
         rpcRegistry: RpcRegistry,
-        sseManager: SSEManager
+        sseManager: SSEManager,
+        private readonly closeSessionTerminals?: CloseSessionTerminals
     ) {
         this.eventPublisher = new EventPublisher(sseManager, (event) => this.resolveNamespace(event))
         this.sessionCache = new SessionCache(store, this.eventPublisher)
@@ -541,12 +544,24 @@ export class SyncEngine {
     }
 
     async archiveSession(sessionId: string): Promise<void> {
+        const session = this.sessionCache.getSession(sessionId)
+        const namespace = session?.namespace
+
+        this.handleSessionEnd({ sid: sessionId, time: Date.now(), reason: 'terminated' })
+
+        if (namespace) {
+            try {
+                this.closeSessionTerminals?.({ namespace, sessionId })
+            } catch {
+                // Best-effort terminal cleanup; archive already completed logically.
+            }
+        }
+
         try {
             await this.rpcGateway.killSession(sessionId)
         } catch {
-            // Best-effort: CLI may already be disconnected — still mark session ended
+            // Best-effort: CLI may already be disconnected.
         }
-        this.handleSessionEnd({ sid: sessionId, time: Date.now(), reason: 'terminated' })
     }
 
     async switchSession(sessionId: string, to: 'remote' | 'local'): Promise<void> {

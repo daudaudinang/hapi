@@ -60,6 +60,7 @@ function createWebApp(options: {
     getSyncEngine: () => SyncEngine | null
     getSseManager: () => SSEManager | null
     getVisibilityTracker: () => VisibilityTracker | null
+    getTerminalLiveCount?: (sessionId: string, namespace: string) => number | undefined
     jwtSecret: Uint8Array
     store: Store
     vapidPublicKey: string
@@ -92,7 +93,9 @@ function createWebApp(options: {
 
     app.use('/api/*', createAuthMiddleware(options.jwtSecret))
     app.route('/api', createEventsRoutes(options.getSseManager, options.getSyncEngine, options.getVisibilityTracker))
-    app.route('/api', createSessionsRoutes(options.getSyncEngine))
+    app.route('/api', createSessionsRoutes(options.getSyncEngine, {
+        getTerminalLiveCount: options.getTerminalLiveCount
+    }))
     app.route('/api', createMessagesRoutes(options.getSyncEngine))
     app.route('/api', createTeamChatsRoutes(options.getSyncEngine))
     app.route('/api', createPermissionsRoutes(options.getSyncEngine))
@@ -209,6 +212,7 @@ export async function startWebServer(options: {
     getSyncEngine: () => SyncEngine | null
     getSseManager: () => SSEManager | null
     getVisibilityTracker: () => VisibilityTracker | null
+    getTerminalLiveCount?: (sessionId: string, namespace: string) => number | undefined
     jwtSecret: Uint8Array
     store: Store
     vapidPublicKey: string
@@ -223,6 +227,7 @@ export async function startWebServer(options: {
         getSyncEngine: options.getSyncEngine,
         getSseManager: options.getSseManager,
         getVisibilityTracker: options.getVisibilityTracker,
+        getTerminalLiveCount: options.getTerminalLiveCount,
         jwtSecret: options.jwtSecret,
         store: options.store,
         vapidPublicKey: options.vapidPublicKey,
