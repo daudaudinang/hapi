@@ -1,12 +1,17 @@
 import {
     TerminalErrorPayloadSchema,
     TerminalExitPayloadSchema,
+    TerminalListPayloadSchema,
     TerminalOutputPayloadSchema,
-    TerminalReadyPayloadSchema
+    TerminalReadyPayloadSchema,
+    TerminalWarningPayloadSchema,
+    type TerminalScopeTyped
 } from '@hapi/protocol'
 import type { StoredMachine, StoredSession } from '../../../store'
 import type { TerminalRegistry } from '../../terminalRegistry'
+import type { TerminalSessionStateStore } from '../../terminalSessionState'
 import type { CliSocketWithData, SocketServer } from '../../socketTypes'
+import { terminalScopeRoom } from '../../terminalRooms'
 import type { AccessErrorReason, AccessResult } from './types'
 
 type ResolveSessionAccess = (sessionId: string) => AccessResult<StoredSession>
@@ -20,9 +25,12 @@ const terminalReadySchema = TerminalReadyPayloadSchema
 const terminalOutputSchema = TerminalOutputPayloadSchema
 const terminalExitSchema = TerminalExitPayloadSchema
 const terminalErrorSchema = TerminalErrorPayloadSchema
+const terminalListSchema = TerminalListPayloadSchema
+const terminalWarningSchema = TerminalWarningPayloadSchema
 
 export type TerminalHandlersDeps = {
     terminalRegistry: TerminalRegistry
+    terminalSessionState?: TerminalSessionStateStore
     terminalNamespace: SocketNamespace
     resolveSessionAccess: ResolveSessionAccess
     resolveMachineAccess: ResolveMachineAccess
@@ -30,9 +38,27 @@ export type TerminalHandlersDeps = {
 }
 
 export function registerTerminalHandlers(socket: CliSocketWithData, deps: TerminalHandlersDeps): void {
-    const { terminalRegistry, terminalNamespace, resolveSessionAccess, resolveMachineAccess, emitAccessError } = deps
+    const { terminalRegistry, terminalSessionState, terminalNamespace, resolveSessionAccess, resolveMachineAccess, emitAccessError } = deps
 
-    const forwardTerminalEvent = (event: string, payload: { sessionId?: string; machineId?: string; terminalId: string } & Record<string, unknown>) => {
+    const authorizeTypedScope = (scope: TerminalScopeTyped): string | null => {
+        if (scope.scopeType === 'session') {
+            const sessionAccess = resolveSessionAccess(scope.sessionId)
+            if (!sessionAccess.ok) {
+                emitAccessError('session', scope.sessionId, sessionAccess.reason)
+                return null
+            }
+            return sessionAccess.value.namespace
+        }
+
+        const machineAccess = resolveMachineAccess(scope.machineId)
+        if (!machineAccess.ok) {
+            emitAccessError('machine', scope.machineId, machineAccess.reason)
+            return null
+        }
+        return machineAccess.value.namespace
+    }
+
+    const forwardTerminalEvent = (event: string, payload: { sessionId?: string; machineId?: string; terminalId: string } & Record<string, unknown>, removeEntry = false) => {
         const entry = terminalRegistry.get(payload.terminalId)
         if (!entry) {
             return
@@ -43,25 +69,60 @@ export function registerTerminalHandlers(socket: CliSocketWithData, deps: Termin
         if (payload.sessionId !== entry.sessionId || payload.machineId !== entry.machineId) {
             return
         }
-        if (payload.sessionId) {
-            const sessionAccess = resolveSessionAccess(payload.sessionId)
-            if (!sessionAccess.ok) {
-                emitAccessError('session', payload.sessionId, sessionAccess.reason)
-                return
+        const typedScope: TerminalScopeTyped | null = payload.sessionId
+            ? { scopeType: 'session', sessionId: payload.sessionId }
+            : payload.machineId
+                ? { scopeType: 'machine', machineId: payload.machineId }
+                : null
+        const namespace = typedScope ? authorizeTypedScope(typedScope) : null
+        if (!typedScope || !namespace) {
+            if (removeEntry) {
+                terminalRegistry.remove(payload.terminalId)
             }
-        } else if (payload.machineId) {
-            const machineAccess = resolveMachineAccess(payload.machineId)
-            if (!machineAccess.ok) {
-                emitAccessError('machine', payload.machineId, machineAccess.reason)
-                return
-            }
+            return
         }
+        if (removeEntry) {
+            terminalRegistry.remove(payload.terminalId)
+        }
+        const room = terminalScopeRoom(namespace, typedScope)
+        terminalNamespace.to(room).emit(event, payload)
         const terminalSocket = terminalNamespace.sockets.get(entry.socketId)
         if (!terminalSocket) {
             return
         }
+        if (terminalSocket.rooms.has(room)) {
+            return
+        }
         terminalSocket.emit(event, payload)
     }
+
+    socket.on('terminal:list', (data: unknown) => {
+        const parsed = terminalListSchema.safeParse(data)
+        if (!parsed.success) {
+            return
+        }
+        const namespace = authorizeTypedScope(parsed.data)
+        if (!namespace) {
+            return
+        }
+        terminalSessionState?.updateFromList(socket.id, namespace, parsed.data)
+        const payload = parsed.data.scopeType === 'session'
+            ? (terminalSessionState?.getCachedSessionList(parsed.data.sessionId, namespace) ?? parsed.data)
+            : parsed.data
+        terminalNamespace.to(terminalScopeRoom(namespace, parsed.data)).emit('terminal:list', payload)
+    })
+
+    socket.on('terminal:warning', (data: unknown) => {
+        const parsed = terminalWarningSchema.safeParse(data)
+        if (!parsed.success) {
+            return
+        }
+        const namespace = authorizeTypedScope(parsed.data)
+        if (!namespace) {
+            return
+        }
+        terminalNamespace.to(terminalScopeRoom(namespace, parsed.data)).emit('terminal:warning', parsed.data)
+    })
 
     socket.on('terminal:ready', (data: unknown) => {
         const parsed = terminalReadySchema.safeParse(data)
@@ -87,15 +148,12 @@ export function registerTerminalHandlers(socket: CliSocketWithData, deps: Termin
             return
         }
         const entry = terminalRegistry.get(parsed.data.terminalId)
-        if (!entry || entry.sessionId !== parsed.data.sessionId || entry.machineId !== parsed.data.machineId || entry.cliSocketId !== socket.id) {
+        const sessionId = 'sessionId' in parsed.data ? parsed.data.sessionId : undefined
+        const machineId = 'machineId' in parsed.data ? parsed.data.machineId : undefined
+        if (!entry || entry.sessionId !== sessionId || entry.machineId !== machineId || entry.cliSocketId !== socket.id) {
             return
         }
-        terminalRegistry.remove(parsed.data.terminalId)
-        const terminalSocket = terminalNamespace.sockets.get(entry.socketId)
-        if (!terminalSocket) {
-            return
-        }
-        terminalSocket.emit('terminal:exit', parsed.data)
+        forwardTerminalEvent('terminal:exit', parsed.data, true)
     })
 
     socket.on('terminal:error', (data: unknown) => {
@@ -105,29 +163,13 @@ export function registerTerminalHandlers(socket: CliSocketWithData, deps: Termin
         }
 
         const entry = terminalRegistry.get(parsed.data.terminalId)
-        if (!entry || entry.sessionId !== parsed.data.sessionId || entry.machineId !== parsed.data.machineId || entry.cliSocketId !== socket.id) {
+        const sessionId = 'sessionId' in parsed.data ? parsed.data.sessionId : undefined
+        const machineId = 'machineId' in parsed.data ? parsed.data.machineId : undefined
+        if (!entry || entry.sessionId !== sessionId || entry.machineId !== machineId || entry.cliSocketId !== socket.id) {
             return
         }
 
-        if (parsed.data.sessionId) {
-            const sessionAccess = resolveSessionAccess(parsed.data.sessionId)
-            if (!sessionAccess.ok) {
-                terminalRegistry.remove(parsed.data.terminalId)
-                emitAccessError('session', parsed.data.sessionId, sessionAccess.reason)
-                return
-            }
-        } else if (parsed.data.machineId) {
-            const machineAccess = resolveMachineAccess(parsed.data.machineId)
-            if (!machineAccess.ok) {
-                terminalRegistry.remove(parsed.data.terminalId)
-                emitAccessError('machine', parsed.data.machineId, machineAccess.reason)
-                return
-            }
-        }
-
-        const terminalSocket = terminalNamespace.sockets.get(entry.socketId)
-        terminalRegistry.remove(parsed.data.terminalId)
-        terminalSocket?.emit('terminal:error', parsed.data)
+        forwardTerminalEvent('terminal:error', parsed.data, true)
     })
 }
 

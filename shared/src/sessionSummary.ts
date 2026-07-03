@@ -23,6 +23,7 @@ export type SessionSummary = {
     pendingRequestsCount: number
     model: string | null
     effort: string | null
+    terminalLiveCount?: number
 }
 
 export function toSessionSummary(session: Session): SessionSummary {

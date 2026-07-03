@@ -14,7 +14,16 @@
     "./voice": "./src/voice.ts"
   },
   "sideEffects": false,
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
   "dependencies": {
     "zod": "^4.2.1"
+  },
+  "devDependencies": {
+    "@types/node": ">=25",
+    "bun-types": "^1.3.5",
+    "typescript": "^5"
   }
 }

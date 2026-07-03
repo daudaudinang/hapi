@@ -2,6 +2,7 @@ export type TerminalRegistryEntry = {
     terminalId: string
     sessionId?: string
     machineId?: string
+    namespace: string
     socketId: string
     cliSocketId: string
     idleTimer: ReturnType<typeof setTimeout> | null
@@ -11,6 +12,7 @@ export type TerminalRegistryRegisterOptions = {
     terminalId: string
     sessionId?: string
     machineId?: string
+    namespace: string
     socketId: string
     cliSocketId: string
 }
@@ -46,21 +48,22 @@ export class TerminalRegistry {
             ? {
                 terminalId: optionsOrTerminalId,
                 sessionId: legacySessionId,
+                namespace: '',
                 socketId: legacySocketId ?? '',
                 cliSocketId: legacyCliSocketId ?? ''
             }
             : optionsOrTerminalId
-        const { terminalId, sessionId, machineId, socketId, cliSocketId } = options
+        const { terminalId, sessionId, machineId, namespace, socketId, cliSocketId } = options
         if (Boolean(sessionId) === Boolean(machineId)) {
             return null
         }
 
         const existing = this.terminals.get(terminalId)
         if (existing) {
-            if (existing.socketId === socketId) {
+            if (existing.socketId === socketId && existing.namespace === namespace) {
                 return existing
             }
-            if (existing.sessionId !== sessionId || existing.machineId !== machineId) {
+            if (existing.sessionId !== sessionId || existing.machineId !== machineId || existing.namespace !== namespace) {
                 return null
             }
             // Same scope, different socket — stale entry from a previous
@@ -74,6 +77,7 @@ export class TerminalRegistry {
             terminalId,
             sessionId,
             machineId,
+            namespace,
             socketId,
             cliSocketId,
             idleTimer: null
@@ -96,6 +100,9 @@ export class TerminalRegistry {
     markActivity(terminalId: string): void {
         const entry = this.terminals.get(terminalId)
         if (!entry) {
+            return
+        }
+        if (entry.sessionId) {
             return
         }
         this.scheduleIdle(entry)
@@ -143,11 +150,30 @@ export class TerminalRegistry {
         return Array.from(ids).map((terminalId) => this.remove(terminalId)).filter(Boolean) as TerminalRegistryEntry[]
     }
 
+    entriesForSession(sessionId: string, namespace: string): TerminalRegistryEntry[] {
+        const ids = this.terminalsBySession.get(sessionId)
+        if (!ids || ids.size === 0) {
+            return []
+        }
+        return Array.from(ids)
+            .map((terminalId) => this.terminals.get(terminalId))
+            .filter((entry): entry is TerminalRegistryEntry => Boolean(entry && entry.namespace === namespace))
+    }
+
+    removeBySession(sessionId: string, namespace: string): TerminalRegistryEntry[] {
+        return this.entriesForSession(sessionId, namespace)
+            .map((entry) => this.remove(entry.terminalId))
+            .filter(Boolean) as TerminalRegistryEntry[]
+    }
+
     countForSocket(socketId: string): number {
         return this.terminalsBySocket.get(socketId)?.size ?? 0
     }
 
-    countForSession(sessionId: string): number {
+    countForSession(sessionId: string, namespace?: string): number {
+        if (namespace) {
+            return this.entriesForSession(sessionId, namespace).length
+        }
         return this.terminalsBySession.get(sessionId)?.size ?? 0
     }
 
@@ -157,6 +183,9 @@ export class TerminalRegistry {
 
     private scheduleIdle(entry: TerminalRegistryEntry): void {
         if (this.idleTimeoutMs <= 0) {
+            return
+        }
+        if (!entry.machineId) {
             return
         }
 

@@ -4,6 +4,9 @@ import type { SyncEvent } from '@hapi/protocol/types'
 import { Store } from '../store'
 import { RpcRegistry } from '../socket/rpcRegistry'
 import { registerSessionHandlers } from '../socket/handlers/cli/sessionHandlers'
+import { registerTerminalHandlers } from '../socket/handlers/terminal'
+import { TerminalRegistry } from '../socket/terminalRegistry'
+import type { SocketServer, SocketWithData } from '../socket/socketTypes'
 import type { EventPublisher } from './eventPublisher'
 import { SessionCache } from './sessionCache'
 import { SyncEngine } from './syncEngine'
@@ -14,6 +17,63 @@ function createPublisher(events: SyncEvent[]): EventPublisher {
             events.push(event)
         }
     } as unknown as EventPublisher
+}
+
+type TerminalEmittedEvent = {
+    event: string
+    data: unknown
+}
+
+class TerminalFakeSocket {
+    readonly id: string
+    readonly data: Record<string, unknown> = {}
+    readonly emitted: TerminalEmittedEvent[] = []
+    private readonly handlers = new Map<string, (...args: unknown[]) => void>()
+
+    constructor(id: string) {
+        this.id = id
+    }
+
+    on(event: string, handler: (...args: unknown[]) => void): this {
+        this.handlers.set(event, handler)
+        return this
+    }
+
+    join(): void {}
+    leave(): void {}
+
+    emit(event: string, data: unknown): boolean {
+        this.emitted.push({ event, data })
+        return true
+    }
+
+    trigger(event: string, data?: unknown): void {
+        const handler = this.handlers.get(event)
+        if (!handler) return
+        if (typeof data === 'undefined') handler()
+        else handler(data)
+    }
+}
+
+class TerminalFakeNamespace {
+    readonly sockets = new Map<string, TerminalFakeSocket>()
+    readonly adapter = { rooms: new Map<string, Set<string>>() }
+}
+
+class TerminalFakeServer {
+    private readonly namespaces = new Map<string, TerminalFakeNamespace>()
+
+    of(name: string): TerminalFakeNamespace {
+        const existing = this.namespaces.get(name)
+        if (existing) return existing
+        const namespace = new TerminalFakeNamespace()
+        this.namespaces.set(name, namespace)
+        return namespace
+    }
+}
+
+function lastTerminalEmit(socket: TerminalFakeSocket, event: string): TerminalEmittedEvent | undefined {
+    return [...socket.emitted].reverse().find((entry) => entry.event === event)
 }
 
 describe('session model', () => {
@@ -587,6 +647,144 @@ describe('session model', () => {
         })
 
         expect(activity).toHaveLength(0)
+    })
+
+    it('marks archived session inactive immediately while kill is still pending and calls terminal close-all', async () => {
+        const store = new Store(':memory:')
+        const closeAllCalls: Array<{ namespace: string; sessionId: string }> = []
+        let resolveKill!: () => void
+        const pendingKill = new Promise<void>((resolve) => {
+            resolveKill = resolve
+        })
+        const engine = new SyncEngine(
+            store,
+            {} as never,
+            new RpcRegistry(),
+            { broadcast() {} } as never,
+            (input) => {
+                closeAllCalls.push(input)
+            }
+        )
+
+        try {
+            const session = engine.getOrCreateSession(
+                'session-archive-race',
+                { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
+                null,
+                'team-a'
+            )
+            engine.handleSessionAlive({ sid: session.id, time: Date.now() })
+            expect(engine.getSession(session.id)?.active).toBe(true)
+            ;(engine as any).rpcGateway.killSession = () => pendingKill
+
+            const archivePromise = engine.archiveSession(session.id)
+
+            expect(engine.getSession(session.id)?.active).toBe(false)
+            expect(closeAllCalls).toEqual([{ namespace: 'team-a', sessionId: session.id }])
+
+            resolveKill()
+            await archivePromise
+            expect(engine.getSession(session.id)?.active).toBe(false)
+        } finally {
+            engine.stop()
+        }
+    })
+
+    it('rejects terminal create through handler while archive kill is still pending', async () => {
+        const store = new Store(':memory:')
+        let resolveKill!: () => void
+        const pendingKill = new Promise<void>((resolve) => {
+            resolveKill = resolve
+        })
+        const engine = new SyncEngine(
+            store,
+            {} as never,
+            new RpcRegistry(),
+            { broadcast() {} } as never,
+            () => {}
+        )
+        const io = new TerminalFakeServer()
+        const terminalRegistry = new TerminalRegistry({ idleTimeoutMs: 0 })
+        const terminalSocket = new TerminalFakeSocket('terminal-socket')
+        terminalSocket.data.namespace = 'team-a'
+        const cliSocket = new TerminalFakeSocket('cli-socket')
+        cliSocket.data.namespace = 'team-a'
+        const cliNamespace = io.of('/cli')
+        cliNamespace.sockets.set(cliSocket.id, cliSocket)
+        cliNamespace.adapter.rooms.set('session:session-archive-handler-race', new Set([cliSocket.id]))
+
+        try {
+            const session = engine.getOrCreateSession(
+                'session-archive-handler-race',
+                { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
+                null,
+                'team-a'
+            )
+            engine.handleSessionAlive({ sid: session.id, time: Date.now() })
+            registerTerminalHandlers(terminalSocket as unknown as SocketWithData, {
+                io: io as unknown as SocketServer,
+                getSession: (sessionId) => engine.getSession(sessionId) ?? null,
+                getMachine: () => null,
+                terminalRegistry,
+                maxTerminalsPerSocket: 4,
+                maxTerminalsPerSession: 3
+            })
+            ;(engine as any).rpcGateway.killSession = () => pendingKill
+
+            const archivePromise = engine.archiveSession(session.id)
+            terminalSocket.trigger('terminal:create', {
+                sessionId: session.id,
+                terminalId: 'terminal-after-archive',
+                cols: 80,
+                rows: 24
+            })
+
+            expect(lastTerminalEmit(terminalSocket, 'terminal:error')?.data).toEqual({
+                terminalId: 'terminal-after-archive',
+                message: 'Session is inactive or unavailable.'
+            })
+            expect(lastTerminalEmit(cliSocket, 'terminal:open')).toBeUndefined()
+
+            resolveKill()
+            await archivePromise
+        } finally {
+            engine.stop()
+        }
+    })
+
+    it('keeps archive best-effort when terminal cleanup and kill throw after early inactive', async () => {
+        const store = new Store(':memory:')
+        let closeAllCalls = 0
+        const engine = new SyncEngine(
+            store,
+            {} as never,
+            new RpcRegistry(),
+            { broadcast() {} } as never,
+            () => {
+                closeAllCalls += 1
+                throw new Error('close-all failed')
+            }
+        )
+
+        try {
+            const session = engine.getOrCreateSession(
+                'session-archive-offline',
+                { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
+                null,
+                'team-a'
+            )
+            engine.handleSessionAlive({ sid: session.id, time: Date.now() })
+            ;(engine as any).rpcGateway.killSession = async () => {
+                throw new Error('CLI offline')
+            }
+
+            await engine.archiveSession(session.id)
+
+            expect(closeAllCalls).toBe(1)
+            expect(engine.getSession(session.id)?.active).toBe(false)
+        } finally {
+            engine.stop()
+        }
     })
 
     it('passes the stored model when respawning a resumed session', async () => {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Terminal } from '@xterm/xterm'
 import type { ApiClient } from '@/api/client'
 import { TerminalView } from '@/components/Terminal/TerminalView'
+import { SessionTerminalTabs } from '@/components/Terminal/SessionTerminalTabs'
 import { TerminalQuickKeys, useTerminalQuickInput } from '@/components/Terminal/TerminalQuickKeys'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useAppContext } from '@/lib/app-context'
@@ -9,6 +10,48 @@ import type { EditorTab } from '@/hooks/useEditorState'
 import { useSession } from '@/hooks/queries/useSession'
 import { useTerminalSocket } from '@/hooks/useTerminalSocket'
 import { isRemoteTerminalSupported } from '@/utils/terminalSupport'
+
+
+function EditorSessionTerminalBody(props: {
+    api: ApiClient | null
+    tab: EditorTab
+    compactFontSize?: boolean
+}) {
+    const sessionId = props.tab.sessionId ?? null
+    const { session, isLoading } = useSession(props.api, sessionId)
+    const terminalSupported = isRemoteTerminalSupported(session?.metadata)
+
+    if (!sessionId) {
+        return null
+    }
+
+    if (isLoading) {
+        return (
+            <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-xs text-[var(--app-hint)]">
+                Loading terminal session...
+            </div>
+        )
+    }
+
+    if (!session) {
+        return (
+            <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-xs text-[var(--app-hint)]">
+                Terminal session is unavailable.
+            </div>
+        )
+    }
+
+    return (
+        <SessionTerminalTabs
+            sessionId={sessionId}
+            active={Boolean(session.active)}
+            terminalSupported={terminalSupported}
+            cwd={session.metadata?.path}
+            compactFontSize={props.compactFontSize}
+            className="min-h-0 flex-1"
+        />
+    )
+}
 
 function EditorTerminalBody(props: {
     api: ApiClient | null
@@ -285,6 +328,8 @@ export function EditorTerminal(props: {
         [props.tabs]
     )
     const activeTerminal = terminalTabs.find((tab) => tab.id === props.activeTabId) ?? terminalTabs[0] ?? null
+    const activeSessionTerminal = activeTerminal?.sessionId ? activeTerminal : null
+    const activeMachineTerminal = activeTerminal?.machineId ? activeTerminal : null
     const handleRegisterClose = useCallback((tabId: string, close: (() => void) | null) => {
         if (!close) {
             closeByTerminalIdRef.current.delete(tabId)
@@ -295,17 +340,21 @@ export function EditorTerminal(props: {
         props.onRegisterTerminalClose?.(tabId, close)
     }, [props.onRegisterTerminalClose])
     const closeTerminalNow = useCallback((tabId: string) => {
-        closeByTerminalIdRef.current.get(tabId)?.()
-        closeByTerminalIdRef.current.delete(tabId)
+        const tab = terminalTabs.find((item) => item.id === tabId)
+        if (!tab?.sessionId) {
+            closeByTerminalIdRef.current.get(tabId)?.()
+            closeByTerminalIdRef.current.delete(tabId)
+        }
         props.onCloseTab(tabId)
-    }, [props.onCloseTab])
+    }, [props.onCloseTab, terminalTabs])
     const handleCloseTerminal = useCallback((tabId: string) => {
-        if (props.mobileMode) {
+        const tab = terminalTabs.find((item) => item.id === tabId)
+        if (props.mobileMode && !tab?.sessionId) {
             setPendingCloseTerminalId(tabId)
             return
         }
         closeTerminalNow(tabId)
-    }, [closeTerminalNow, props.mobileMode])
+    }, [closeTerminalNow, props.mobileMode, terminalTabs])
 
     return (
         <div className="flex h-full min-h-0 flex-col border-t border-[var(--app-border)] bg-[var(--app-bg)]">
@@ -367,8 +416,17 @@ export function EditorTerminal(props: {
 
             {terminalTabs.length > 0 ? (
                 <div className={`min-h-0 flex-1 overflow-hidden ${props.isCollapsed && !props.mobileMode ? 'hidden' : ''}`}>
-                    {terminalTabs.map((tab) => {
-                        const isActive = tab.id === activeTerminal?.id
+                    {activeSessionTerminal ? (
+                        <div className="h-full min-h-0">
+                            <EditorSessionTerminalBody
+                                api={props.api}
+                                tab={activeSessionTerminal}
+                                compactFontSize={props.mobileMode}
+                            />
+                        </div>
+                    ) : null}
+                    {terminalTabs.filter((tab) => tab.machineId).map((tab) => {
+                        const isActive = tab.id === activeMachineTerminal?.id
                         return (
                             <div key={tab.id} className={`h-full min-h-0 ${isActive ? 'block' : 'hidden'}`}>
                                 <EditorTerminalBody

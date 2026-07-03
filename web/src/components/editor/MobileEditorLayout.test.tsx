@@ -52,6 +52,23 @@ vi.mock('./EditorTerminal', () => ({
     )
 }))
 
+vi.mock('@/lib/use-translation', () => ({
+    useTranslation: () => ({
+        t: (key: string, params?: Record<string, string | number>) => {
+            const messages: Record<string, string> = {
+                'dialog.archive.description': 'Archive "{name}"? You can still find it in archived sessions.',
+                'dialog.archive.terminalImpact': 'Archiving will stop all running terminals in this session.',
+                'dialog.archive.terminalCount': 'Running terminals: {n}/{max}'
+            }
+            let value = messages[key] ?? key
+            for (const [param, replacement] of Object.entries(params ?? {})) {
+                value = value.replace(`{${param}}`, String(replacement))
+            }
+            return value
+        }
+    })
+}))
+
 function makeSession(id: string, overrides: Partial<SessionSummary> = {}): SessionSummary {
     return {
         id,
@@ -240,6 +257,7 @@ describe('MobileEditorLayout', () => {
 
     it('archives chat sessions through a custom confirmation modal', async () => {
         const props = baseProps()
+        props.projectSessions[0] = makeSession('session-1', { terminalLiveCount: 2 })
         render(<MobileEditorLayout {...props} />)
 
         fireEvent.click(screen.getByRole('button', { name: 'Chat' }))
@@ -247,6 +265,8 @@ describe('MobileEditorLayout', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Archive session' }))
 
         expect(screen.getByText('Archive session?')).toBeInTheDocument()
+        expect(screen.getByText(/Archiving will stop all running terminals in this session/)).toBeInTheDocument()
+        expect(screen.getByText(/Running terminals: 2\/3/)).toBeInTheDocument()
         fireEvent.click(screen.getByRole('button', { name: 'Archive' }))
 
         expect(props.onArchiveSession).toHaveBeenCalledWith('session-1')

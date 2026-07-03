@@ -2,7 +2,6 @@ import { EventEmitter } from 'node:events'
 import { randomUUID } from 'node:crypto'
 import { io, type Socket } from 'socket.io-client'
 import axios from 'axios'
-import type { ZodType } from 'zod'
 import { logger } from '@/ui/logger'
 import { backoff } from '@/utils/time'
 import { apiValidationError } from '@/utils/errorUtils'
@@ -14,8 +13,11 @@ import type { MarkTeamMentionNoActionInput, ReportToTeamInput, SessionEndReason,
 import { TeamChatMessageSchema, TeamMentionRequestSchema } from '@hapi/protocol/schemas'
 import type { ClientToServerEvents, ServerToClientEvents, Update } from '@hapi/protocol'
 import {
+    TerminalCloseAllPayloadSchema,
     TerminalClosePayloadSchema,
     TerminalDetachPayloadSchema,
+    TerminalKeepalivePayloadSchema,
+    TerminalListRequestSchema,
     TerminalOpenPayloadSchema,
     TerminalResizePayloadSchema,
     TerminalWritePayloadSchema
@@ -141,7 +143,8 @@ export class ApiSessionClient extends EventEmitter {
             onReady: (payload) => this.socket.emit('terminal:ready', payload),
             onOutput: (payload) => this.socket.emit('terminal:output', payload),
             onExit: (payload) => this.socket.emit('terminal:exit', payload),
-            onError: (payload) => this.socket.emit('terminal:error', payload)
+            onError: (payload) => this.socket.emit('terminal:error', payload),
+            onWarning: (payload) => this.socket.emit('terminal:warning', payload)
         })
 
         this.socket.on('connect', () => {
@@ -166,7 +169,6 @@ export class ApiSessionClient extends EventEmitter {
         this.socket.on('disconnect', (reason) => {
             logger.debug('[API] Socket disconnected:', reason)
             this.rpcHandlerManager.onSocketDisconnect()
-            this.terminalManager.closeAll()
             if (this.hasConnectedOnce) {
                 this.needsBackfill = true
             }
@@ -181,18 +183,18 @@ export class ApiSessionClient extends EventEmitter {
             logger.debug('[API] Socket error:', payload)
         })
 
-        const handleTerminalEvent = <T extends { sessionId?: string }>(
-            schema: ZodType<T>,
-            handler: (payload: T) => void
+        const handleTerminalEvent = <T extends { terminalId: string }>(
+            schema: { safeParse: (data: unknown) => { success: true; data: T } | { success: false } },
+            handler: (payload: T & { sessionId: string }) => void
         ) => (data: unknown) => {
             const parsed = schema.safeParse(data)
             if (!parsed.success) {
                 return
             }
-            if (parsed.data.sessionId !== this.sessionId) {
+            if (!('sessionId' in parsed.data) || parsed.data.sessionId !== this.sessionId) {
                 return
             }
-            handler(parsed.data)
+            handler(parsed.data as T & { sessionId: string })
         }
 
         this.socket.on('terminal:open', handleTerminalEvent(TerminalOpenPayloadSchema, (payload) => {
@@ -209,11 +211,54 @@ export class ApiSessionClient extends EventEmitter {
 
         this.socket.on('terminal:close', handleTerminalEvent(TerminalClosePayloadSchema, (payload) => {
             this.terminalManager.close(payload.terminalId)
+            this.socket.emit('terminal:list', {
+                scopeType: 'session',
+                sessionId: this.sessionId,
+                terminals: this.terminalManager.list()
+            })
         }))
 
         this.socket.on('terminal:detach', handleTerminalEvent(TerminalDetachPayloadSchema, (payload) => {
             this.terminalManager.detach(payload.terminalId)
         }))
+
+        this.socket.on('terminal:list', (data: unknown) => {
+            const parsed = TerminalListRequestSchema.safeParse(data)
+            if (!parsed.success || parsed.data.scopeType !== 'session' || parsed.data.sessionId !== this.sessionId) {
+                return
+            }
+            this.socket.emit('terminal:list', {
+                scopeType: 'session',
+                sessionId: this.sessionId,
+                terminals: this.terminalManager.list()
+            })
+        })
+
+        this.socket.on('terminal:keepalive', (data: unknown) => {
+            const parsed = TerminalKeepalivePayloadSchema.safeParse(data)
+            if (!parsed.success || parsed.data.scopeType !== 'session' || parsed.data.sessionId !== this.sessionId) {
+                return
+            }
+            this.terminalManager.keepalive(parsed.data.terminalId)
+            this.socket.emit('terminal:list', {
+                scopeType: 'session',
+                sessionId: this.sessionId,
+                terminals: this.terminalManager.list()
+            })
+        })
+
+        this.socket.on('terminal:close-all', (data: unknown) => {
+            const parsed = TerminalCloseAllPayloadSchema.safeParse(data)
+            if (!parsed.success || parsed.data.scopeType !== 'session' || parsed.data.sessionId !== this.sessionId) {
+                return
+            }
+            this.terminalManager.closeAll()
+            this.socket.emit('terminal:list', {
+                scopeType: 'session',
+                sessionId: this.sessionId,
+                terminals: this.terminalManager.list()
+            })
+        })
 
         this.socket.on('update', (data: Update) => {
             try {

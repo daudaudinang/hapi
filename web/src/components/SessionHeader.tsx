@@ -14,6 +14,7 @@ import { RenameSessionDialog } from '@/components/RenameSessionDialog'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { getSessionModelLabel } from '@/lib/sessionModelLabel'
 import { useTranslation } from '@/lib/use-translation'
+import { getArchiveSessionDescription } from '@/lib/archiveConfirmation'
 
 function getSessionTitle(session: Session): string {
     if (session.metadata?.name) {
@@ -449,7 +450,7 @@ export function SessionHeader(props: {
                 />
 
                 <RenameSessionDialog isOpen={renameOpen} onClose={() => setRenameOpen(false)} currentName={title} onRename={renameSession} isPending={isPending} />
-                <ConfirmDialog isOpen={archiveOpen} onClose={() => setArchiveOpen(false)} title={t('dialog.archive.title')} description={t('dialog.archive.description', { name: title })} confirmLabel={t('dialog.archive.confirm')} confirmingLabel={t('dialog.archive.confirming')} onConfirm={archiveSession} isPending={isPending} destructive />
+                <ConfirmDialog isOpen={archiveOpen} onClose={() => setArchiveOpen(false)} title={t('dialog.archive.title')} description={getArchiveSessionDescription(t, { name: title, terminalLiveCount: session.terminalLiveCount })} confirmLabel={t('dialog.archive.confirm')} confirmingLabel={t('dialog.archive.confirming')} onConfirm={archiveSession} isPending={isPending} destructive />
                 <ConfirmDialog isOpen={deleteOpen} onClose={() => setDeleteOpen(false)} title={t('dialog.delete.title')} description={t('dialog.delete.description', { name: title })} confirmLabel={t('dialog.delete.confirm')} confirmingLabel={t('dialog.delete.confirming')} onConfirm={handleDelete} isPending={isPending} destructive />
             </>
         )
@@ -711,7 +712,7 @@ export function SessionHeader(props: {
                 isOpen={archiveOpen}
                 onClose={() => setArchiveOpen(false)}
                 title={t('dialog.archive.title')}
-                description={t('dialog.archive.description', { name: title })}
+                description={getArchiveSessionDescription(t, { name: title, terminalLiveCount: session.terminalLiveCount })}
                 confirmLabel={t('dialog.archive.confirm')}
                 confirmingLabel={t('dialog.archive.confirming')}
                 onConfirm={archiveSession}

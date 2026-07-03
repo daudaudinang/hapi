@@ -44,7 +44,9 @@ vi.mock('@/hooks/mutations/useSessionActions', () => ({
 }))
 
 vi.mock('@/components/SessionActionMenu', () => ({
-    SessionActionMenu: () => null
+    SessionActionMenu: (props: { isOpen: boolean; onArchive: () => void }) => (
+        props.isOpen ? <button type="button" onClick={props.onArchive}>Archive session</button> : null
+    )
 }))
 
 vi.mock('@/components/RenameSessionDialog', () => ({
@@ -52,11 +54,26 @@ vi.mock('@/components/RenameSessionDialog', () => ({
 }))
 
 vi.mock('@/components/ui/ConfirmDialog', () => ({
-    ConfirmDialog: () => null
+    ConfirmDialog: (props: { isOpen: boolean; description: string }) => (
+        props.isOpen ? <div role="dialog">{props.description}</div> : null
+    )
 }))
 
 vi.mock('@/lib/use-translation', () => ({
-    useTranslation: () => ({ t: (key: string) => key })
+    useTranslation: () => ({
+        t: (key: string, params?: Record<string, string | number>) => {
+            const messages: Record<string, string> = {
+                'dialog.archive.description': 'Archive "{name}"? You can still find it in archived sessions.',
+                'dialog.archive.terminalImpact': 'Archiving will stop all running terminals in this session.',
+                'dialog.archive.terminalCount': 'Running terminals: {n}/{max}'
+            }
+            let value = messages[key] ?? key
+            for (const [param, replacement] of Object.entries(params ?? {})) {
+                value = value.replace(`{${param}}`, String(replacement))
+            }
+            return value
+        }
+    })
 }))
 
 function makeSession(overrides: Partial<Session> = {}): Session {
@@ -177,6 +194,21 @@ describe('SessionHeader editor entry point', () => {
         const button = screen.getByRole('button', { name: 'Codex goal' })
         expect(button).toBeInTheDocument()
         expect(button).toHaveAttribute('title', 'Ship Codex goal header control')
+    })
+
+    it('shows archive terminal impact copy when terminal count is available', () => {
+        const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        render(
+            <QueryClientProvider client={qc}>
+                <SessionHeader session={makeSession({ terminalLiveCount: 2 })} onBack={vi.fn()} api={null} />
+            </QueryClientProvider>
+        )
+
+        fireEvent.click(screen.getByTitle('session.more'))
+        fireEvent.click(screen.getByRole('button', { name: 'Archive session' }))
+
+        expect(screen.getByRole('dialog')).toHaveTextContent('Archiving will stop all running terminals in this session.')
+        expect(screen.getByRole('dialog')).toHaveTextContent('Running terminals: 2/3')
     })
 
     it('sends a clear goal command from the header goal modal', () => {

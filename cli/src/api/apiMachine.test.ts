@@ -3,11 +3,15 @@ import { mkdtempSync, rmSync, mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-const ioMock = vi.hoisted(() => vi.fn())
-const listOpencodeModelsForCwdMock = vi.hoisted(() => vi.fn())
+const mocks = vi.hoisted(() => ({
+    ioMock: vi.fn(),
+    listOpencodeModelsForCwdMock: vi.fn()
+}))
+
+const { ioMock, listOpencodeModelsForCwdMock } = mocks
 
 vi.mock('socket.io-client', () => ({
-    io: ioMock
+    io: mocks.ioMock
 }))
 
 vi.mock('@/api/auth', () => ({
@@ -15,11 +19,33 @@ vi.mock('@/api/auth', () => ({
 }))
 
 vi.mock('../modules/common/opencodeModels', () => ({
-    listOpencodeModelsForCwd: listOpencodeModelsForCwdMock
+    listOpencodeModelsForCwd: mocks.listOpencodeModelsForCwdMock
 }))
 
 import { ApiMachineClient } from './apiMachine'
 import type { Machine } from './types'
+import { TerminalManager } from '@/terminal/TerminalManager'
+
+class FakeSocket {
+    readonly emitted: Array<{ event: string; data: unknown }> = []
+    readonly handlers = new Map<string, (...args: unknown[]) => void>()
+    readonly close = vi.fn()
+    readonly emitWithAck = vi.fn(async () => ({ result: 'success', version: 1, runnerState: null, metadata: null }))
+
+    on(event: string, handler: (...args: unknown[]) => void): this {
+        this.handlers.set(event, handler)
+        return this
+    }
+
+    emit(event: string, data: unknown): boolean {
+        this.emitted.push({ event, data })
+        return true
+    }
+
+    trigger(event: string, data?: unknown): void {
+        this.handlers.get(event)?.(data)
+    }
+}
 
 function makeMachine(id: string): Machine {
     return {
@@ -114,5 +140,92 @@ describe('ApiMachineClient listOpencodeModelsForCwd handler', () => {
         } finally {
             client.shutdown()
         }
+    })
+})
+
+describe('ApiMachineClient terminal legacy boundary', () => {
+    let workspaceRoot: string
+    let socket: FakeSocket
+    let terminalSpies: {
+        create: ReturnType<typeof vi.spyOn>
+        write: ReturnType<typeof vi.spyOn>
+        resize: ReturnType<typeof vi.spyOn>
+        close: ReturnType<typeof vi.spyOn>
+        detach: ReturnType<typeof vi.spyOn>
+        closeAll: ReturnType<typeof vi.spyOn>
+    }
+
+    beforeEach(() => {
+        ioMock.mockReset()
+        listOpencodeModelsForCwdMock.mockReset()
+        workspaceRoot = mkdtempSync(join(tmpdir(), 'hapi-machine-terminal-ws-'))
+        socket = new FakeSocket()
+        ioMock.mockReturnValue(socket)
+        terminalSpies = {
+            create: vi.spyOn(TerminalManager.prototype, 'create').mockImplementation(() => {}),
+            write: vi.spyOn(TerminalManager.prototype, 'write').mockImplementation(() => {}),
+            resize: vi.spyOn(TerminalManager.prototype, 'resize').mockImplementation(() => {}),
+            close: vi.spyOn(TerminalManager.prototype, 'close').mockImplementation(() => {}),
+            detach: vi.spyOn(TerminalManager.prototype, 'detach').mockImplementation(() => {}),
+            closeAll: vi.spyOn(TerminalManager.prototype, 'closeAll').mockImplementation(() => {})
+        }
+    })
+
+    afterEach(() => {
+        vi.restoreAllMocks()
+        rmSync(workspaceRoot, { recursive: true, force: true })
+    })
+
+    it('keeps machine terminal events on the legacy single-terminal path', () => {
+        const machine = makeMachine('machine-1')
+        const client = new ApiMachineClient('cli-token', machine, workspaceRoot)
+        client.connect()
+
+        socket.trigger('terminal:open', { machineId: 'machine-1', terminalId: 'tm', cols: 120, rows: 40 })
+        socket.trigger('terminal:write', { machineId: 'machine-1', terminalId: 'tm', data: 'ls\n' })
+        socket.trigger('terminal:resize', { machineId: 'machine-1', terminalId: 'tm', cols: 100, rows: 30 })
+        socket.trigger('terminal:detach', { machineId: 'machine-1', terminalId: 'tm' })
+        socket.trigger('terminal:close', { machineId: 'machine-1', terminalId: 'tm' })
+
+        expect(terminalSpies.create).toHaveBeenCalledWith('tm', 120, 40, undefined, false)
+        expect(terminalSpies.write).toHaveBeenCalledWith('tm', 'ls\n')
+        expect(terminalSpies.resize).toHaveBeenCalledWith('tm', 100, 30)
+        expect(terminalSpies.detach).toHaveBeenCalledWith('tm')
+        expect(terminalSpies.close).toHaveBeenCalledWith('tm')
+        expect(socket.handlers.has('terminal:list')).toBe(false)
+        expect(socket.handlers.has('terminal:keepalive')).toBe(false)
+        expect(socket.handlers.has('terminal:close-all')).toBe(false)
+
+        client.shutdown()
+    })
+
+    it('ignores terminal events for another machine id', () => {
+        const machine = makeMachine('machine-1')
+        const client = new ApiMachineClient('cli-token', machine, workspaceRoot)
+        client.connect()
+
+        socket.trigger('terminal:open', { machineId: 'other-machine', terminalId: 'tm', cols: 120, rows: 40 })
+        socket.trigger('terminal:write', { machineId: 'other-machine', terminalId: 'tm', data: 'ls\n' })
+        socket.trigger('terminal:resize', { machineId: 'other-machine', terminalId: 'tm', cols: 100, rows: 30 })
+        socket.trigger('terminal:detach', { machineId: 'other-machine', terminalId: 'tm' })
+        socket.trigger('terminal:close', { machineId: 'other-machine', terminalId: 'tm' })
+
+        expect(terminalSpies.create).not.toHaveBeenCalled()
+        expect(terminalSpies.write).not.toHaveBeenCalled()
+        expect(terminalSpies.resize).not.toHaveBeenCalled()
+        expect(terminalSpies.detach).not.toHaveBeenCalled()
+        expect(terminalSpies.close).not.toHaveBeenCalled()
+
+        client.shutdown()
+    })
+
+    it('closes all machine terminals on socket disconnect using legacy cleanup', () => {
+        const machine = makeMachine('machine-1')
+        const client = new ApiMachineClient('cli-token', machine, workspaceRoot)
+        client.connect()
+
+        socket.trigger('disconnect')
+
+        expect(terminalSpies.closeAll).toHaveBeenCalledTimes(1)
     })
 })

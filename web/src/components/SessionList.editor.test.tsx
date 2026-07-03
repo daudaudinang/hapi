@@ -13,7 +13,21 @@ vi.mock('@tanstack/react-router', () => ({
 
 vi.mock('@/lib/use-translation', () => ({
     useTranslation: () => ({
-        t: (key: string, params?: Record<string, string | number>) => params?.n !== undefined ? `${key} ${params.n}` : key
+        t: (key: string, params?: Record<string, string | number>) => {
+            const messages: Record<string, string> = {
+                'dialog.archive.description': 'Archive "{name}"? You can still find it in archived sessions.',
+                'dialog.archive.terminalImpact': 'Archiving will stop all running terminals in this session.',
+                'dialog.archive.terminalCount': 'Running terminals: {n}/{max}',
+                'dialog.archiveAll.description': 'Archive {n} session(s)?',
+                'dialog.archiveAll.terminalImpact': 'Archiving these sessions will stop their running terminals.',
+                'dialog.archiveAll.terminalCount': 'Running terminals: {n}'
+            }
+            let value = messages[key] ?? (params?.n !== undefined ? `${key} ${params.n}` : key)
+            for (const [param, replacement] of Object.entries(params ?? {})) {
+                value = value.replace(`{${param}}`, String(replacement))
+            }
+            return value
+        }
     })
 }))
 
@@ -35,7 +49,9 @@ vi.mock('@/hooks/mutations/useSessionActions', () => ({
 }))
 
 vi.mock('@/components/SessionActionMenu', () => ({
-    SessionActionMenu: () => null
+    SessionActionMenu: (props: { onArchive: () => void }) => (
+        <button type="button" onClick={props.onArchive}>Archive session</button>
+    )
 }))
 
 vi.mock('@/components/RenameSessionDialog', () => ({
@@ -43,7 +59,9 @@ vi.mock('@/components/RenameSessionDialog', () => ({
 }))
 
 vi.mock('@/components/ui/ConfirmDialog', () => ({
-    ConfirmDialog: () => null
+    ConfirmDialog: (props: { isOpen: boolean; description: string }) => (
+        props.isOpen ? <div role="dialog">{props.description}</div> : null
+    )
 }))
 
 function makeSession(overrides: Partial<SessionSummary> & { id: string }): SessionSummary {
@@ -98,5 +116,50 @@ describe('SessionList editor entry point', () => {
             to: '/editor',
             search: { machine: 'machine-1', project: '/work/hapi' }
         })
+    })
+
+    it('shows archive terminal impact copy for a session with known terminals', () => {
+        render(
+            <SessionList
+                sessions={[makeSession({ id: 'session-1', terminalLiveCount: 2 })]}
+                onSelect={vi.fn()}
+                onNewSession={vi.fn()}
+                onRefresh={vi.fn()}
+                isLoading={false}
+                renderHeader={false}
+                api={null}
+                machineLabelsById={{ 'machine-1': 'Dev machine' }}
+            />,
+            { wrapper: createWrapper() }
+        )
+
+        fireEvent.click(screen.getAllByRole('button', { name: 'Archive session' })[0])
+
+        expect(screen.getByRole('dialog')).toHaveTextContent('Archiving will stop all running terminals in this session.')
+        expect(screen.getByRole('dialog')).toHaveTextContent('Running terminals: 2/3')
+    })
+
+    it('shows archive-all terminal impact copy with total known terminals', () => {
+        render(
+            <SessionList
+                sessions={[
+                    makeSession({ id: 'session-1', terminalLiveCount: 2 }),
+                    makeSession({ id: 'session-2', terminalLiveCount: 1 })
+                ]}
+                onSelect={vi.fn()}
+                onNewSession={vi.fn()}
+                onRefresh={vi.fn()}
+                isLoading={false}
+                renderHeader={false}
+                api={null}
+                machineLabelsById={{ 'machine-1': 'Dev machine' }}
+            />,
+            { wrapper: createWrapper() }
+        )
+
+        fireEvent.click(screen.getByTitle('dialog.archiveAll.title'))
+
+        expect(screen.getByRole('dialog')).toHaveTextContent('Archiving these sessions will stop their running terminals.')
+        expect(screen.getByRole('dialog')).toHaveTextContent('Running terminals: 3')
     })
 })

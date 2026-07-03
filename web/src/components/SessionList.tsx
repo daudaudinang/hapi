@@ -15,6 +15,7 @@ import { CopyIcon, CheckIcon } from '@/components/icons'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/lib/use-translation'
 import { compareSessionGroupOrder } from '@/lib/session-group-order'
+import { getArchiveAllDescription, getArchiveSessionDescription, getTotalKnownTerminalLiveCount } from '@/lib/archiveConfirmation'
 
 type SessionGroup = {
     key: string
@@ -703,7 +704,7 @@ function SessionItem(props: {
                 isOpen={archiveOpen}
                 onClose={() => setArchiveOpen(false)}
                 title={t('dialog.archive.title')}
-                description={t('dialog.archive.description', { name: sessionName })}
+                description={getArchiveSessionDescription(t, { name: sessionName, terminalLiveCount: s.terminalLiveCount })}
                 confirmLabel={t('dialog.archive.confirm')}
                 confirmingLabel={t('dialog.archive.confirming')}
                 onConfirm={archiveSession}
@@ -822,7 +823,10 @@ function ProjectGroupActions(props: {
                 isOpen={archiveAllOpen}
                 onClose={() => setArchiveAllOpen(false)}
                 title={t('dialog.archiveAll.title')}
-                description={t('dialog.archiveAll.description', { n: activeSessions.length })}
+                description={getArchiveAllDescription(t, {
+                    sessionCount: activeSessions.length,
+                    terminalLiveCount: getTotalKnownTerminalLiveCount(activeSessions)
+                })}
                 confirmLabel={t('dialog.archiveAll.confirm')}
                 confirmingLabel={t('dialog.archiveAll.confirming')}
                 onConfirm={handleArchiveAll}

@@ -98,6 +98,21 @@ vi.mock('@/lib/use-translation', () => ({
     useTranslation: () => ({
         t: (key: string, params?: Record<string, unknown>) => {
             if (key === 'dashboard.sessions' && params?.n !== undefined) return `${params.n} sessions`
+            const messages: Record<string, string> = {
+                'dialog.archive.description': 'Archive "{name}"? You can still find it in archived sessions.',
+                'dialog.archive.terminalImpact': 'Archiving will stop all running terminals in this session.',
+                'dialog.archive.terminalCount': 'Running terminals: {n}/{max}',
+                'dialog.archiveAll.description': 'Archive {n} session(s)?',
+                'dialog.archiveAll.terminalImpact': 'Archiving these sessions will stop their running terminals.',
+                'dialog.archiveAll.terminalCount': 'Running terminals: {n}'
+            }
+            let value = messages[key]
+            if (value) {
+                for (const [param, replacement] of Object.entries(params ?? {})) {
+                    value = value.replace(`{${param}}`, String(replacement))
+                }
+                return value
+            }
             return key
         }
     })
@@ -220,6 +235,38 @@ describe('Dashboard session context menu', () => {
 
         expect(screen.getByText('dashboard.archiveSession')).toBeInTheDocument()
         expect(screen.getByText('dashboard.copySessionId')).toBeInTheDocument()
+    })
+
+    it('includes terminal impact copy in single-session archive confirm', () => {
+        mockSessions = [
+            makeSession({
+                id: 'session-1',
+                terminalLiveCount: 2,
+                metadata: { path: '/repo/app', name: 'Build app', flavor: 'claude' }
+            })
+        ]
+        const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+        renderDashboard()
+
+        fireEvent.contextMenu(screen.getByText('Build app'))
+        fireEvent.click(screen.getByText('dashboard.archiveSession'))
+
+        expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('Archiving will stop all running terminals in this session.'))
+        expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('Running terminals: 2/3'))
+        confirmSpy.mockRestore()
+    })
+
+    it('includes total terminal impact copy in group archive confirm', () => {
+        mockSessions = [
+            makeSession({ id: 'session-1', terminalLiveCount: 2, metadata: { path: '/repo/app', name: 'Build app 1', flavor: 'claude' } }),
+            makeSession({ id: 'session-2', terminalLiveCount: 1, metadata: { path: '/repo/app', name: 'Build app 2', flavor: 'claude' } })
+        ]
+        renderDashboard()
+
+        fireEvent.click(screen.getByTitle('dashboard.archiveAllTitle'))
+
+        expect(screen.getByText(/Archiving these sessions will stop their running terminals/)).toBeInTheDocument()
+        expect(screen.getByText(/Running terminals: 3/)).toBeInTheDocument()
     })
 
     it('pins from single-clicking a session card', () => {

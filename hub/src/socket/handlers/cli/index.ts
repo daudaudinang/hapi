@@ -3,6 +3,7 @@ import type { Store, StoredMachine, StoredSession } from '../../../store'
 import type { RpcRegistry } from '../../rpcRegistry'
 import type { SyncEvent } from '../../../sync/syncEngine'
 import type { TerminalRegistry } from '../../terminalRegistry'
+import type { TerminalSessionStateStore } from '../../terminalSessionState'
 import type { CliSocketWithData, SocketServer } from '../../socketTypes'
 import type { AccessErrorReason, AccessResult } from './types'
 import { registerMachineHandlers } from './machineHandlers'
@@ -37,6 +38,7 @@ export type CliHandlersDeps = {
     store: Store
     rpcRegistry: RpcRegistry
     terminalRegistry: TerminalRegistry
+    terminalSessionState?: TerminalSessionStateStore
     onSessionAlive?: (payload: SessionAlivePayload) => void
     onSessionEnd?: (payload: SessionEndPayload) => void
     onMachineAlive?: (payload: MachineAlivePayload) => void
@@ -48,7 +50,7 @@ export type CliHandlersDeps = {
 }
 
 export function registerCliHandlers(socket: CliSocketWithData, deps: CliHandlersDeps): void {
-    const { io, store, rpcRegistry, terminalRegistry, onSessionAlive, onSessionEnd, onMachineAlive, onWebappEvent, onBackgroundTaskDelta, onSessionActivity, onSessionCrashed, onAgentTextMessage } = deps
+    const { io, store, rpcRegistry, terminalRegistry, terminalSessionState, onSessionAlive, onSessionEnd, onMachineAlive, onWebappEvent, onBackgroundTaskDelta, onSessionActivity, onSessionCrashed, onAgentTextMessage } = deps
     const terminalNamespace = io.of('/terminal')
     const namespace = typeof socket.data.namespace === 'string' ? socket.data.namespace : null
 
@@ -122,6 +124,7 @@ export function registerCliHandlers(socket: CliSocketWithData, deps: CliHandlers
     })
     registerTerminalHandlers(socket, {
         terminalRegistry,
+        terminalSessionState,
         terminalNamespace,
         resolveSessionAccess,
         resolveMachineAccess,
@@ -134,6 +137,11 @@ export function registerCliHandlers(socket: CliSocketWithData, deps: CliHandlers
 
     socket.on('disconnect', () => {
         rpcRegistry.unregisterAll(socket)
+        terminalSessionState?.markLostByCliSocket(
+            socket.id,
+            Date.now(),
+            namespace && sessionId ? { namespace, sessionId } : null
+        )
         cleanupTerminalHandlers(socket, { terminalRegistry, terminalNamespace })
     })
 }
