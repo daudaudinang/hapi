@@ -104,6 +104,7 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
     const selectedIsLive = Boolean(activeLiveTerminal)
     const activeWarning = activeLiveTerminal ? warningReason(activeLiveTerminal) : null
     const canUseTerminal = props.active && props.terminalSupported
+    const terminalSocketConnected = controller.state.status === 'connected'
     const quickInputDisabled = !canUseTerminal || !selectedIsLive || controller.state.status !== 'connected'
     const quickInput = useTerminalQuickInput({
         disabled: quickInputDisabled,
@@ -181,7 +182,7 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
     }, [controller.lastError])
 
     const createTerminal = useCallback((replay = true, sizeFallback?: { cols: number; rows: number }) => {
-        if (!canUseTerminal) {
+        if (!canUseTerminal || !terminalSocketConnected) {
             return
         }
         if (createPending) {
@@ -197,37 +198,48 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
             return
         }
         const terminalId = randomId()
-        attachedTerminalIdsRef.current.add(terminalId)
-        setCreatePending(true)
         setCreateError(null)
         controller.clearLastError()
+        const accepted = controller.create({ terminalId, cols: size.cols, rows: size.rows, cwd: props.cwd, replay })
+        if (!accepted) {
+            return
+        }
+        attachedTerminalIdsRef.current.add(terminalId)
+        setCreatePending(true)
         setActiveTerminalId(terminalId)
-        controller.create({ terminalId, cols: size.cols, rows: size.rows, cwd: props.cwd, replay })
         controller.subscribe()
-    }, [canUseTerminal, controller.clearLastError, controller.create, controller.subscribe, createPending, liveCount, props.cwd, t])
+    }, [canUseTerminal, controller.clearLastError, controller.create, controller.subscribe, createPending, liveCount, props.cwd, t, terminalSocketConnected])
 
     const handleResize = useCallback((cols: number, rows: number) => {
         lastSizeRef.current = { cols, rows }
+        if (!terminalSocketConnected) {
+            return
+        }
         if (activeLiveTerminal) {
             if (!attachedTerminalIdsRef.current.has(activeLiveTerminal.terminalId)) {
-                attachedTerminalIdsRef.current.add(activeLiveTerminal.terminalId)
-                controller.create({ terminalId: activeLiveTerminal.terminalId, cols, rows, cwd: props.cwd, replay: true })
+                const accepted = controller.create({ terminalId: activeLiveTerminal.terminalId, cols, rows, cwd: props.cwd, replay: true })
+                if (accepted) {
+                    attachedTerminalIdsRef.current.add(activeLiveTerminal.terminalId)
+                }
                 return
             }
             controller.resize(activeLiveTerminal.terminalId, cols, rows)
             return
         }
-        if (!canUseTerminal || controller.terminals.length > 0 || bootstrapRequestedRef.current) {
+        if (!canUseTerminal || !controller.listLoaded || controller.terminals.length > 0 || bootstrapRequestedRef.current) {
+            return
+        }
+        const terminalId = randomId()
+        controller.clearLastError()
+        const accepted = controller.create({ terminalId, cols, rows, cwd: props.cwd, replay: true })
+        if (!accepted) {
             return
         }
         bootstrapRequestedRef.current = true
-        const terminalId = randomId()
         attachedTerminalIdsRef.current.add(terminalId)
         setCreatePending(true)
         setActiveTerminalId(terminalId)
-        controller.clearLastError()
-        controller.create({ terminalId, cols, rows, cwd: props.cwd, replay: true })
-    }, [activeLiveTerminal, canUseTerminal, controller.clearLastError, controller.create, controller.resize, controller.terminals.length, props.cwd])
+    }, [activeLiveTerminal, canUseTerminal, controller.clearLastError, controller.create, controller.listLoaded, controller.resize, controller.terminals.length, props.cwd, terminalSocketConnected])
 
     const handleTerminalMount = useCallback((terminal: Terminal) => {
         terminalRef.current = terminal
@@ -271,7 +283,7 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
                         <button
                             type="button"
                             aria-label={t('terminal.new')}
-                            disabled={!canUseTerminal || liveCount >= 3 || createPending}
+                            disabled={!canUseTerminal || !terminalSocketConnected || liveCount >= 3 || createPending}
                             onClick={() => createTerminal(true)}
                             className="rounded border border-[var(--app-border)] px-2 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-50"
                         >

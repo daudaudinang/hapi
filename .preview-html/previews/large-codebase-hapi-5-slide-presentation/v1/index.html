@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Large Codebase & HAPI — AI Engineering Projects</title>
+  <style>
+    :root {
+      --bg: #080b12;
+      --panel: #111827;
+      --panel-2: #172033;
+      --panel-3: #202b43;
+      --text: #f8fafc;
+      --muted: #a8b3c7;
+      --soft: #d6deee;
+      --line: rgba(255,255,255,.13);
+      --blue: #7c8cff;
+      --cyan: #38d5ff;
+      --green: #33e38a;
+      --yellow: #ffd166;
+      --red: #ff6b6b;
+      --purple: #a78bfa;
+      --shadow: 0 28px 80px rgba(0,0,0,.45);
+      --radius: 22px;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { overflow: hidden; }
+
+    .deck {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      background:
+        radial-gradient(circle at 12% 10%, rgba(124,140,255,.22), transparent 32%),
+        radial-gradient(circle at 88% 80%, rgba(51,227,138,.13), transparent 34%),
+        linear-gradient(135deg, #070a11 0%, #0b1020 52%, #070a11 100%);
+    }
+
+    .topbar, .footer, .nav {
+      position: fixed;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      color: var(--muted);
+      font-size: 13px;
+      letter-spacing: .01em;
+    }
+    .topbar { top: 16px; left: 24px; right: 24px; justify-content: space-between; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; color: var(--text); }
+    .brand-mark { width: 12px; height: 12px; border-radius: 50%; background: linear-gradient(135deg, var(--green), var(--cyan)); box-shadow: 0 0 24px rgba(56,213,255,.6); }
+    .status { display: flex; gap: 10px; align-items: center; }
+    .pill { border: 1px solid var(--line); background: rgba(255,255,255,.06); border-radius: 999px; padding: 7px 11px; }
+    .footer { bottom: 16px; left: 24px; right: 24px; justify-content: space-between; }
+    .nav { bottom: 52px; right: 24px; gap: 8px; }
+    button { color: var(--text); background: rgba(255,255,255,.08); border: 1px solid var(--line); border-radius: 12px; padding: 9px 12px; cursor: pointer; font-weight: 700; }
+    button:hover { background: rgba(255,255,255,.14); }
+
+    .slide {
+      position: absolute;
+      inset: 0;
+      padding: 72px 72px 64px;
+      opacity: 0;
+      transform: translateX(24px) scale(.985);
+      transition: opacity .25s ease, transform .25s ease;
+      pointer-events: none;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 26px;
+    }
+    .slide.active { opacity: 1; transform: translateX(0) scale(1); pointer-events: auto; }
+
+    .kicker { color: var(--green); font-weight: 900; text-transform: uppercase; letter-spacing: .12em; font-size: 13px; margin-bottom: 12px; }
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: clamp(46px, 5.6vw, 86px); line-height: .96; letter-spacing: -.055em; max-width: 1060px; }
+    h2 { font-size: clamp(34px, 4.1vw, 62px); line-height: 1; letter-spacing: -.045em; max-width: 1120px; }
+    h3 { font-size: 22px; letter-spacing: -.02em; }
+    .lead { color: var(--soft); font-size: 24px; line-height: 1.36; max-width: 1000px; margin-top: 18px; }
+    .muted { color: var(--muted); }
+    .accent { color: var(--green); }
+    .blue { color: var(--cyan); }
+    .yellow { color: var(--yellow); }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; min-height: 0; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,.075), rgba(255,255,255,.035));
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 24px;
+      min-width: 0;
+    }
+    .card.hot { border-color: rgba(51,227,138,.38); box-shadow: 0 28px 90px rgba(34,197,94,.08); }
+    .card.cool { border-color: rgba(56,213,255,.35); box-shadow: 0 28px 90px rgba(56,213,255,.08); }
+    .card.purple { border-color: rgba(167,139,250,.35); box-shadow: 0 28px 90px rgba(167,139,250,.08); }
+
+    .project-card { display: flex; flex-direction: column; gap: 18px; justify-content: space-between; }
+    .project-title { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+    .badge { font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; border-radius: 999px; padding: 7px 10px; background: rgba(255,255,255,.08); border: 1px solid var(--line); white-space: nowrap; }
+    .big-word { font-size: 44px; font-weight: 950; letter-spacing: -.05em; line-height: 1; }
+    .bullets { display: grid; gap: 10px; margin-top: 4px; color: var(--soft); font-size: 18px; line-height: 1.32; }
+    .bullet { display: grid; grid-template-columns: 16px 1fr; gap: 10px; align-items: start; }
+    .dot { width: 8px; height: 8px; border-radius: 999px; margin-top: 8px; background: var(--green); box-shadow: 0 0 14px rgba(51,227,138,.7); }
+    .dot.cyan { background: var(--cyan); box-shadow: 0 0 14px rgba(56,213,255,.7); }
+    .dot.yellow { background: var(--yellow); box-shadow: 0 0 14px rgba(255,209,102,.65); }
+
+    .screenshot-frame {
+      position: relative;
+      overflow: hidden;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,.16);
+      background: #0b1020;
+      box-shadow: 0 24px 64px rgba(0,0,0,.45);
+      min-height: 0;
+    }
+    .screenshot-frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .caption {
+      position: absolute; left: 14px; bottom: 14px;
+      background: rgba(0,0,0,.62); backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,.16); border-radius: 999px;
+      padding: 8px 12px; color: var(--text); font-size: 13px; font-weight: 800;
+    }
+
+    .three-layer { display: grid; gap: 12px; }
+    .layer {
+      display: grid; grid-template-columns: 180px 1fr; gap: 16px; align-items: center;
+      padding: 17px 18px; border-radius: 18px; border: 1px solid var(--line);
+      background: rgba(255,255,255,.055);
+    }
+    .layer strong { font-size: 19px; }
+    .layer span { color: var(--muted); font-size: 15px; line-height: 1.35; }
+
+    .table { width: 100%; border-collapse: collapse; overflow: hidden; border-radius: 18px; font-size: 17px; }
+    .table th, .table td { padding: 16px 18px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+    .table th { color: var(--text); background: rgba(255,255,255,.08); font-size: 14px; text-transform: uppercase; letter-spacing: .08em; }
+    .table td { color: var(--soft); line-height: 1.35; }
+    .table tr:last-child td { border-bottom: 0; }
+
+    .flow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; align-items: stretch; }
+    .flow-step { position: relative; padding: 20px; min-height: 130px; border-radius: 20px; border: 1px solid var(--line); background: rgba(255,255,255,.06); }
+    .flow-step:not(:last-child)::after { content: "→"; position: absolute; right: -15px; top: 44%; color: var(--green); font-size: 24px; font-weight: 900; z-index: 2; }
+    .flow-num { width: 30px; height: 30px; border-radius: 10px; background: rgba(51,227,138,.15); color: var(--green); display: grid; place-items: center; font-weight: 950; margin-bottom: 12px; }
+    .flow-step h3 { font-size: 19px; margin-bottom: 8px; }
+    .flow-step p { color: var(--muted); font-size: 15px; line-height: 1.36; }
+
+    .phone-combo { display: grid; grid-template-columns: 1.25fr .45fr; gap: 16px; min-height: 0; }
+    .phone { aspect-ratio: 9/16; max-height: 100%; justify-self: center; }
+    .split-content { display: grid; grid-template-columns: 1.05fr .95fr; gap: 22px; min-height: 0; }
+    .metric-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 18px; }
+    .metric { background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 18px; padding: 16px; }
+    .metric .num { font-size: 34px; font-weight: 950; letter-spacing: -.04em; color: var(--green); }
+    .metric .label { color: var(--muted); font-size: 14px; margin-top: 4px; }
+
+    .roadmap { display: grid; gap: 14px; }
+    .roadmap-item { display: grid; grid-template-columns: 130px 1fr; gap: 16px; padding: 18px; border-radius: 18px; background: rgba(255,255,255,.055); border: 1px solid var(--line); }
+    .phase { color: var(--green); font-weight: 950; }
+    .roadmap-item p { color: var(--soft); line-height: 1.35; }
+
+    .quote { font-size: 26px; line-height: 1.28; color: var(--text); font-weight: 800; letter-spacing: -.025em; }
+    .mini-note { color: var(--muted); font-size: 14px; line-height: 1.4; margin-top: 10px; }
+
+    @media (max-width: 1100px) {
+      body { overflow: auto; }
+      .deck { min-height: 100vh; }
+      .slide { padding: 72px 22px 90px; overflow: auto; }
+      .grid-2, .grid-3, .split-content, .phone-combo, .flow { grid-template-columns: 1fr; }
+      .flow-step:not(:last-child)::after { display: none; }
+      .screenshot-frame { min-height: 260px; }
+      .topbar, .footer { left: 12px; right: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="deck" aria-label="Presentation deck">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark"></span><span>AI Engineering Projects</span></div>
+      <div class="status"><span class="pill">Tối đa 5 slide</span><span class="pill">Team Lead / Key Members</span></div>
+    </header>
+
+    <section class="slide active" data-title="Hai dự án, hai bài toán lớn">
+      <div>
+        <div class="kicker">Tổng quan</div>
+        <h1>Hai dự án, hai bài toán lớn trong engineering</h1>
+        <p class="lead">Một dự án giúp team <b>hiểu và phân tích codebase lớn</b>. Một dự án giúp cá nhân/team <b>code thật từ xa, đa nhiệm, tuỳ biến với AI coding agent</b>.</p>
+      </div>
+      <div class="grid-2">
+        <article class="card project-card hot">
+          <div class="project-title">
+            <div>
+              <div class="big-word">Large Codebase</div>
+              <p class="muted" style="margin-top:10px;font-size:18px;">Nền tảng tri thức + phân tích codebase lớn</p>
+            </div>
+            <span class="badge">Debug / Review / RCA</span>
+          </div>
+          <div class="bullets">
+            <div class="bullet"><span class="dot"></span><span>Hiểu source code, code graph, tài liệu kỹ thuật theo từng repo.</span></div>
+            <div class="bullet"><span class="dot"></span><span>Tự động hoá RCA, dò lỗi, review code, chấm story point từ commit.</span></div>
+            <div class="bullet"><span class="dot"></span><span>Giúp team lead có dữ liệu để đánh giá rủi ro và phạm vi thay đổi.</span></div>
+          </div>
+        </article>
+        <article class="card project-card cool">
+          <div class="project-title">
+            <div>
+              <div class="big-word">HAPI</div>
+              <p class="muted" style="margin-top:10px;font-size:18px;">Web/mobile coding workspace cho AI agent</p>
+            </div>
+            <span class="badge">Remote / Mobile / Multitask</span>
+          </div>
+          <div class="bullets">
+            <div class="bullet"><span class="dot cyan"></span><span>Code thật từ xa trên web/PWA, kể cả xử lý trên điện thoại.</span></div>
+            <div class="bullet"><span class="dot cyan"></span><span>Làm nhiều task/session cùng lúc, chuyển ngữ cảnh nhanh.</span></div>
+            <div class="bullet"><span class="dot cyan"></span><span>Tuỳ biến workspace theo workflow của anh em, không bị ép theo khuôn tool.</span></div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="slide" data-title="Large Codebase: tự động hoá phân tích">
+      <div>
+        <div class="kicker">Dự án 1 · Large Codebase</div>
+        <h2>Tự động hoá việc hiểu, dò lỗi và review codebase lớn</h2>
+        <p class="lead">Thay vì mỗi lần debug/review phải đọc thủ công từ đầu, hệ thống dựng 3 lớp tri thức để truy vấn, đối chiếu và tạo báo cáo.</p>
+      </div>
+      <div class="split-content">
+        <div class="card">
+          <h3>Ba lớp tri thức cốt lõi</h3>
+          <div class="three-layer" style="margin-top:18px;">
+            <div class="layer"><strong>Sourcecode</strong><span>Tìm kiếm mã nguồn liên repo, xác định file/symbol/dòng liên quan.</span></div>
+            <div class="layer"><strong>Codegraph</strong><span>Hiểu quan hệ hàm, class, module, call path và phạm vi ảnh hưởng.</span></div>
+            <div class="layer"><strong>Doc Knowledge</strong><span>Biến hiểu biết kỹ thuật thành tài liệu, knowledge base, flow/data map.</span></div>
+          </div>
+          <div class="metric-row">
+            <div class="metric"><div class="num">RCA</div><div class="label">lần lỗi về đúng vùng code</div></div>
+            <div class="metric"><div class="num">PR</div><div class="label">review theo tác động thật</div></div>
+            <div class="metric"><div class="num">SP</div><div class="label">ước lượng từ commit</div></div>
+          </div>
+        </div>
+        <div class="grid-2" style="grid-template-columns:1fr;gap:14px;">
+          <div class="screenshot-frame"><img src="large_codebase/sourcebot.png" alt="Sourcebot search across repositories"><div class="caption">Source search liên repo</div></div>
+          <div class="screenshot-frame"><img src="large_codebase/doc-knowledgebase-detail.png" alt="Knowledge base detail"><div class="caption">Doc knowledge: flow/data map</div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" data-title="Large Codebase: giá trị cho team lead">
+      <div>
+        <div class="kicker">Large Codebase · Giá trị ứng dụng</div>
+        <h2>Từ “đọc code bằng cảm giác” sang “phân tích có bằng chứng”</h2>
+        <p class="lead">Team lead không chỉ cần xem code. Team lead cần biết lỗi ở đâu, ảnh hưởng chỗ nào, PR có rủi ro gì, story thật sự phức tạp đến mức nào.</p>
+      </div>
+      <div class="grid-2">
+        <div class="card">
+          <table class="table">
+            <thead><tr><th>Vấn đề team gặp</th><th>Large Codebase hỗ trợ</th><th>Kết quả kỳ vọng</th></tr></thead>
+            <tbody>
+              <tr><td>Lỗi production khó lần</td><td>RCA từ log/stack trace về code path</td><td>Giảm thời gian khoanh vùng lỗi</td></tr>
+              <tr><td>PR chạm nhiều module</td><td>Phân tích phạm vi ảnh hưởng trên graph</td><td>Review đúng chỗ nguy hiểm</td></tr>
+              <tr><td>Ước lượng story point cảm tính</td><td>Đọc commit/diff, đo độ phức tạp thay đổi</td><td>Planning công bằng và nhất quán hơn</td></tr>
+              <tr><td>Người mới khó hiểu hệ thống</td><td>Sinh knowledge base, flow, data map</td><td>Onboard nhanh hơn, giảm phụ thuộc cá nhân</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card purple">
+          <h3>Luồng xử lý mẫu</h3>
+          <div class="flow" style="grid-template-columns:1fr; margin-top:18px;">
+            <div class="flow-step"><div class="flow-num">1</div><h3>Đầu vào</h3><p>Bug report, log, stack trace, PR diff, commit range hoặc yêu cầu review.</p></div>
+            <div class="flow-step"><div class="flow-num">2</div><h3>Phân tích</h3><p>Truy code, graph, doc knowledge để dựng vùng ảnh hưởng và luồng liên quan.</p></div>
+            <div class="flow-step"><div class="flow-num">3</div><h3>Báo cáo</h3><p>Trả về RCA, rủi ro, điểm cần review, mức phức tạp hoặc đề xuất kiểm chứng.</p></div>
+          </div>
+          <p class="mini-note">Điểm quan trọng: dùng cho tự động hoá debug/dò lỗi/review/chấm điểm — không định vị là công cụ nối vào HAPI.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" data-title="HAPI: code thật từ xa">
+      <div>
+        <div class="kicker">Dự án 2 · HAPI</div>
+        <h2>Code thật từ xa — trên web, PWA, kể cả điện thoại</h2>
+        <p class="lead">HAPI không chỉ để “xem session”. Giá trị chính là biến AI coding agent thành một workspace có thể code, kiểm tra, chạy terminal và tiếp tục việc ở bất kỳ đâu.</p>
+      </div>
+      <div class="phone-combo">
+        <div class="screenshot-frame"><img src="hapi/giao-dien-desktop-editor-mode.png" alt="HAPI desktop editor mode"><div class="caption">Web IDE: file · editor · terminal · agent chat</div></div>
+        <div class="screenshot-frame phone"><img src="hapi/giao-dien-mobile-editor-mode.png" alt="HAPI mobile editor mode"><div class="caption">Mobile/PWA</div></div>
+      </div>
+    </section>
+
+    <section class="slide" data-title="HAPI: đa nhiệm và tuỳ biến workflow">
+      <div>
+        <div class="kicker">HAPI · Workflow Advantage</div>
+        <h2>Workspace tuỳ biến cho người làm nhiều task với AI agent</h2>
+        <p class="lead">Không ép anh em đổi cách làm việc theo tool. HAPI bẻ giao diện và luồng thao tác theo cách team/cá nhân thật sự vận hành.</p>
+      </div>
+      <div class="split-content">
+        <div class="card cool">
+          <p class="quote">“Từ một cửa sổ terminal trên laptop → thành môi trường code từ xa, đa nhiệm, tuỳ biến theo workflow của người dùng.”</p>
+          <div class="roadmap" style="margin-top:22px;">
+            <div class="roadmap-item"><div class="phase">1 · Remote</div><p>Code, xem file, chạy terminal, theo dõi agent từ web/mobile.</p></div>
+            <div class="roadmap-item"><div class="phase">2 · Multitask</div><p>Một người xử lý nhiều session/task, ghim việc quan trọng, chuyển ngữ cảnh nhanh.</p></div>
+            <div class="roadmap-item"><div class="phase">3 · Customize</div><p>Tuỳ biến màn hình, luồng duyệt, cách mở rộng session/terminal/editor theo thói quen team.</p></div>
+          </div>
+          <div class="metric-row">
+            <div class="metric"><div class="num">Web</div><div class="label">coding workspace</div></div>
+            <div class="metric"><div class="num">PWA</div><div class="label">mobile-ready</div></div>
+            <div class="metric"><div class="num">Multi</div><div class="label">session/task</div></div>
+          </div>
+        </div>
+        <div class="grid-2" style="grid-template-columns:1fr; gap:14px;">
+          <div class="screenshot-frame"><img src="hapi/giao-dien-desktop.png" alt="HAPI mission control"><div class="caption">Mission Control: nhiều session song song</div></div>
+          <div class="screenshot-frame"><img src="hapi/giao-dien-mobile.png" alt="HAPI mobile session"><div class="caption">Can thiệp nhanh khi xa máy</div></div>
+        </div>
+      </div>
+    </section>
+
+    <nav class="nav" aria-label="Slide navigation">
+      <button type="button" id="prev">◀ Trước</button>
+      <button type="button" id="next">Tiếp ▶</button>
+    </nav>
+    <footer class="footer">
+      <div>© 2026 · Internal presentation</div>
+      <div><span id="slideTitle">Hai dự án, hai bài toán lớn</span> · Trang <span id="idx">1</span> / <span id="total">5</span></div>
+    </footer>
+  </main>
+
+  <script>
+    const slides = Array.from(document.querySelectorAll('.slide'));
+    const idxEl = document.getElementById('idx');
+    const totalEl = document.getElementById('total');
+    const titleEl = document.getElementById('slideTitle');
+    const prevBtn = document.getElementById('prev');
+    const nextBtn = document.getElementById('next');
+    let current = 0;
+    totalEl.textContent = String(slides.length);
+
+    function show(index) {
+      current = (index + slides.length) % slides.length;
+      slides.forEach((slide, i) => slide.classList.toggle('active', i === current));
+      idxEl.textContent = String(current + 1);
+      titleEl.textContent = slides[current].dataset.title || '';
+      prevBtn.disabled = current === 0;
+      nextBtn.disabled = current === slides.length - 1;
+      location.hash = `slide-${current + 1}`;
+    }
+
+    prevBtn.addEventListener('click', () => show(Math.max(0, current - 1)));
+    nextBtn.addEventListener('click', () => show(Math.min(slides.length - 1, current + 1)));
+    window.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' ') show(Math.min(slides.length - 1, current + 1));
+      if (event.key === 'ArrowLeft' || event.key === 'PageUp') show(Math.max(0, current - 1));
+    });
+
+    const match = location.hash.match(/slide-(\d+)/);
+    if (match) show(Math.min(slides.length - 1, Math.max(0, Number(match[1]) - 1)));
+    else show(0);
+  </script>
+</body>
+</html>

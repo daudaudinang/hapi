@@ -9,6 +9,7 @@ var mocks: {
         state: { status: 'idle' | 'connecting' | 'connected' | 'error'; error?: string }
         lastError: string | null
         recoveryReason: 'cli_lost' | null
+        listLoaded: boolean
         terminals: TerminalState[]
         connect: ReturnType<typeof vi.fn>
         disconnect: ReturnType<typeof vi.fn>
@@ -110,11 +111,15 @@ function makeController(terminals: TerminalState[] = []) {
         state: { status: 'connected' as const },
         lastError: null,
         recoveryReason: null,
+        listLoaded: true,
         terminals,
         connect: vi.fn(),
         disconnect: vi.fn(),
         subscribe: vi.fn(),
-        create: vi.fn((input) => mocks.emittedEvents.push(`terminal:create:${input.terminalId}`)),
+        create: vi.fn((input) => {
+            mocks.emittedEvents.push(`terminal:create:${input.terminalId}`)
+            return true
+        }),
         write: vi.fn(),
         resize: vi.fn(),
         closeOne: vi.fn((terminalId: string) => mocks.emittedEvents.push(`terminal:close:${terminalId}`)),
@@ -258,6 +263,33 @@ describe('SessionTerminalTabs', () => {
 
         expect(mocks.controller.create).toHaveBeenCalledTimes(2)
         expect(mocks.controller.create).toHaveBeenNthCalledWith(1, expect.objectContaining({ terminalId: 't1', replay: true }))
+    })
+
+    it('does not create or leave pending while the terminal socket is still connecting', () => {
+        mocks.controller = {
+            ...makeController([]),
+            state: { status: 'connecting' as const },
+            create: vi.fn(() => false)
+        }
+
+        renderTabs()
+        mocks.terminalMounts.at(-1)?.onResize?.(80, 24)
+        expect(screen.getByRole('button', { name: 'New terminal' })).toBeDisabled()
+        fireEvent.click(screen.getByRole('button', { name: 'New terminal' }))
+
+        expect(mocks.controller.create).not.toHaveBeenCalled()
+    })
+
+    it('does not bootstrap a new terminal before the first session terminal list arrives', () => {
+        mocks.controller = {
+            ...makeController([]),
+            listLoaded: false
+        }
+
+        renderTabs()
+        mocks.terminalMounts.at(-1)?.onResize?.(80, 24)
+
+        expect(mocks.controller.create).not.toHaveBeenCalled()
     })
 
     it('prefers first live terminal when closed terminal appears before running terminal', () => {

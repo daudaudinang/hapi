@@ -34,8 +34,6 @@ export function TerminalModal(props: { sessionId: string; onClose: () => void })
             </DialogHeader>
             <SessionTerminalTabs
                 sessionId={sessionId}
-                title="Terminal"
-                subtitle={subtitle}
                 active={Boolean(session.active)}
                 terminalSupported={terminalSupported}
                 cwd={session.metadata?.path}

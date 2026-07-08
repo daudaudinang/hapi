@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'bun:test'
+import type { TerminalListPayload } from '@hapi/protocol'
 import type { StoredMachine, StoredSession } from '../../../store'
 import type { CliSocketWithData } from '../../socketTypes'
 import { TerminalRegistry } from '../../terminalRegistry'
 import { TerminalSessionStateStore } from '../../terminalSessionState'
 import { registerTerminalHandlers } from './terminalHandlers'
+import { broadcastLostTerminalLists } from './index'
 
 type EmittedEvent = {
     event: string
@@ -70,7 +72,9 @@ function storedMachine(namespace = 'default'): StoredMachine {
     return { namespace } as StoredMachine
 }
 
-function runningSessionTerminal(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+type SessionTerminalState = Extract<TerminalListPayload['terminals'][number], { scopeType: 'session' }>
+
+function runningSessionTerminal(overrides: Partial<SessionTerminalState> = {}): SessionTerminalState {
     return {
         scopeType: 'session',
         sessionId: 'session-1',
@@ -90,6 +94,30 @@ function runningSessionTerminal(overrides: Record<string, unknown> = {}): Record
 }
 
 describe('cli terminal handlers', () => {
+    it('broadcasts lost terminal lists to exact session rooms', () => {
+        const terminalNamespace = new FakeNamespace()
+
+        broadcastLostTerminalLists(terminalNamespace as never, [{
+            namespace: 'team/a',
+            payload: {
+                scopeType: 'session',
+                sessionId: 'session-1',
+                terminals: [runningSessionTerminal({ status: 'lost', closeReason: 'cli_lost' })],
+                recovery: { reason: 'cli_lost', at: 999 }
+            }
+        }])
+
+        expect(terminalNamespace.roomEmits).toEqual([{
+            event: 'terminal:team%2Fa:session:session-1:terminal:list',
+            data: {
+                scopeType: 'session',
+                sessionId: 'session-1',
+                terminals: [runningSessionTerminal({ status: 'lost', closeReason: 'cli_lost' })],
+                recovery: { reason: 'cli_lost', at: 999 }
+            }
+        }])
+    })
+
     it('forwards typed terminal list payloads to the exact session room', () => {
         const cliSocket = new FakeSocket('cli-socket')
         const terminalNamespace = new FakeNamespace()

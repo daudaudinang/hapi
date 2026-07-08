@@ -46,10 +46,12 @@ describe('TerminalModal', () => {
         expect(screen.getByTestId('session-terminal-tabs')).toBeInTheDocument()
         expect(sharedTabsMock).toHaveBeenCalledWith(expect.objectContaining({
             sessionId: 'session-1',
-            title: 'Terminal',
-            subtitle: '/tmp/project',
             active: true,
             terminalSupported: true
+        }))
+        expect(sharedTabsMock).toHaveBeenCalledWith(expect.not.objectContaining({
+            title: expect.anything(),
+            subtitle: expect.anything()
         }))
     })
 

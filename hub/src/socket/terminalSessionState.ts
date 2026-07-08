@@ -17,6 +17,11 @@ type SessionTerminalSnapshot = {
     recovery?: { reason: 'cli_lost'; at: number }
 }
 
+export type LostSessionTerminalList = {
+    namespace: string
+    payload: Extract<TerminalListPayload, { scopeType: 'session' }>
+}
+
 function sessionKey(namespace: string, sessionId: string): SessionKey {
     return `${namespace}\0${sessionId}`
 }
@@ -73,17 +78,20 @@ export class TerminalSessionStateStore {
         cliSocketId: string,
         at: number,
         fallbackSession?: { namespace: string; sessionId: string } | null
-    ): void {
+    ): LostSessionTerminalList[] {
         const keys = new Set(this.sessionsByCliSocket.get(cliSocketId) ?? [])
         if (fallbackSession) {
             keys.add(sessionKey(fallbackSession.namespace, fallbackSession.sessionId))
         }
         if (keys.size === 0) {
-            return
+            return []
         }
+        const affected: LostSessionTerminalList[] = []
         for (const key of keys) {
             const existing = this.snapshotsBySession.get(key)
             const [namespace, sessionId] = key.split('\0') as [string, string]
+            const resolvedNamespace = existing?.namespace ?? namespace
+            const resolvedSessionId = existing?.sessionId ?? sessionId
             const terminals = (existing?.terminals ?? []).map((terminal) => {
                 if (!SESSION_LIVE_STATUSES.has(terminal.status)) {
                     return terminal
@@ -97,13 +105,23 @@ export class TerminalSessionStateStore {
             })
             this.snapshotsBySession.set(key, {
                 cliSocketId,
-                namespace: existing?.namespace ?? namespace,
-                sessionId: existing?.sessionId ?? sessionId,
+                namespace: resolvedNamespace,
+                sessionId: resolvedSessionId,
                 terminals,
                 recovery: { reason: 'cli_lost', at }
             })
+            affected.push({
+                namespace: resolvedNamespace,
+                payload: {
+                    scopeType: 'session',
+                    sessionId: resolvedSessionId,
+                    terminals,
+                    recovery: { reason: 'cli_lost', at }
+                }
+            })
         }
         this.sessionsByCliSocket.delete(cliSocketId)
+        return affected
     }
 
     getCachedSessionList(sessionId: string, namespace: string): Extract<TerminalListPayload, { scopeType: 'session' }> | null {

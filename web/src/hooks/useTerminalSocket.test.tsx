@@ -236,6 +236,29 @@ describe('useSessionTerminalSocket warning merge', () => {
         expect(result.current.terminals).toEqual([])
     })
 
+    it('clears stale terminals and marks list unloaded when session id changes', () => {
+        const rendered = renderHook(({ sessionId }) => useSessionTerminalSocket({
+            token: 'token-1',
+            baseUrl: 'http://hub.local',
+            sessionId
+        }), { initialProps: { sessionId: 'session-a' } })
+        act(() => rendered.result.current.connect())
+        const socketA = socketMocks.sockets.at(-1)
+        if (!socketA) throw new Error('socket A not created')
+        act(() => socketA.trigger('connect'))
+        act(() => socketA.trigger('terminal:list', listPayload([state('a1')], 'session-a', { reason: 'cli_lost', at: 123 })))
+
+        expect(rendered.result.current.terminals.map((terminal) => terminal.terminalId)).toEqual(['a1'])
+        expect(rendered.result.current.recoveryReason).toBe('cli_lost')
+        expect(rendered.result.current.listLoaded).toBe(true)
+
+        rendered.rerender({ sessionId: 'session-b' })
+
+        expect(rendered.result.current.terminals).toEqual([])
+        expect(rendered.result.current.recoveryReason).toBeNull()
+        expect(rendered.result.current.listLoaded).toBe(false)
+    })
+
     it('does not render raw warning payload message in SessionTerminalTabs', () => {
         render(<SessionTerminalTabs sessionId="session-1" active terminalSupported />)
         const socket = socketMocks.sockets.at(-1)

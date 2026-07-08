@@ -3,13 +3,14 @@ import type { Store, StoredMachine, StoredSession } from '../../../store'
 import type { RpcRegistry } from '../../rpcRegistry'
 import type { SyncEvent } from '../../../sync/syncEngine'
 import type { TerminalRegistry } from '../../terminalRegistry'
-import type { TerminalSessionStateStore } from '../../terminalSessionState'
+import type { LostSessionTerminalList, TerminalSessionStateStore } from '../../terminalSessionState'
 import type { CliSocketWithData, SocketServer } from '../../socketTypes'
 import type { AccessErrorReason, AccessResult } from './types'
 import { registerMachineHandlers } from './machineHandlers'
 import { registerRpcHandlers } from './rpcHandlers'
 import { registerSessionHandlers } from './sessionHandlers'
 import { cleanupTerminalHandlers, registerTerminalHandlers } from './terminalHandlers'
+import { terminalScopeRoom } from '../../terminalRooms'
 
 type SessionAlivePayload = {
     sid: string
@@ -47,6 +48,19 @@ export type CliHandlersDeps = {
     onSessionActivity?: (sessionId: string, updatedAt: number) => void
     onSessionCrashed?: (sessionId: string, error?: string) => void
     onAgentTextMessage?: (input: { namespace: string; sessionId: string; text: string; requestId?: string | null }) => void
+}
+
+type SocketNamespace = ReturnType<SocketServer['of']>
+
+export function broadcastLostTerminalLists(
+    terminalNamespace: SocketNamespace,
+    lostLists: LostSessionTerminalList[]
+): void {
+    for (const lostList of lostLists) {
+        terminalNamespace
+            .to(terminalScopeRoom(lostList.namespace, lostList.payload))
+            .emit('terminal:list', lostList.payload)
+    }
 }
 
 export function registerCliHandlers(socket: CliSocketWithData, deps: CliHandlersDeps): void {
@@ -137,11 +151,12 @@ export function registerCliHandlers(socket: CliSocketWithData, deps: CliHandlers
 
     socket.on('disconnect', () => {
         rpcRegistry.unregisterAll(socket)
-        terminalSessionState?.markLostByCliSocket(
+        const lostLists = terminalSessionState?.markLostByCliSocket(
             socket.id,
             Date.now(),
             namespace && sessionId ? { namespace, sessionId } : null
-        )
+        ) ?? []
+        broadcastLostTerminalLists(terminalNamespace, lostLists)
         cleanupTerminalHandlers(socket, { terminalRegistry, terminalNamespace })
     })
 }

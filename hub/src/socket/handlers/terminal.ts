@@ -79,6 +79,28 @@ export function registerTerminalHandlers(socket: SocketWithData, deps: TerminalH
         return entry
     }
 
+    const resolveEntryForControl = (terminalId: string): TerminalRegistryEntry | null => {
+        const entry = terminalRegistry.get(terminalId)
+        if (!entry) {
+            return null
+        }
+        if (entry.socketId === socket.id) {
+            return entry
+        }
+        if (!entry.sessionId || entry.namespace !== namespace) {
+            return null
+        }
+        const scope: TerminalScopeTyped = { scopeType: 'session', sessionId: entry.sessionId }
+        if (!authorizeScope(scope)) {
+            return null
+        }
+        const room = roomForScope(scope)
+        if (!room || !socket.rooms.has(room)) {
+            return null
+        }
+        return entry
+    }
+
     const resolveCliSocket = (entry: TerminalRegistryEntry, reportError: boolean): SocketWithData | null => {
         const cliSocket = cliNamespace.sockets.get(entry.cliSocketId)
         if (!cliSocket || cliSocket.data.namespace !== namespace) {
@@ -304,7 +326,7 @@ export function registerTerminalHandlers(socket: SocketWithData, deps: TerminalH
         }
 
         const { terminalId, data: payload } = parsed.data
-        const entry = resolveEntryForSocket(terminalId)
+        const entry = resolveEntryForControl(terminalId)
         if (!entry) {
             return
         }
@@ -330,7 +352,7 @@ export function registerTerminalHandlers(socket: SocketWithData, deps: TerminalH
         }
 
         const { terminalId, cols, rows } = parsed.data
-        const entry = resolveEntryForSocket(terminalId)
+        const entry = resolveEntryForControl(terminalId)
         if (!entry) {
             return
         }

@@ -69,9 +69,16 @@ describe('TerminalSessionStateStore', () => {
             terminals: [terminal('a', 'running'), terminal('b', 'detached'), terminal('c', 'closed_user')]
         }))
 
-        store.markLostByCliSocket('cli-1', 999)
+        const affected = store.markLostByCliSocket('cli-1', 999)
 
         const cached = store.getCachedSessionList('session-1', 'ns-a')
+        if (!cached) {
+            throw new Error('Expected cached lost terminal list')
+        }
+        expect(affected).toEqual([{
+            namespace: 'ns-a',
+            payload: cached
+        }])
         expect(cached?.recovery).toEqual({ reason: 'cli_lost', at: 999 })
         expect(cached?.terminals.map(t => [t.terminalId, t.status, t.closeReason])).toEqual([
             ['a', 'lost', 'cli_lost'],
@@ -83,14 +90,16 @@ describe('TerminalSessionStateStore', () => {
     it('stores session-level recovery when CLI disconnects before any terminal list', () => {
         const store = new TerminalSessionStateStore()
 
-        store.markLostByCliSocket('cli-1', 999, { namespace: 'ns-a', sessionId: 'session-1' })
+        const affected = store.markLostByCliSocket('cli-1', 999, { namespace: 'ns-a', sessionId: 'session-1' })
 
-        expect(store.getCachedSessionList('session-1', 'ns-a')).toEqual({
+        const expected: Extract<TerminalListPayload, { scopeType: 'session' }> = {
             scopeType: 'session',
             sessionId: 'session-1',
             terminals: [],
             recovery: { reason: 'cli_lost', at: 999 }
-        })
+        }
+        expect(store.getCachedSessionList('session-1', 'ns-a')).toEqual(expected)
+        expect(affected).toEqual([{ namespace: 'ns-a', payload: expected }])
     })
 
     it('preserves lost terminals when restarted CLI reports an empty list', () => {

@@ -15,6 +15,7 @@ class FakeSocket {
     readonly data: Record<string, unknown> = {}
     readonly emitted: EmittedEvent[] = []
     readonly joinedRooms = new Set<string>()
+    readonly rooms = this.joinedRooms
     private readonly handlers = new Map<string, (...args: unknown[]) => void>()
 
     constructor(id: string) {
@@ -673,6 +674,36 @@ describe('terminal socket handlers', () => {
             terminalId: 'terminal-1'
         })
         expect(terminalRegistry.get('terminal-1')).toBeNull()
+    })
+
+    it('allows an authorized session subscriber to write after another socket reattaches the same terminal', () => {
+        const { io, terminalSocket: socketA, cliNamespace, terminalRegistry } = createHarness()
+        const socketB = new FakeSocket('terminal-socket-b')
+        socketB.data.namespace = 'default'
+        const cliSocket = new FakeSocket('cli-socket-1')
+        connectCliSocket(cliNamespace, cliSocket, 'session-1')
+
+        registerTerminalHandlers(socketB as unknown as SocketWithData, {
+            io: io as unknown as SocketServer,
+            getSession: () => ({ active: true, namespace: 'default' }),
+            getMachine: () => ({ active: true, namespace: 'default' }),
+            terminalRegistry,
+            maxTerminalsPerSocket: 4,
+            maxTerminalsPerSession: 3
+        })
+
+        socketA.trigger('terminal:subscribe', { scopeType: 'session', sessionId: 'session-1' })
+        socketB.trigger('terminal:subscribe', { scopeType: 'session', sessionId: 'session-1' })
+        socketA.trigger('terminal:create', { sessionId: 'session-1', terminalId: 'terminal-1', cols: 80, rows: 24 })
+        socketB.trigger('terminal:create', { sessionId: 'session-1', terminalId: 'terminal-1', cols: 80, rows: 24, replay: true })
+
+        socketA.trigger('terminal:write', { terminalId: 'terminal-1', data: 'echo still-owned-by-session\n' })
+
+        expect(lastEmit(cliSocket, 'terminal:write')?.data).toEqual({
+            sessionId: 'session-1',
+            terminalId: 'terminal-1',
+            data: 'echo still-owned-by-session\n'
+        })
     })
 
     it('opens a machine-scoped terminal without a chat session', () => {

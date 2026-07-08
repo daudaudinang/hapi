@@ -267,11 +267,12 @@ export type SessionTerminalController = {
     state: TerminalConnectionState
     terminals: TerminalState[]
     recoveryReason: 'cli_lost' | null
+    listLoaded: boolean
     lastError: string | null
     connect: () => void
     disconnect: () => void
     subscribe: () => void
-    create: (input: { terminalId: string; cols: number; rows: number; cwd?: string; replay?: boolean }) => void
+    create: (input: { terminalId: string; cols: number; rows: number; cwd?: string; replay?: boolean }) => boolean
     write: (terminalId: string, data: string) => void
     resize: (terminalId: string, cols: number, rows: number) => void
     closeOne: (terminalId: string) => void
@@ -290,6 +291,7 @@ export function useSessionTerminalSocket(options: {
     const [state, setState] = useState<TerminalConnectionState>({ status: 'idle' })
     const [terminals, setTerminals] = useState<TerminalState[]>([])
     const [recoveryReason, setRecoveryReason] = useState<'cli_lost' | null>(null)
+    const [listLoaded, setListLoaded] = useState(false)
     const [lastError, setLastError] = useState<string | null>(null)
     const socketRef = useRef<Socket | null>(null)
     const tokenRef = useRef(options.token)
@@ -304,6 +306,13 @@ export function useSessionTerminalSocket(options: {
         baseUrlRef.current = options.baseUrl
         sessionIdRef.current = options.sessionId
     }, [options.token, options.baseUrl, options.sessionId])
+
+    useEffect(() => {
+        setTerminals([])
+        setRecoveryReason(null)
+        setListLoaded(false)
+        setLastError(null)
+    }, [options.sessionId])
 
     const isSessionPayload = useCallback((payload: { scopeType?: string; sessionId?: string }) => (
         payload.scopeType === 'session' && payload.sessionId === sessionIdRef.current
@@ -352,6 +361,7 @@ export function useSessionTerminalSocket(options: {
             }
             setTerminals(payload.terminals)
             setRecoveryReason(payload.scopeType === 'session' ? (payload.recovery?.reason ?? null) : null)
+            setListLoaded(true)
         })
 
         socket.on('terminal:output', (payload: { scopeType?: string; sessionId?: string; terminalId: string; data: string }) => {
@@ -433,6 +443,7 @@ export function useSessionTerminalSocket(options: {
         }
         const socket = ensureSocket()
         socket.auth = { token: tokenRef.current }
+        setListLoaded(false)
         setState({ status: 'connecting' })
         if (socket.connected) {
             subscribe()
@@ -450,13 +461,14 @@ export function useSessionTerminalSocket(options: {
         socket.removeAllListeners()
         socket.disconnect()
         socketRef.current = null
+        setListLoaded(false)
         setState({ status: 'idle' })
     }, [])
 
     const create = useCallback((input: { terminalId: string; cols: number; rows: number; cwd?: string; replay?: boolean }) => {
         const socket = socketRef.current
         if (!socket?.connected) {
-            return
+            return false
         }
         setLastError(null)
         socket.emit('terminal:create', {
@@ -467,6 +479,7 @@ export function useSessionTerminalSocket(options: {
             replay: input.replay ?? true,
             ...(input.cwd ? { cwd: input.cwd } : {})
         })
+        return true
     }, [])
 
     const write = useCallback((terminalId: string, data: string) => {
@@ -522,6 +535,7 @@ export function useSessionTerminalSocket(options: {
         state,
         terminals,
         recoveryReason,
+        listLoaded,
         lastError,
         connect,
         disconnect,
@@ -539,6 +553,7 @@ export function useSessionTerminalSocket(options: {
         state,
         terminals,
         recoveryReason,
+        listLoaded,
         lastError,
         connect,
         disconnect,
