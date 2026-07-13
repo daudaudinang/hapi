@@ -240,6 +240,16 @@ export function EditorLayout(props: {
     )
     const activeFilePath = activeFileTab?.path ?? null
 
+    // Auto-open a session terminal tab when activeSessionId changes
+    // so terminals created elsewhere (e.g. modal) are visible in the editor
+    useEffect(() => {
+        if (!editor.activeSessionId) return
+        const hasSessionTab = terminalTabs.some((tab) => tab.sessionId === editor.activeSessionId)
+        if (!hasSessionTab) {
+            editor.openTerminal({ sessionId: editor.activeSessionId })
+        }
+    }, [editor.activeSessionId]) // eslint-disable-line react-hooks/exhaustive-deps
+
     const handleRegisterTerminalClose = useCallback((tabId: string, close: (() => void) | null) => {
         if (!close) {
             terminalCloseFnsRef.current.delete(tabId)

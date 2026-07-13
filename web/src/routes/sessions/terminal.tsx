@@ -61,8 +61,6 @@ export default function TerminalPage() {
             </div>
             <SessionTerminalTabs
                 sessionId={sessionId}
-                title="Terminal"
-                subtitle={subtitle}
                 active={Boolean(session.active)}
                 terminalSupported={terminalSupported}
                 cwd={session.metadata?.path}

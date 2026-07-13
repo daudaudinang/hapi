@@ -45,8 +45,6 @@ describe('TerminalPage session terminal tabs', () => {
         expect(screen.getByTestId('session-terminal-tabs')).toBeInTheDocument()
         expect(sharedTabsMock).toHaveBeenCalledWith(expect.objectContaining({
             sessionId: 'session-1',
-            title: 'Terminal',
-            subtitle: '/tmp/project',
             active: true,
             terminalSupported: true
         }))

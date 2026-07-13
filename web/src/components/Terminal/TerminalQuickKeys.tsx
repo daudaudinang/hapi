@@ -313,7 +313,11 @@ export function TerminalQuickKeys(props: {
     }, [manualPasteText, props])
 
     return (
-        <div className="shrink-0 border-t border-[var(--app-border)] bg-[var(--app-bg)] pb-[env(safe-area-inset-bottom)]">
+        <div
+            role="toolbar"
+            aria-label="Terminal quick keys"
+            className="shrink-0 border-t border-[var(--app-border)] bg-[var(--app-bg)] pb-[env(safe-area-inset-bottom)] lg:hidden"
+        >
             <div className="flex flex-col gap-2 px-2 py-2">
                 <button
                     type="button"

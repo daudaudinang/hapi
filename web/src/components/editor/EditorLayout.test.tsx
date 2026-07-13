@@ -304,7 +304,7 @@ describe('EditorLayout', () => {
         expect(screen.getByTestId('editor-terminal')).toHaveTextContent('Terminal tabs: Terminal: bash:machine-1:/repo')
     })
 
-    it('opens mobile terminals scoped to the project without session tabs', () => {
+    it('opens mobile terminals scoped to the project with auto-opened session tab', () => {
         mocks.isMobile = true
         mocks.sessions = [
             makeSession({ id: 'session-1', metadata: { path: '/repo', machineId: 'machine-1', name: 'Session 1' } }),
@@ -317,7 +317,8 @@ describe('EditorLayout', () => {
         expect(screen.queryByRole('button', { name: 'Use session session-2 for terminal' })).not.toBeInTheDocument()
         fireEvent.click(screen.getByRole('button', { name: 'Open terminal' }))
 
-        expect(screen.getByTestId('editor-terminal')).toHaveTextContent('Terminal tabs: Terminal: bash:machine-1:/repo')
+        const terminalContent = screen.getByTestId('editor-terminal').textContent ?? ''
+        expect(terminalContent).toContain('machine-1:/repo')
     })
 
     it('archives mobile chat sessions through the editor API', async () => {

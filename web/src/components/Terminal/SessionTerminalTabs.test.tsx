@@ -152,22 +152,41 @@ describe('SessionTerminalTabs', () => {
 
     afterEach(() => cleanup())
 
-    it('renders lifecycle hint and count n/3 from CLI list', () => {
+    it('marks terminal quick keys as mobile and tablet only', () => {
+        mocks.controller = makeController([state('t1')])
+
+        renderTabs()
+
+        expect(screen.getByRole('toolbar', { name: 'Terminal quick keys' })).toHaveClass('lg:hidden')
+    })
+
+    it('renders count n/3 from CLI list', () => {
         mocks.controller = makeController([state('t1', 'running'), state('t2', 'detached')])
 
         renderTabs()
 
         expect(screen.getByText('2/3')).toBeInTheDocument()
-        expect(screen.getByText(/Closing this window only detaches/)).toBeInTheDocument()
     })
 
-    it('disables plus at 3/3 with clear copy', () => {
+    it('places new-terminal button directly after the latest terminal tab', () => {
+        mocks.controller = makeController([state('t1'), state('t2')])
+
+        renderTabs()
+
+        const tabList = screen.getByRole('group', { name: 'Terminal tabs' })
+        const addButton = screen.getByRole('button', { name: 'New terminal' })
+        expect(addButton.parentElement).toBe(tabList)
+        expect(tabList.lastElementChild).toBe(addButton)
+    })
+
+    it('disables plus at 3/3 with tooltip', () => {
         mocks.controller = makeController([state('t1'), state('t2'), state('t3')])
 
         renderTabs()
 
-        expect(screen.getByRole('button', { name: 'New terminal' })).toBeDisabled()
-        expect(screen.getByText('Close an existing terminal before creating another.')).toBeInTheDocument()
+        const addButton = screen.getByRole('button', { name: 'New terminal' })
+        expect(addButton).toBeDisabled()
+        expect(addButton).toHaveAttribute('title', 'Close an existing terminal before creating another.')
     })
 
 

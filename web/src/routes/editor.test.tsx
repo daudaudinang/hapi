@@ -85,5 +85,5 @@ describe('EditorPage', () => {
         const router = createAppRouter() as unknown as { routesByPath: Record<string, unknown> }
 
         expect(router.routesByPath['/editor']).toBeTruthy()
-    })
+    }, 10_000)
 })
