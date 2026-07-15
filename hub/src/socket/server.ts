@@ -1,6 +1,5 @@
 import { Server as Engine } from '@socket.io/bun-engine'
 import { Server, type DefaultEventsMap } from 'socket.io'
-import { jwtVerify } from 'jose'
 import { z } from 'zod'
 import type { Store } from '../store'
 import { configuration } from '../configuration'
@@ -13,11 +12,21 @@ import type { SyncEvent } from '../sync/syncEngine'
 import { TerminalRegistry, type TerminalRegistryEntry } from './terminalRegistry'
 import { TerminalSessionStateStore } from './terminalSessionState'
 import type { CliSocketWithData, SocketData, SocketServer } from './socketTypes'
+import type { RunnerAuthenticator } from '../auth/runnerAuthenticator'
+import { RunnerSocketAuthSchema } from '@hapi/protocol/runner-enrollment'
+import type { ResourceCapabilityResolver } from '../auth/resourceCapability'
 
-const jwtPayloadSchema = z.object({
-    uid: z.number(),
-    ns: z.string()
-})
+const SHARED_SESSION_COOKIE = '__Host-hapi_session'
+
+function cookieValue(cookieHeader: string | undefined, name: string): string | null {
+    if (!cookieHeader) return null
+    for (const part of cookieHeader.split(';')) {
+        const separator = part.indexOf('=')
+        if (separator < 0 || part.slice(0, separator).trim() !== name) continue
+        try { return decodeURIComponent(part.slice(separator + 1).trim()) } catch { return null }
+    }
+    return null
+}
 
 const DEFAULT_IDLE_TIMEOUT_MS = 0
 const DEFAULT_MAX_TERMINALS = 4
@@ -62,6 +71,9 @@ export function handleTerminalRegistryIdle(entry: TerminalRegistryEntry, termina
 export type SocketServerDeps = {
     store: Store
     jwtSecret: Uint8Array
+    runnerAuthenticator: RunnerAuthenticator
+    validateWebSession: (sessionToken: string) => { membershipId: string; organizationId: string; role: 'admin' | 'member' | 'viewer' } | null
+    resolveCapability: ResourceCapabilityResolver
     corsOrigins?: string[]
     getSession?: (sessionId: string) => { active: boolean; namespace: string } | null
     onWebappEvent?: (event: SyncEvent) => void
@@ -80,6 +92,9 @@ export function createSocketServer(deps: SocketServerDeps): {
     rpcRegistry: RpcRegistry
     terminalRegistry: TerminalRegistry
     terminalSessionState: TerminalSessionStateStore
+    disconnectOrganization: (organizationId: string) => void
+    disconnectRunner: (organizationId: string, runnerId: string) => void
+    disconnectMembership: (organizationId: string, membershipId: string) => void
 } {
     const corsOrigins = deps.corsOrigins ?? configuration.corsOrigins
     const allowAllOrigins = corsOrigins.includes('*')
@@ -87,7 +102,7 @@ export function createSocketServer(deps: SocketServerDeps): {
     const corsOptions = {
         origin: corsOriginOption,
         methods: ['GET', 'POST'],
-        credentials: false
+        credentials: true
     }
 
     const io = new Server<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, SocketData>({
@@ -120,12 +135,15 @@ export function createSocketServer(deps: SocketServerDeps): {
 
     cliNs.use((socket, next) => {
         const auth = socket.handshake.auth as Record<string, unknown> | undefined
+        const runnerAuth=RunnerSocketAuthSchema.safeParse(auth)
+        if(runnerAuth.success){const runner=deps.runnerAuthenticator.authenticateAny(runnerAuth.data.credential);if(!runner)return next(new Error('Invalid Runner credential'));if(runner.machineId!==runnerAuth.data.machineId)return next(new Error('Machine binding mismatch'));socket.data.namespace=runner.organizationId;socket.data.organizationId=runner.organizationId;socket.data.runnerId=runner.id;socket.data.machineId=runner.machineId;socket.data.principalKind='runner';return next()}
         const token = typeof auth?.token === 'string' ? auth.token : null
         const parsedToken = token ? parseAccessToken(token) : null
         if (!parsedToken || !constantTimeEquals(parsedToken.baseToken, configuration.cliApiToken)) {
             return next(new Error('Invalid token'))
         }
         socket.data.namespace = parsedToken.namespace
+        socket.data.principalKind = 'legacy-session'
         next()
     })
     cliNs.on('connection', (socket) => registerCliHandlers(socket as CliSocketWithData, {
@@ -141,29 +159,19 @@ export function createSocketServer(deps: SocketServerDeps): {
         onBackgroundTaskDelta: deps.onBackgroundTaskDelta,
         onSessionActivity: deps.onSessionActivity,
         onSessionCrashed: deps.onSessionCrashed,
-        onAgentTextMessage: deps.onAgentTextMessage
+        onAgentTextMessage: deps.onAgentTextMessage,
+        resolveCapability: deps.resolveCapability
     }))
 
-    terminalNs.use(async (socket, next) => {
-        const auth = socket.handshake.auth as Record<string, unknown> | undefined
-        const token = typeof auth?.token === 'string' ? auth.token : null
-        if (!token) {
-            return next(new Error('Missing token'))
-        }
-
-        try {
-            const verified = await jwtVerify(token, deps.jwtSecret, { algorithms: ['HS256'] })
-            const parsed = jwtPayloadSchema.safeParse(verified.payload)
-            if (!parsed.success) {
-                return next(new Error('Invalid token payload'))
-            }
-            socket.data.userId = parsed.data.uid
-            socket.data.namespace = parsed.data.ns
-            next()
-            return
-        } catch {
-            return next(new Error('Invalid token'))
-        }
+    terminalNs.use((socket, next) => {
+        const sessionToken = cookieValue(socket.handshake.headers.cookie, SHARED_SESSION_COOKIE)
+        const session = sessionToken ? deps.validateWebSession(sessionToken) : null
+        if (!session) return next(new Error('Invalid session'))
+        socket.data.membershipId = session.membershipId
+        socket.data.organizationId = session.organizationId
+        socket.data.organizationRole = session.role
+        socket.data.namespace = session.organizationId
+        next()
     })
     terminalNs.on('connection', (socket) => registerTerminalHandlers(socket, {
         io,
@@ -176,8 +184,34 @@ export function createSocketServer(deps: SocketServerDeps): {
         terminalRegistry,
         terminalSessionState,
         maxTerminalsPerSocket,
-        maxTerminalsPerSession
+        maxTerminalsPerSession,
+        capabilityResolver: deps.resolveCapability
     }))
 
-    return { io, engine, rpcRegistry, terminalRegistry, terminalSessionState }
+    return { io, engine, rpcRegistry, terminalRegistry, terminalSessionState,
+        disconnectOrganization: (organizationId: string) => {
+            for (const [id, socket] of cliNs.sockets) {
+                if (socket.data.namespace === organizationId || socket.data.organizationId === organizationId) {
+                    socket.disconnect(true)
+                }
+            }
+            for (const socket of terminalNs.sockets.values()) {
+                if (socket.data.organizationId === organizationId) socket.disconnect(true)
+            }
+        },
+        disconnectRunner: (organizationId: string, runnerId: string) => {
+            for (const socket of cliNs.sockets.values()) {
+                if (socket.data.organizationId === organizationId && socket.data.runnerId === runnerId) {
+                    socket.disconnect(true)
+                }
+            }
+        },
+        disconnectMembership: (organizationId: string, membershipId: string) => {
+            for (const socket of terminalNs.sockets.values()) {
+                if (socket.data.organizationId === organizationId && socket.data.membershipId === membershipId) {
+                    socket.disconnect(true)
+                }
+            }
+        }
+    }
 }

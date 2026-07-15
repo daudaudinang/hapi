@@ -89,6 +89,7 @@ jobs:
 
                   cd ../release-artifacts
                   sha256sum * > checksums.txt
+                  cp ../scripts/install.sh install.sh
             - name: Create Release
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

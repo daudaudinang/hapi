@@ -13,7 +13,7 @@ describe('ApiClient editor file mutations', () => {
             statusText: 'OK',
             json: async () => ({ success: true, path: '/repo/a.ts', size: 7 })
         } as Response)
-        const api = new ApiClient('token')
+        const api = new ApiClient()
 
         await expect(api.writeEditorFile('machine-1', '/repo/a.ts', 'updated')).resolves.toEqual({
             success: true,
@@ -34,7 +34,7 @@ describe('ApiClient editor file mutations', () => {
             statusText: 'OK',
             json: async () => ({ success: true, path: '/repo/new.ts', size: 0 })
         } as Response)
-        const api = new ApiClient('token')
+        const api = new ApiClient()
 
         await expect(api.createEditorFile('machine-1', '/repo/new.ts', '')).resolves.toEqual({
             success: true,
@@ -55,7 +55,7 @@ describe('ApiClient editor file mutations', () => {
             statusText: 'OK',
             json: async () => ({ success: true, path: '/repo/old.ts' })
         } as Response)
-        const api = new ApiClient('token')
+        const api = new ApiClient()
 
         await expect(api.deleteEditorFile('machine-1', '/repo/old.ts')).resolves.toEqual({
             success: true,
@@ -75,7 +75,7 @@ describe('ApiClient editor file mutations', () => {
             statusText: 'OK',
             json: async () => ({ success: true, state: 'notRepository', repositories: [], stagedFiles: [], unstagedFiles: [], totalStaged: 0, totalUnstaged: 0 })
         } as Response)
-        const api = new ApiClient('token')
+        const api = new ApiClient()
 
         const response = await api.getEditorGitStatusV2('machine-1', '/repo', '/repo')
 
@@ -93,7 +93,7 @@ describe('ApiClient editor file mutations', () => {
             statusText: 'OK',
             json: async () => ({ success: true, stdout: '', stderr: '', exitCode: 0 })
         } as Response)
-        const api = new ApiClient('token')
+        const api = new ApiClient()
 
         await api.stageEditorGitFile('machine-1', '/repo', 'src/App.tsx', '/repo')
         await api.commitEditorGit('machine-1', '/repo', 'message', '/repo')

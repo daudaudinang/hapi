@@ -150,7 +150,6 @@ function warningPayload(reason: 'idle' | 'age', sessionId = 'session-1', message
 
 function renderSessionHook() {
     const rendered = renderHook(() => useSessionTerminalSocket({
-        token: 'token-1',
         baseUrl: 'http://hub.local',
         sessionId: 'session-1'
     }))
@@ -238,7 +237,6 @@ describe('useSessionTerminalSocket warning merge', () => {
 
     it('clears stale terminals and marks list unloaded when session id changes', () => {
         const rendered = renderHook(({ sessionId }) => useSessionTerminalSocket({
-            token: 'token-1',
             baseUrl: 'http://hub.local',
             sessionId
         }), { initialProps: { sessionId: 'session-a' } })

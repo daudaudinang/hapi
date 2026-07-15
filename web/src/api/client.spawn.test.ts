@@ -13,7 +13,7 @@ describe('ApiClient spawnSession', () => {
             statusText: 'OK',
             json: async () => ({ type: 'success', sessionId: 'session-1' })
         } as Response)
-        const api = new ApiClient('token')
+        const api = new ApiClient()
 
         await expect(api.spawnSession(
             'machine-1',

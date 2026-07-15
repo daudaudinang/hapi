@@ -29,6 +29,18 @@ import QRCode from 'qrcode'
 import type { Server as BunServer } from 'bun'
 import type { WebSocketData } from '@socket.io/bun-engine'
 import { closeSessionTerminalsInternal } from './socket/internalTerminalControl'
+import { Database } from 'bun:sqlite'
+import { SharedHubStore } from './store/sharedHubStore'
+import { OidcService } from './auth/oidcService'
+import { IdentityService } from './auth/identityService'
+import { loadSharedHubConfiguration } from './sharedHubConfiguration'
+import { AuthorizationService } from './auth/authorizationService'
+import { TeamAuthorizationService } from './application/teamAuthorizationService'
+import { resolveResourceCapability } from './auth/resourceCapability'
+import { SessionSecurityProjection } from './application/sessionSecurityProjection'
+import { RunnerEnrollmentService } from './application/runnerEnrollmentService'
+import { RunnerLifecycleService } from './application/runnerLifecycleService'
+import { RunnerAuthenticator } from './auth/runnerAuthenticator'
 
 /** Format config source for logging */
 function formatSource(source: ConfigSource | 'generated'): string {
@@ -106,6 +118,7 @@ let sseManager: SSEManager | null = null
 let visibilityTracker: VisibilityTracker | null = null
 let notificationHub: NotificationHub | null = null
 let tunnelManager: TunnelManager | null = null
+let sessionSecurityProjection: SessionSecurityProjection | null = null
 
 async function main() {
     console.log('HAPI Hub starting...')
@@ -115,28 +128,15 @@ async function main() {
     const relayFlag = resolveRelayFlag(process.argv)
     const officialWebUrl = process.env.HAPI_OFFICIAL_WEB_URL || 'https://app.hapi.run'
     const config = await createConfiguration()
+    const sharedConfig = loadSharedHubConfiguration(process.env, config.publicUrl)
     const baseCorsOrigins = normalizeOrigins(config.corsOrigins)
     const relayCorsOrigin = normalizeOrigin(officialWebUrl)
     const corsOrigins = relayFlag.enabled
         ? mergeCorsOrigins(baseCorsOrigins, relayCorsOrigin ? [relayCorsOrigin] : [])
         : baseCorsOrigins
 
-    // Display CLI API token information
-    if (config.cliApiTokenIsNew) {
-        console.log('')
-        console.log('='.repeat(70))
-        console.log('  NEW CLI_API_TOKEN GENERATED')
-        console.log('='.repeat(70))
-        console.log('')
-        console.log(`  Token: ${config.cliApiToken}`)
-        console.log('')
-        console.log(`  Saved to: ${config.settingsFile}`)
-        console.log('')
-        console.log('='.repeat(70))
-        console.log('')
-    } else {
-        console.log(`[Hub] CLI_API_TOKEN: loaded from ${formatSource(config.sources.cliApiToken)}`)
-    }
+    // Never print credentials. Runner enrollment replaces this legacy CLI token path in Phase 4.
+    console.log(`[Hub] legacy CLI credential: ${config.cliApiTokenIsNew ? 'generated' : 'loaded'} (${formatSource(config.sources.cliApiToken)})`)
 
     // Display other configuration sources
     console.log(`[Hub] HAPI_LISTEN_HOST: ${config.listenHost} (${formatSource(config.sources.listenHost)})`)
@@ -167,6 +167,20 @@ async function main() {
         console.log(`[Hub] Tunnel: disabled (${relayFlag.source})`)
     }
 
+    const sharedDatabase = new Database(config.dbPath, { create: true, readwrite: true, strict: true })
+    const sharedStore = new SharedHubStore(sharedDatabase, {
+        organizationId: sharedConfig.organizationId,
+        organizationName: sharedConfig.organizationName
+    })
+    const identityService = new IdentityService(sharedStore, sharedConfig.authPepper)
+    const runnerEnrollment = new RunnerEnrollmentService(sharedStore, sharedConfig.authPepper, config.publicUrl)
+    const runnerAuthenticator = new RunnerAuthenticator(sharedStore, sharedConfig.authPepper)
+    const oidcService = new OidcService(sharedStore, {
+        issuer: sharedConfig.oidcIssuer,
+        clientId: sharedConfig.oidcClientId,
+        allowedRedirectUris: [sharedConfig.callbackUrl],
+        pepper: sharedConfig.authPepper
+    })
     const store = new Store(config.dbPath)
     const jwtSecret = await getOrCreateJwtSecret()
     const vapidKeys = await getOrCreateVapidKeys(config.dataDir)
@@ -176,9 +190,16 @@ async function main() {
     visibilityTracker = new VisibilityTracker()
     sseManager = new SSEManager(30_000, visibilityTracker)
 
+    let teamAuthorization: TeamAuthorizationService | null = null
     const socketServer = createSocketServer({
         store,
         jwtSecret,
+        runnerAuthenticator,
+        validateWebSession: (sessionToken) => identityService.validateSession(sessionToken, { mutation: false }),
+        resolveCapability: (input) => {
+            if (!teamAuthorization) return null
+            return resolveResourceCapability(teamAuthorization, input)
+        },
         corsOrigins,
         getSession: (sessionId) => {
             if (syncEngine) {
@@ -195,6 +216,23 @@ async function main() {
         onSessionCrashed: (sessionId, error) => syncEngine?.handleSessionCrashed(sessionId, error),
         onAgentTextMessage: (input) => syncEngine?.autoReportSessionReply(input)
     })
+    const runnerLifecycle = new RunnerLifecycleService(
+        sharedStore,
+        sharedConfig.authPepper,
+        () => Date.now(),
+        (organizationId, runnerId) => socketServer.disconnectRunner(organizationId, runnerId)
+    )
+    teamAuthorization = new TeamAuthorizationService(
+        sharedStore,
+        new AuthorizationService(),
+        undefined,
+        ({ organizationId, membershipIds }) => {
+            for (const membershipId of membershipIds) {
+                sseManager?.disconnectMembership(organizationId, membershipId)
+                socketServer.disconnectMembership(organizationId, membershipId)
+            }
+        }
+    )
 
     syncEngine = new SyncEngine(
         store,
@@ -206,6 +244,13 @@ async function main() {
             terminalRegistry: socketServer.terminalRegistry
         }, input)
     )
+    sessionSecurityProjection = new SessionSecurityProjection(
+        sharedStore,
+        sharedConfig.organizationId,
+        store.sessions,
+        syncEngine
+    )
+    sessionSecurityProjection.start()
 
     const notificationChannels: NotificationChannel[] = [
         new PushNotificationChannel(pushService, sseManager, visibilityTracker, config.publicUrl)
@@ -237,8 +282,26 @@ async function main() {
         getSseManager: () => sseManager,
         getVisibilityTracker: () => visibilityTracker,
         getTerminalLiveCount: (sessionId, namespace) => socketServer.terminalSessionState.countLiveSessionTerminals(sessionId, namespace),
-        jwtSecret,
         store,
+        sharedAuth: {
+            routes: {
+                oidc: oidcService,
+                identity: identityService,
+                organizationId: sharedConfig.organizationId,
+                bootstrapAdminEmail: sharedConfig.bootstrapAdminEmail,
+                callbackUrl: sharedConfig.callbackUrl,
+                appUrl: sharedConfig.appUrl
+            },
+            identity: identityService
+        },
+        teamAuthorization,
+        runnerEnrollment,
+        runnerLifecycle,
+        runnerAuthenticator,
+        onMemberDisabled: (organizationId, membershipId) => {
+            sseManager?.disconnectMembership(organizationId, membershipId)
+            socketServer.disconnectMembership(organizationId, membershipId)
+        },
         vapidPublicKey: vapidKeys.publicKey,
         socketEngine: socketServer.engine,
         corsOrigins,
@@ -285,12 +348,7 @@ async function main() {
 
             console.log('[Web] Public: ' + tunnelUrl)
 
-            // Generate direct access link with hub and token
-            const params = new URLSearchParams({
-                hub: tunnelUrl,
-                token: config.cliApiToken
-            })
-            const directAccessUrl = `${officialWebUrl}/?${params.toString()}`
+            const directAccessUrl = sharedConfig.appUrl
 
             console.log('')
             console.log('Open in browser:')
@@ -324,6 +382,7 @@ async function main() {
         await tunnelManager?.stop()
         await happyBot?.stop()
         notificationHub?.stop()
+        sessionSecurityProjection?.stop()
         syncEngine?.stop()
         sseManager?.stop()
         webServer?.stop()

@@ -6,6 +6,9 @@ export type WebAppEnv = {
     Variables: {
         userId: number
         namespace: string
+        organizationId: string
+        organizationRole: 'admin' | 'member' | 'viewer'
+        membershipId: string
     }
 }
 

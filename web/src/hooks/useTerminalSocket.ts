@@ -10,7 +10,6 @@ export type TerminalConnectionState =
 
 type UseTerminalSocketOptions = {
     baseUrl: string
-    token: string
     sessionId?: string
     machineId?: string
     cwd?: string
@@ -55,7 +54,6 @@ export function useTerminalSocket(options: UseTerminalSocketOptions): {
     const machineIdRef = useRef(options.machineId)
     const cwdRef = useRef(options.cwd)
     const terminalIdRef = useRef(options.terminalId)
-    const tokenRef = useRef(options.token)
     const baseUrlRef = useRef(options.baseUrl)
     const lastSizeRef = useRef<{ cols: number; rows: number } | null>(null)
     const replayOnNextCreateRef = useRef(true)
@@ -67,25 +65,6 @@ export function useTerminalSocket(options: UseTerminalSocketOptions): {
         terminalIdRef.current = options.terminalId
         baseUrlRef.current = options.baseUrl
     }, [options.sessionId, options.machineId, options.cwd, options.terminalId, options.baseUrl])
-
-    useEffect(() => {
-        tokenRef.current = options.token
-        const socket = socketRef.current
-        if (!socket) {
-            return
-        }
-        if (!options.token) {
-            if (socket.connected) {
-                socket.disconnect()
-            }
-            return
-        }
-        socket.auth = { token: options.token }
-        if (socket.connected) {
-            socket.disconnect()
-            socket.connect()
-        }
-    }, [options.token])
 
     const isCurrentTerminal = useCallback((terminalId: string) => terminalId === terminalIdRef.current, [])
 
@@ -106,19 +85,17 @@ export function useTerminalSocket(options: UseTerminalSocketOptions): {
 
     const connect = useCallback((cols: number, rows: number) => {
         lastSizeRef.current = { cols, rows }
-        const token = tokenRef.current
         const sessionId = sessionIdRef.current
         const machineId = machineIdRef.current
         const terminalId = terminalIdRef.current
 
-        if (!token || !terminalId || (!sessionId && !machineId)) {
+        if (!terminalId || (!sessionId && !machineId)) {
             setErrorState('Missing terminal credentials.')
             return
         }
 
         if (socketRef.current) {
             const socket = socketRef.current
-            socket.auth = { token }
             if (socket.connected) {
                 emitCreate(socket, { cols, rows })
             } else {
@@ -135,11 +112,10 @@ export function useTerminalSocket(options: UseTerminalSocketOptions): {
             reconnectionDelay: 1000,
             reconnectionDelayMax: 5000,
             transports: ['polling', 'websocket'],
-            autoConnect: false
+            autoConnect: false,
+            withCredentials: true
         })
-        const socket = manager.socket('/terminal', {
-            auth: { token }
-        })
+        const socket = manager.socket('/terminal')
 
         socketRef.current = socket
         setState({ status: 'connecting' })
@@ -285,7 +261,6 @@ export type SessionTerminalController = {
 
 export function useSessionTerminalSocket(options: {
     baseUrl: string
-    token: string
     sessionId: string
 }): SessionTerminalController {
     const [state, setState] = useState<TerminalConnectionState>({ status: 'idle' })
@@ -294,7 +269,6 @@ export function useSessionTerminalSocket(options: {
     const [listLoaded, setListLoaded] = useState(false)
     const [lastError, setLastError] = useState<string | null>(null)
     const socketRef = useRef<Socket | null>(null)
-    const tokenRef = useRef(options.token)
     const baseUrlRef = useRef(options.baseUrl)
     const sessionIdRef = useRef(options.sessionId)
     const outputHandlerRef = useRef<(terminalId: string, data: string) => void>(() => {})
@@ -302,10 +276,9 @@ export function useSessionTerminalSocket(options: {
     const warningHandlerRef = useRef<(payload: TerminalWarningPayload) => void>(() => {})
 
     useEffect(() => {
-        tokenRef.current = options.token
         baseUrlRef.current = options.baseUrl
         sessionIdRef.current = options.sessionId
-    }, [options.token, options.baseUrl, options.sessionId])
+    }, [options.baseUrl, options.sessionId])
 
     useEffect(() => {
         setTerminals([])
@@ -342,11 +315,10 @@ export function useSessionTerminalSocket(options: {
             reconnectionDelay: 1000,
             reconnectionDelayMax: 5000,
             transports: ['polling', 'websocket'],
-            autoConnect: false
+            autoConnect: false,
+            withCredentials: true
         })
-        const socket = manager.socket('/terminal', {
-            auth: { token: tokenRef.current }
-        })
+        const socket = manager.socket('/terminal')
         socketRef.current = socket
 
         socket.on('connect', () => {
@@ -437,12 +409,11 @@ export function useSessionTerminalSocket(options: {
     }, [emitListRequest, isSessionPayload])
 
     const connect = useCallback(() => {
-        if (!tokenRef.current || !sessionIdRef.current) {
+        if (!sessionIdRef.current) {
             setState({ status: 'error', error: 'Missing terminal credentials.' })
             return
         }
         const socket = ensureSocket()
-        socket.auth = { token: tokenRef.current }
         setListLoaded(false)
         setState({ status: 'connecting' })
         if (socket.connected) {

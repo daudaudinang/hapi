@@ -156,12 +156,10 @@ function getVisibilityState(): VisibilityState {
 
 function buildEventsUrl(
     baseUrl: string,
-    token: string,
     subscription: SSESubscription,
     visibility: VisibilityState
 ): string {
     const params = new URLSearchParams()
-    params.set('token', token)
     params.set('visibility', visibility)
     if (subscription.all) {
         params.set('all', 'true')
@@ -183,7 +181,6 @@ function buildEventsUrl(
 
 export function useSSE(options: {
     enabled: boolean
-    token: string
     baseUrl: string
     subscription?: SSESubscription
     onEvent: (event: SyncEvent) => void
@@ -258,7 +255,7 @@ export function useSSE(options: {
         }
 
         setSubscriptionId(null)
-        const url = buildEventsUrl(options.baseUrl, options.token, {
+        const url = buildEventsUrl(options.baseUrl, {
             ...subscription,
             sessionId: subscription.sessionId ?? undefined
         }, getVisibilityState())
@@ -660,7 +657,7 @@ export function useSSE(options: {
             }
             setSubscriptionId(null)
         }
-    }, [options.baseUrl, options.enabled, options.token, subscriptionKey, queryClient, reconnectNonce])
+    }, [options.baseUrl, options.enabled, subscriptionKey, queryClient, reconnectNonce])
 
     return { subscriptionId }
 }

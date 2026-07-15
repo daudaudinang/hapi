@@ -17,7 +17,7 @@ describe('ApiClient team chat methods', () => {
 
     it('lists and creates Team Chats', async () => {
         const fetchMock = mockJson({ teamChats: [] })
-        const api = new ApiClient('token')
+        const api = new ApiClient()
 
         await api.getTeamChats()
         await api.createTeamChat({ name: 'Build Team Chat', projectPath: '/repo' })
@@ -31,7 +31,7 @@ describe('ApiClient team chat methods', () => {
 
     it('fetches a Team Chat detail with URL encoding', async () => {
         const fetchMock = mockJson({ teamChat: { id: 'team/1', name: 'Team' } })
-        const api = new ApiClient('token')
+        const api = new ApiClient()
 
         await api.getTeamChat('team/1')
 
@@ -40,7 +40,7 @@ describe('ApiClient team chat methods', () => {
 
     it('deletes a Team Chat with URL encoding', async () => {
         const fetchMock = mockJson({ ok: true })
-        const api = new ApiClient('token')
+        const api = new ApiClient()
 
         await api.deleteTeamChat('team/1')
 
@@ -51,7 +51,7 @@ describe('ApiClient team chat methods', () => {
 
     it('fetches Team Chat messages with limit, beforeSeq, and URL encoding', async () => {
         const fetchMock = mockJson({ messages: [], page: { limit: 20, nextBeforeSeq: null, hasMore: false } })
-        const api = new ApiClient('token')
+        const api = new ApiClient()
 
         await api.getTeamMessages('team/1', { limit: 20, beforeSeq: 7 })
 
@@ -60,7 +60,7 @@ describe('ApiClient team chat methods', () => {
 
     it('fetches Team Chat reply context with URL encoding', async () => {
         const fetchMock = mockJson({ messages: [], page: { limit: 41, nextBeforeSeq: null, hasMore: false } })
-        const api = new ApiClient('token')
+        const api = new ApiClient()
 
         await api.getTeamMessagesAround('team/1', 'msg/2')
 
@@ -69,7 +69,7 @@ describe('ApiClient team chat methods', () => {
 
     it('sends Team Chat messages and lists participants/session mentions', async () => {
         const fetchMock = mockJson({ ok: true })
-        const api = new ApiClient('token')
+        const api = new ApiClient()
 
         await api.sendTeamMessage('team/1', { authorParticipantId: 'p1', text: 'hello', replyToMessageId: 'm1' })
         await api.getTeamParticipants('team/1')

@@ -5,9 +5,9 @@ purpose: build-substrate
 altitude: initiative
 paradigm: 'Control plane / outbound execution agents'
 scope: 'Shared Hub đa người dùng, Runner enrollment, authorization, realtime isolation và vận hành nội bộ'
-status: draft
+status: approved
 created: '2026-07-13'
-updated: '2026-07-13'
+updated: '2026-07-14'
 binds: ['shared-hub', 'zero-touch-runner-enrollment', 'runner-update', 'resource-sharing']
 sources:
   - '_bmad-output/planning-artifacts/research/hapi/hapi-current-features-architecture.md'
@@ -25,7 +25,7 @@ companions:
 
 ```mermaid
 flowchart LR
-    User[Người dùng nội bộ] -->|OIDC/JWT| Hub[Shared Hub control plane]
+    User[Người dùng nội bộ] -->|OIDC + opaque cookie| Hub[Shared Hub control plane]
     Hub --> Authz[Authorization + Audit]
     Hub --> Store[(Shared state)]
     RunnerA[Runner A] -->|Outbound WSS + runner credential| Hub
@@ -82,7 +82,7 @@ flowchart LR
 
 - **Binds:** machine, Runner, session.
 - **Prevents:** thành viên mới nhìn thấy hoặc điều khiển toàn bộ máy trong phòng.
-- **Rule:** owner và organization admin có `manage`; thành viên khác chỉ có quyền từ resource grant rõ ràng.
+- **Rule:** owner và organization Admin có toàn bộ capability; thành viên khác chỉ có quyền từ resource grant rõ ràng. Delegated `manage` không bao gồm transfer/archive/revoke.
 
 ### AD-9 — Realtime phải lọc theo cùng authorization
 
@@ -136,7 +136,7 @@ Entry points không được gọi SQL trực tiếp. Bootstrap scripts không �
 | Errors | `{ error: string, code: string }`, không trả stack trace |
 | Events | Tên quá khứ: `runner.enrolled`, `runner.revoked`, `grant.created` |
 | Mutations | Service transaction: authorize → mutate → audit → publish |
-| Config | `HAPI_DEPLOYMENT_MODE=personal|shared`; shared mode không fallback sang shared secret |
+| Config | Shared Hub là mode duy nhất; không fallback sang shared secret hoặc namespace JWT |
 
 ## Stack
 
@@ -182,7 +182,6 @@ cli/src/runner/
 cli/src/runner/platform/
   darwin.ts
   linux.ts
-  windows.ts
 hub/src/web/install/
   runner.sh
   runner.ps1
@@ -233,11 +232,24 @@ flowchart TB
 | Security traceability | audit service/store | AD-10 |
 | Pilot operations | deployment/backup | AD-11 |
 
+## Approved permission and lifecycle contracts
+
+- Capability lattice cộng dồn: `view → interact → spawn → operate → manage`.
+- Organization Viewer bị hard-cap `view`; Admin có full operational + ownership lifecycle access.
+- Session-level grant luôn read-only và không nâng quyền Runner.
+- Invitation chỉ claim khi email OIDC đã verify và khớp; sau claim identity là `(issuer, subject)`.
+- Enrollment code one-time, TTL 15 phút, hash-only; Runner credential riêng, rotate/revoke độc lập.
+- Revoke offline tạo tombstone; reconnect bị từ chối và cleanup được ưu tiên trước work mới.
+- Mất quyền làm Hub re-evaluate và đóng SSE/Socket.IO/terminal/RPC attachment ngay sau commit.
+
+Chi tiết normative: `docs/superpowers/plans/2026-07-14-shared-hub-pilot-core-implementation-plan.md`.
+
 ## Deferred
 
-- Corporate OIDC provider cụ thể: chọn khi biết hạ tầng công ty; kiến trúc chỉ khóa chuẩn OIDC.
+- Keycloak broker cấu hình Google/VietID cụ thể thuộc vận hành; Hub khóa chuẩn OIDC discovery + Authorization Code/PKCE.
 - PostgreSQL và horizontal scaling: chỉ làm trước rollout toàn công ty hoặc khi single-instance thành bottleneck.
 - Multi-organization management UI: schema hỗ trợ, pilot chỉ seed một organization.
 - Fine-grained file-path policy: MVP dùng quyền ở cấp Runner/machine/session.
 - Mobile device management deployment: có thể bổ sung sau luồng copy-paste.
-- Full cryptographic signing rollout: checksum bắt buộc trong MVP; signature bắt buộc trước auto-update toàn phòng.
+- Windows enrollment, updater channels, directory sync và Telegram identity linking.
+- Full cryptographic signing rollout: checksum bắt buộc trong pilot; signature bắt buộc trước auto-update toàn phòng.

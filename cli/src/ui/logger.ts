@@ -175,7 +175,7 @@ class Logger {
     }
   }
 
-  private async sendToRemoteServer(level: string, message: string, ...args: unknown[]): Promise<void> {
+  private async sendToRemoteServer(level: string): Promise<void> {
     if (!this.dangerouslyUnencryptedServerLoggingUrl) return
     
     try {
@@ -185,9 +185,6 @@ class Logger {
         body: JSON.stringify({
           timestamp: new Date().toISOString(),
           level,
-          message: `${message} ${args.map(a => 
-            typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)
-          ).join(' ')}`,
           source: 'cli',
           platform: process.platform
         })
@@ -210,7 +207,7 @@ class Logger {
         level = 'debug'
       }
       // Fire and forget, with explicit .catch to prevent unhandled rejection
-      this.sendToRemoteServer(level, message, ...args).catch(() => {
+      this.sendToRemoteServer(level).catch(() => {
         // Silently ignore remote logging errors to prevent loops
       })
     }

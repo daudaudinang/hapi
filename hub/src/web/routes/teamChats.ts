@@ -76,7 +76,7 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
     app.get('/team-chats', (c) => {
         const engine = requireSyncEngine(c, getSyncEngine)
         if (engine instanceof Response) return engine
-        return c.json({ teamChats: engine.listTeamChats(c.get('namespace')) })
+        return c.json({ teamChats: engine.listTeamChats(c.get('organizationId')) })
     })
 
     app.post('/team-chats', async (c) => {
@@ -86,7 +86,7 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
         const parsed = createTeamChatSchema.safeParse(body)
         if (!parsed.success) return c.json({ error: 'Invalid body' }, 400)
         const teamChat = engine.createTeamChat({
-            namespace: c.get('namespace'),
+            namespace: c.get('organizationId'),
             name: parsed.data.name,
             projectPath: parsed.data.projectPath ?? null
         })
@@ -96,7 +96,7 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
     app.get('/team-chats/:id', (c) => {
         const engine = requireSyncEngine(c, getSyncEngine)
         if (engine instanceof Response) return engine
-        const teamChat = engine.getTeamChat(c.get('namespace'), c.req.param('id'))
+        const teamChat = engine.getTeamChat(c.get('organizationId'), c.req.param('id'))
         return teamChat ? c.json({ teamChat }) : c.json({ error: 'Team Chat not found' }, 404)
     })
 
@@ -104,7 +104,7 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
         const engine = requireSyncEngine(c, getSyncEngine)
         if (engine instanceof Response) return engine
         try {
-            engine.archiveTeamChat(c.get('namespace'), c.req.param('id'))
+            engine.archiveTeamChat(c.get('organizationId'), c.req.param('id'))
             return c.json({ ok: true })
         } catch (error) {
             return teamChatErrorResponse(c, error)
@@ -119,7 +119,7 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
         const limit = parsed.data.limit ?? 50
         const beforeSeq = parsed.data.beforeSeq ?? null
         try {
-            return c.json(engine.getTeamMessages(c.get('namespace'), c.req.param('id'), { limit, beforeSeq }))
+            return c.json(engine.getTeamMessages(c.get('organizationId'), c.req.param('id'), { limit, beforeSeq }))
         } catch (error) {
             return teamChatErrorResponse(c, error)
         }
@@ -129,7 +129,7 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
         const engine = requireSyncEngine(c, getSyncEngine)
         if (engine instanceof Response) return engine
         try {
-            return c.json(engine.getTeamMessagesAround(c.get('namespace'), c.req.param('id'), c.req.param('messageId'), { before: 20, after: 20 }))
+            return c.json(engine.getTeamMessagesAround(c.get('organizationId'), c.req.param('id'), c.req.param('messageId'), { before: 20, after: 20 }))
         } catch (error) {
             return teamChatErrorResponse(c, error)
         }
@@ -143,7 +143,7 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
         if (!parsed.success) return c.json({ error: 'Invalid body' }, 400)
         try {
             return c.json(engine.postTeamMessage({
-                namespace: c.get('namespace'),
+                namespace: c.get('organizationId'),
                 teamChatId: c.req.param('id'),
                 ...parsed.data
             }), 201)
@@ -164,7 +164,7 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
         }
         try {
             return c.json(engine.reportToTeam({
-                namespace: c.get('namespace'),
+                namespace: c.get('organizationId'),
                 teamChatId: c.req.param('id'),
                 ...parsed.data
             }), 201)
@@ -177,7 +177,7 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
         const engine = requireSyncEngine(c, getSyncEngine)
         if (engine instanceof Response) return engine
         try {
-            return c.json({ participants: engine.listTeamParticipants(c.get('namespace'), c.req.param('id')) })
+            return c.json({ participants: engine.listTeamParticipants(c.get('organizationId'), c.req.param('id')) })
         } catch (error) {
             return teamChatErrorResponse(c, error)
         }
@@ -191,7 +191,7 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
         if (!parsed.success) return c.json({ error: 'Invalid body' }, 400)
         try {
             return c.json({ participant: engine.addTeamParticipant({
-                namespace: c.get('namespace'),
+                namespace: c.get('organizationId'),
                 teamChatId: c.req.param('id'),
                 ...parsed.data
             }) }, 201)
@@ -208,7 +208,7 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
         if (!parsed.success) return c.json({ error: 'Invalid body' }, 400)
         try {
             return c.json({ participant: engine.updateTeamParticipant({
-                namespace: c.get('namespace'),
+                namespace: c.get('organizationId'),
                 teamChatId: c.req.param('id'),
                 participantId: c.req.param('participantId'),
                 ...parsed.data
@@ -222,7 +222,7 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
         const engine = requireSyncEngine(c, getSyncEngine)
         if (engine instanceof Response) return engine
         try {
-            engine.archiveTeamParticipant(c.get('namespace'), c.req.param('id'), c.req.param('participantId'))
+            engine.archiveTeamParticipant(c.get('organizationId'), c.req.param('id'), c.req.param('participantId'))
             return c.json({ ok: true })
         } catch (error) {
             return teamChatErrorResponse(c, error)
@@ -235,7 +235,7 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
         const sessionResult = requireSessionFromParam(c, engine)
         if (sessionResult instanceof Response) return sessionResult
         try {
-            return c.json({ requests: engine.listSessionTeamMentions(c.get('namespace'), sessionResult.sessionId) })
+            return c.json({ requests: engine.listSessionTeamMentions(c.get('organizationId'), sessionResult.sessionId) })
         } catch (error) {
             return teamChatErrorResponse(c, error)
         }
@@ -247,7 +247,7 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
         const sessionResult = requireSessionFromParam(c, engine)
         if (sessionResult instanceof Response) return sessionResult
         try {
-            return c.json({ memberships: engine.listSessionTeamMemberships(c.get('namespace'), sessionResult.sessionId) })
+            return c.json({ memberships: engine.listSessionTeamMemberships(c.get('organizationId'), sessionResult.sessionId) })
         } catch (error) {
             return teamChatErrorResponse(c, error)
         }
@@ -260,7 +260,7 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
         if (sessionResult instanceof Response) return sessionResult
         try {
             const request = engine.updateTeamMentionStatus({
-                namespace: c.get('namespace'),
+                namespace: c.get('organizationId'),
                 sessionId: sessionResult.sessionId,
                 requestId: c.req.param('requestId'),
                 status: 'seen'
@@ -281,7 +281,7 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
         if (!parsed.success) return c.json({ error: 'Invalid body' }, 400)
         try {
             const request = engine.updateTeamMentionStatus({
-                namespace: c.get('namespace'),
+                namespace: c.get('organizationId'),
                 sessionId: sessionResult.sessionId,
                 requestId: c.req.param('requestId'),
                 status: parsed.data.status

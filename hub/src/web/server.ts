@@ -7,9 +7,17 @@ import { serveStatic } from 'hono/bun'
 import { configuration } from '../configuration'
 import { PROTOCOL_VERSION } from '@hapi/protocol'
 import type { SyncEngine } from '../sync/syncEngine'
-import { createAuthMiddleware, type WebAppEnv } from './middleware/auth'
-import { createAuthRoutes } from './routes/auth'
-import { createBindRoutes } from './routes/bind'
+import type { IdentityService } from '../auth/identityService'
+import { createSharedAuthMiddleware } from './middleware/sharedAuth'
+import { createSharedAuthRoutes, type SharedAuthRouteOptions } from './routes/sharedAuth'
+import { createSharedTeamsRoutes } from './routes/sharedTeams'
+import { createSharedMembersRoutes } from './routes/sharedMembers'
+import type { TeamAuthorizationService } from '../application/teamAuthorizationService'
+import type { SharedWebAppEnv } from './sharedAuthEnv'
+import type { RunnerEnrollmentService } from '../application/runnerEnrollmentService'
+import type { RunnerLifecycleService } from '../application/runnerLifecycleService'
+import { createRunnerEnrollmentRoutes, createRunnerExchangeRoutes } from './routes/runnerEnrollments'
+import type { RunnerAuthenticator } from '../auth/runnerAuthenticator'
 import { createEventsRoutes } from './routes/events'
 import { createSessionsRoutes } from './routes/sessions'
 import { createMessagesRoutes } from './routes/messages'
@@ -29,6 +37,22 @@ import type { WebSocketData } from '@socket.io/bun-engine'
 import { loadEmbeddedAssetMap, type EmbeddedWebAsset } from './embeddedAssets'
 import { isBunCompiled } from '../utils/bunCompiled'
 import type { Store } from '../store'
+import type { RestCapabilityResolver } from './routes/guards'
+import { createResourceCapabilityResolver } from '../auth/resourceCapability'
+
+const SENSITIVE_RATE_WINDOW_MS = 60_000
+const SENSITIVE_RATE_LIMIT = 30
+
+export function createRestCapabilityResolver(teamAuthorization: TeamAuthorizationService): RestCapabilityResolver {
+    return createResourceCapabilityResolver(teamAuthorization)
+}
+
+function requestClientKey(request: Request): string {
+    return request.headers.get('cf-connecting-ip')
+        ?? request.headers.get('x-real-ip')
+        ?? request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+        ?? 'unknown'
+}
 
 function findWebappDistDir(): { distDir: string; indexHtmlPath: string } {
     const candidates = [
@@ -56,20 +80,38 @@ function serveEmbeddedAsset(asset: EmbeddedWebAsset): Response {
     })
 }
 
-function createWebApp(options: {
+export function createWebApp(options: {
     getSyncEngine: () => SyncEngine | null
     getSseManager: () => SSEManager | null
     getVisibilityTracker: () => VisibilityTracker | null
     getTerminalLiveCount?: (sessionId: string, namespace: string) => number | undefined
-    jwtSecret: Uint8Array
     store: Store
+    sharedAuth: {
+        routes: SharedAuthRouteOptions
+        identity: Pick<IdentityService, 'validateSession'>
+    }
+    teamAuthorization: TeamAuthorizationService
+    runnerEnrollment?: RunnerEnrollmentService
+    runnerLifecycle?: RunnerLifecycleService
+    runnerAuthenticator?: RunnerAuthenticator
+    onMemberDisabled?: (organizationId: string, membershipId: string) => void
     vapidPublicKey: string
     corsOrigins?: string[]
     embeddedAssetMap: Map<string, EmbeddedWebAsset> | null
     relayMode?: boolean
     officialWebUrl?: string
-}): Hono<WebAppEnv> {
-    const app = new Hono<WebAppEnv>()
+}): Hono<SharedWebAppEnv> {
+    const app = new Hono<SharedWebAppEnv>()
+
+    app.use('*', async (c, next) => {
+        await next()
+        c.header('X-Content-Type-Options', 'nosniff')
+        c.header('X-Frame-Options', 'DENY')
+        c.header('Referrer-Policy', 'no-referrer')
+        c.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+        c.header('Content-Security-Policy', "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'")
+        c.header('Cross-Origin-Resource-Policy', 'same-site')
+    })
 
     app.use('*', logger())
 
@@ -77,31 +119,87 @@ function createWebApp(options: {
     app.get('/health', (c) => c.json({ status: 'ok', protocolVersion: PROTOCOL_VERSION }))
 
     const corsOrigins = options.corsOrigins ?? configuration.corsOrigins
-    const corsOriginOption = corsOrigins.includes('*') ? '*' : corsOrigins
+    if (corsOrigins.includes('*')) {
+        throw new Error('Shared Hub requires an explicit CORS origin allowlist.')
+    }
+    const corsOriginOption = corsOrigins
     const corsMiddleware = cors({
         origin: corsOriginOption,
         allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-        allowHeaders: ['authorization', 'content-type']
+        allowHeaders: ['content-type', 'x-csrf-token'],
+        credentials: true
     })
     app.use('/api/*', corsMiddleware)
     app.use('/cli/*', corsMiddleware)
 
-    app.route('/cli', createCliRoutes(options.getSyncEngine))
+    app.use('/api/*', async (c, next) => {
+        const origin = c.req.header('origin')
+        if (origin && !corsOrigins.includes(origin)) {
+            return c.json({ error: 'origin_not_allowed', code: 'origin_not_allowed' }, 403)
+        }
+        return await next()
+    })
 
-    app.route('/api', createAuthRoutes(options.jwtSecret, options.store))
-    app.route('/api', createBindRoutes(options.jwtSecret, options.store))
+    const sensitiveRequests = new Map<string, { count: number; resetAt: number }>()
+    app.use('/api/*', async (c, next) => {
+        const sensitive = c.req.path === '/api/auth/login'
+            || c.req.path === '/api/auth/invitation'
+            || c.req.path === '/api/auth/callback'
+            || c.req.path === '/api/runner-enrollments/exchange'
+        if (!sensitive) return await next()
+        const now = Date.now()
+        const key = `${requestClientKey(c.req.raw)}:${c.req.path}`
+        if (!sensitiveRequests.has(key) && sensitiveRequests.size >= 10_000) {
+            for (const [candidate, value] of sensitiveRequests) {
+                if (value.resetAt <= now) sensitiveRequests.delete(candidate)
+            }
+            if (sensitiveRequests.size >= 10_000) {
+                return c.json({ error: 'rate_limited', code: 'rate_limited' }, 429)
+            }
+        }
+        const existing = sensitiveRequests.get(key)
+        const entry = !existing || existing.resetAt <= now
+            ? { count: 1, resetAt: now + SENSITIVE_RATE_WINDOW_MS }
+            : { count: existing.count + 1, resetAt: existing.resetAt }
+        sensitiveRequests.set(key, entry)
+        c.header('RateLimit-Limit', String(SENSITIVE_RATE_LIMIT))
+        c.header('RateLimit-Remaining', String(Math.max(0, SENSITIVE_RATE_LIMIT - entry.count)))
+        c.header('RateLimit-Reset', String(Math.ceil(entry.resetAt / 1000)))
+        if (entry.count > SENSITIVE_RATE_LIMIT) {
+            c.header('Retry-After', String(Math.max(1, Math.ceil((entry.resetAt - now) / 1000))))
+            return c.json({ error: 'rate_limited', code: 'rate_limited' }, 429)
+        }
+        return await next()
+    })
 
-    app.use('/api/*', createAuthMiddleware(options.jwtSecret))
-    app.route('/api', createEventsRoutes(options.getSseManager, options.getSyncEngine, options.getVisibilityTracker))
+    app.route('/cli', createCliRoutes(options.getSyncEngine, options.runnerAuthenticator))
+
+    app.route('/api', createSharedAuthRoutes(options.sharedAuth.routes))
+    if (options.runnerEnrollment) app.route('/api', createRunnerExchangeRoutes(options.runnerEnrollment))
+
+    app.use('/api/*', createSharedAuthMiddleware(options.sharedAuth.identity))
+    if (options.runnerEnrollment && options.runnerLifecycle) app.route('/api', createRunnerEnrollmentRoutes(options.runnerEnrollment, options.runnerLifecycle))
+    app.route('/api', createSharedTeamsRoutes(options.teamAuthorization))
+    app.route('/api', createSharedMembersRoutes(options.sharedAuth.routes.identity, options.onMemberDisabled))
+    const resolveRestCapability = createRestCapabilityResolver(options.teamAuthorization)
+    app.route('/api', createEventsRoutes(options.getSseManager, options.getSyncEngine, options.getVisibilityTracker, resolveRestCapability))
     app.route('/api', createSessionsRoutes(options.getSyncEngine, {
-        getTerminalLiveCount: options.getTerminalLiveCount
+        getTerminalLiveCount: options.getTerminalLiveCount,
+        capabilityResolver: resolveRestCapability,
+        getUserCapability: ({ organizationId, membershipId, role, sessionId }) =>
+            options.teamAuthorization.resolveEffectiveCapability({
+                organizationId,
+                membershipId,
+                role,
+                disabled: false
+            }, 'session', sessionId)
     }))
-    app.route('/api', createMessagesRoutes(options.getSyncEngine))
+    app.route('/api', createMessagesRoutes(options.getSyncEngine, resolveRestCapability))
     app.route('/api', createTeamChatsRoutes(options.getSyncEngine))
-    app.route('/api', createPermissionsRoutes(options.getSyncEngine))
-    app.route('/api', createMachinesRoutes(options.getSyncEngine))
-    app.route('/api', createEditorRoutes(options.getSyncEngine))
-    app.route('/api', createGitRoutes(options.getSyncEngine))
+    app.route('/api', createPermissionsRoutes(options.getSyncEngine, resolveRestCapability))
+    app.route('/api', createMachinesRoutes(options.getSyncEngine, resolveRestCapability))
+    app.route('/api', createEditorRoutes(options.getSyncEngine, resolveRestCapability))
+    app.route('/api', createGitRoutes(options.getSyncEngine, resolveRestCapability))
     app.route('/api', createPushRoutes(options.store, options.vapidPublicKey))
     app.route('/api', createVoiceRoutes())
 
@@ -213,8 +311,16 @@ export async function startWebServer(options: {
     getSseManager: () => SSEManager | null
     getVisibilityTracker: () => VisibilityTracker | null
     getTerminalLiveCount?: (sessionId: string, namespace: string) => number | undefined
-    jwtSecret: Uint8Array
     store: Store
+    sharedAuth: {
+        routes: SharedAuthRouteOptions
+        identity: Pick<IdentityService, 'validateSession'>
+    }
+    teamAuthorization: TeamAuthorizationService
+    runnerEnrollment?: RunnerEnrollmentService
+    runnerLifecycle?: RunnerLifecycleService
+    runnerAuthenticator?: RunnerAuthenticator
+    onMemberDisabled?: (organizationId: string, membershipId: string) => void
     vapidPublicKey: string
     socketEngine: SocketEngine
     corsOrigins?: string[]
@@ -228,8 +334,13 @@ export async function startWebServer(options: {
         getSseManager: options.getSseManager,
         getVisibilityTracker: options.getVisibilityTracker,
         getTerminalLiveCount: options.getTerminalLiveCount,
-        jwtSecret: options.jwtSecret,
         store: options.store,
+        sharedAuth: options.sharedAuth,
+        teamAuthorization: options.teamAuthorization,
+        runnerEnrollment: options.runnerEnrollment,
+        runnerLifecycle: options.runnerLifecycle,
+        runnerAuthenticator: options.runnerAuthenticator,
+        onMemberDisabled: options.onMemberDisabled,
         vapidPublicKey: options.vapidPublicKey,
         corsOrigins: options.corsOrigins,
         embeddedAssetMap,

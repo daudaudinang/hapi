@@ -7,13 +7,18 @@ import { apiValidationError } from '@/utils/errorUtils'
 import { ApiMachineClient } from './apiMachine'
 import { ApiSessionClient } from './apiSession'
 import { buildHubRequestHeaders } from './hubExtraHeaders'
+import type { RunnerCredentialEnvelope } from '@hapi/protocol/runner-enrollment'
+
+export type ApiAuthentication={kind:'legacy';token:string}|{kind:'runner';credential:RunnerCredentialEnvelope;machineId:string}
 
 export class ApiClient {
     static async create(): Promise<ApiClient> {
-        return new ApiClient(getAuthToken())
+        return new ApiClient({kind:'legacy',token:getAuthToken()})
     }
+    static createForRunner(credential:RunnerCredentialEnvelope,machineId:string):ApiClient{return new ApiClient({kind:'runner',credential,machineId})}
 
-    private constructor(private readonly token: string) { }
+    private constructor(private readonly authentication:ApiAuthentication) { }
+    private headers():Record<string,string>{return this.authentication.kind==='legacy'?{Authorization:`Bearer ${this.authentication.token}`}:{Authorization:`Runner ${this.authentication.credential.credentialId}.${this.authentication.credential.secret}`,'X-Hapi-Machine-Id':this.authentication.machineId}}
 
     async getOrCreateSession(opts: {
         tag: string
@@ -35,7 +40,7 @@ export class ApiClient {
             },
             {
                 headers: buildHubRequestHeaders({
-                    Authorization: `Bearer ${this.token}`,
+                    ...this.headers(),
                     'Content-Type': 'application/json'
                 }),
                 timeout: 60_000
@@ -98,7 +103,7 @@ export class ApiClient {
             },
             {
                 headers: buildHubRequestHeaders({
-                    Authorization: `Bearer ${this.token}`,
+                    ...this.headers(),
                     'Content-Type': 'application/json'
                 }),
                 timeout: 60_000
@@ -139,10 +144,10 @@ export class ApiClient {
     }
 
     sessionSyncClient(session: Session): ApiSessionClient {
-        return new ApiSessionClient(this.token, session)
+        return new ApiSessionClient(this.authentication, session)
     }
 
     machineSyncClient(machine: Machine, options?: { workspaceRoot?: string }): ApiMachineClient {
-        return new ApiMachineClient(this.token, machine, options?.workspaceRoot)
+        return new ApiMachineClient(this.authentication, machine, options?.workspaceRoot)
     }
 }

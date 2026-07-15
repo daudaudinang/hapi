@@ -19,7 +19,7 @@ interface DifftasticResponse {
 
 export function registerDifftasticHandlers(rpcHandlerManager: RpcHandlerManager, workingDirectory: string): void {
     rpcHandlerManager.registerHandler<DifftasticRequest, DifftasticResponse>('difftastic', async (data) => {
-        logger.debug('Difftastic request with args:', data.args, 'cwd:', data.cwd)
+        logger.debug('Difftastic request received')
 
         if (data.cwd) {
             const validation = validatePath(data.cwd, workingDirectory)

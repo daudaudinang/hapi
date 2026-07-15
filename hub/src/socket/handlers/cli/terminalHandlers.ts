@@ -10,9 +10,10 @@ import {
 import type { StoredMachine, StoredSession } from '../../../store'
 import type { TerminalRegistry } from '../../terminalRegistry'
 import type { TerminalSessionStateStore } from '../../terminalSessionState'
-import type { CliSocketWithData, SocketServer } from '../../socketTypes'
+import type { CliSocketWithData, SocketServer, SocketWithData } from '../../socketTypes'
 import { terminalScopeRoom } from '../../terminalRooms'
 import type { AccessErrorReason, AccessResult } from './types'
+import { capabilitySatisfies, type ResourceCapabilityResolver } from '../../../auth/resourceCapability'
 
 type ResolveSessionAccess = (sessionId: string) => AccessResult<StoredSession>
 type ResolveMachineAccess = (machineId: string) => AccessResult<StoredMachine>
@@ -35,10 +36,11 @@ export type TerminalHandlersDeps = {
     resolveSessionAccess: ResolveSessionAccess
     resolveMachineAccess: ResolveMachineAccess
     emitAccessError: EmitAccessError
+    resolveCapability: ResourceCapabilityResolver
 }
 
 export function registerTerminalHandlers(socket: CliSocketWithData, deps: TerminalHandlersDeps): void {
-    const { terminalRegistry, terminalSessionState, terminalNamespace, resolveSessionAccess, resolveMachineAccess, emitAccessError } = deps
+    const { terminalRegistry, terminalSessionState, terminalNamespace, resolveSessionAccess, resolveMachineAccess, emitAccessError, resolveCapability } = deps
 
     const authorizeTypedScope = (scope: TerminalScopeTyped): string | null => {
         if (scope.scopeType === 'session') {
@@ -56,6 +58,48 @@ export function registerTerminalHandlers(socket: CliSocketWithData, deps: Termin
             return null
         }
         return machineAccess.value.namespace
+    }
+
+    const detachDeniedRecipient = (recipient: SocketWithData, scope: TerminalScopeTyped, room: string): void => {
+        recipient.leave(room)
+        const entries = scope.scopeType === 'session'
+            ? terminalRegistry.entriesForSession(scope.sessionId, socket.data.namespace ?? '')
+            : terminalRegistry.entriesForMachine(scope.machineId, socket.data.namespace ?? '')
+        for (const entry of entries) {
+            if (entry.socketId !== recipient.id) continue
+            terminalRegistry.remove(entry.terminalId)
+            socket.emit('terminal:detach', {
+                ...(entry.sessionId ? { sessionId: entry.sessionId } : { machineId: entry.machineId! }),
+                terminalId: entry.terminalId
+            })
+        }
+    }
+
+    const emitToAuthorizedRecipients = (event: string, payload: unknown, scope: TerminalScopeTyped, namespace: string): Set<string> => {
+        const room = terminalScopeRoom(namespace, scope)
+        const delivered = new Set<string>()
+        const recipients = terminalNamespace.adapter.rooms.get(room) ?? new Set<string>()
+        for (const socketId of recipients) {
+            const recipient = terminalNamespace.sockets.get(socketId)
+            if (!recipient?.data.membershipId || !recipient.data.organizationRole) {
+                recipient?.leave(room)
+                continue
+            }
+            const capability = resolveCapability({
+                organizationId: namespace,
+                membershipId: recipient.data.membershipId,
+                role: recipient.data.organizationRole,
+                resourceType: scope.scopeType,
+                resourceId: scope.scopeType === 'session' ? scope.sessionId : scope.machineId
+            })
+            if (!capabilitySatisfies(capability, 'operate')) {
+                detachDeniedRecipient(recipient, scope, room)
+                continue
+            }
+            recipient.emit(event, payload)
+            delivered.add(recipient.id)
+        }
+        return delivered
     }
 
     const forwardTerminalEvent = (event: string, payload: { sessionId?: string; machineId?: string; terminalId: string } & Record<string, unknown>, removeEntry = false) => {
@@ -85,15 +129,24 @@ export function registerTerminalHandlers(socket: CliSocketWithData, deps: Termin
             terminalRegistry.remove(payload.terminalId)
         }
         const room = terminalScopeRoom(namespace, typedScope)
-        terminalNamespace.to(room).emit(event, payload)
+        const delivered = emitToAuthorizedRecipients(event, payload, typedScope, namespace)
         const terminalSocket = terminalNamespace.sockets.get(entry.socketId)
         if (!terminalSocket) {
             return
         }
-        if (terminalSocket.rooms.has(room)) {
+        if (delivered.has(terminalSocket.id)) {
             return
         }
-        terminalSocket.emit(event, payload)
+        if (!terminalSocket.data.membershipId || !terminalSocket.data.organizationRole) return
+        const capability = resolveCapability({
+            organizationId: namespace,
+            membershipId: terminalSocket.data.membershipId,
+            role: terminalSocket.data.organizationRole,
+            resourceType: typedScope.scopeType,
+            resourceId: typedScope.scopeType === 'session' ? typedScope.sessionId : typedScope.machineId
+        })
+        if (capabilitySatisfies(capability, 'operate')) terminalSocket.emit(event, payload)
+        else detachDeniedRecipient(terminalSocket, typedScope, room)
     }
 
     socket.on('terminal:list', (data: unknown) => {
@@ -109,7 +162,7 @@ export function registerTerminalHandlers(socket: CliSocketWithData, deps: Termin
         const payload = parsed.data.scopeType === 'session'
             ? (terminalSessionState?.getCachedSessionList(parsed.data.sessionId, namespace) ?? parsed.data)
             : parsed.data
-        terminalNamespace.to(terminalScopeRoom(namespace, parsed.data)).emit('terminal:list', payload)
+        emitToAuthorizedRecipients('terminal:list', payload, parsed.data, namespace)
     })
 
     socket.on('terminal:warning', (data: unknown) => {
@@ -121,7 +174,7 @@ export function registerTerminalHandlers(socket: CliSocketWithData, deps: Termin
         if (!namespace) {
             return
         }
-        terminalNamespace.to(terminalScopeRoom(namespace, parsed.data)).emit('terminal:warning', parsed.data)
+        emitToAuthorizedRecipients('terminal:warning', parsed.data, parsed.data, namespace)
     })
 
     socket.on('terminal:ready', (data: unknown) => {
@@ -173,11 +226,26 @@ export function registerTerminalHandlers(socket: CliSocketWithData, deps: Termin
     })
 }
 
-export function cleanupTerminalHandlers(socket: CliSocketWithData, deps: { terminalRegistry: TerminalRegistry; terminalNamespace: SocketNamespace }): void {
+export function cleanupTerminalHandlers(socket: CliSocketWithData, deps: { terminalRegistry: TerminalRegistry; terminalNamespace: SocketNamespace; resolveCapability: ResourceCapabilityResolver }): void {
     const removed = deps.terminalRegistry.removeByCliSocket(socket.id)
     for (const entry of removed) {
         const terminalSocket = deps.terminalNamespace.sockets.get(entry.socketId)
-        terminalSocket?.emit('terminal:error', {
+        if (!terminalSocket?.data.membershipId || !terminalSocket.data.organizationRole) continue
+        const resourceType = entry.sessionId ? 'session' : 'machine'
+        const resourceId = entry.sessionId ?? entry.machineId!
+        if (!capabilitySatisfies(deps.resolveCapability({
+            organizationId: entry.namespace,
+            membershipId: terminalSocket.data.membershipId,
+            role: terminalSocket.data.organizationRole,
+            resourceType,
+            resourceId
+        }), 'operate')) {
+            terminalSocket.leave(terminalScopeRoom(entry.namespace, entry.sessionId
+                ? { scopeType: 'session', sessionId: entry.sessionId }
+                : { scopeType: 'machine', machineId: entry.machineId! }))
+            continue
+        }
+        terminalSocket.emit('terminal:error', {
             ...(entry.sessionId ? { sessionId: entry.sessionId } : { machineId: entry.machineId }),
             terminalId: entry.terminalId,
             message: 'CLI disconnected.'

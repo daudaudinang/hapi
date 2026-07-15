@@ -25,27 +25,46 @@ describe('LoginPrompt', () => {
         Object.defineProperty(window, 'localStorage', { value: localStorageMock, configurable: true })
     })
 
-    it('does not clear first hub URL edit when hub URL required', async () => {
+    it('renders login button and invitation toggle', async () => {
+        const onLogin = vi.fn()
+        const onLoginWithInvitation = vi.fn()
+
         renderWithProviders(
             <LoginPrompt
-                baseUrl="https://app.example.com"
-                serverUrl={null}
-                setServerUrl={vi.fn((value: string) => ({ ok: true as const, value }))}
-                clearServerUrl={vi.fn()}
-                requireServerUrl={true}
-                onLogin={vi.fn()}
+                isLoading={false}
+                error={null}
+                onLogin={onLogin}
+                onLoginWithInvitation={onLoginWithInvitation}
             />
         )
 
-        fireEvent.change(screen.getByPlaceholderText('Access token'), { target: { value: 'token' } })
-        fireEvent.click(screen.getByRole('button', { name: 'Sign In' }))
+        expect(screen.getByText('Sign in with Keycloak')).toBeInTheDocument()
+        expect(screen.getByText('Have an invitation code?')).toBeInTheDocument()
+    })
 
-        const hubInput = await screen.findByPlaceholderText('https://hapi.example.com')
-        expect(screen.getByText('Hub URL required. Please set it before signing in.')).toBeInTheDocument()
+    it('shows loading state', () => {
+        renderWithProviders(
+            <LoginPrompt
+                isLoading={true}
+                error={null}
+                onLogin={vi.fn()}
+                onLoginWithInvitation={vi.fn()}
+            />
+        )
 
-        fireEvent.change(hubInput, { target: { value: 'https://hub.example.com' } })
+        expect(screen.getByText('Signing in...')).toBeInTheDocument()
+    })
 
-        expect(hubInput).toHaveValue('https://hub.example.com')
-        expect(screen.queryByText('Hub URL required. Please set it before signing in.')).not.toBeInTheDocument()
+    it('shows error message', () => {
+        renderWithProviders(
+            <LoginPrompt
+                isLoading={false}
+                error={'Authentication failed'}
+                onLogin={vi.fn()}
+                onLoginWithInvitation={vi.fn()}
+            />
+        )
+
+        expect(screen.getByText('Authentication failed')).toBeInTheDocument()
     })
 })

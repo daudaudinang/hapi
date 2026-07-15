@@ -41,6 +41,7 @@ import { TerminalManager } from '@/terminal/TerminalManager'
 import { applyVersionedAck } from './versionedUpdate'
 import { buildHubRequestHeaders, buildSocketIoExtraHeaderOptions } from './hubExtraHeaders'
 import { z } from 'zod'
+import type { ApiAuthentication } from './api'
 
 /**
  * XML tags that Claude Code injects as `type:'user'` messages.
@@ -85,7 +86,7 @@ export function isExternalUserMessage(body: RawJSONLines): body is Extract<RawJS
 }
 
 export class ApiSessionClient extends EventEmitter {
-    private readonly token: string
+    private readonly auth: ApiAuthentication
     readonly sessionId: string
     private metadata: Metadata | null
     private metadataVersion: number
@@ -103,9 +104,9 @@ export class ApiSessionClient extends EventEmitter {
     private agentStateLock = new AsyncLock()
     private metadataLock = new AsyncLock()
 
-    constructor(token: string, session: Session) {
+    constructor(auth: ApiAuthentication, session: Session) {
         super()
-        this.token = token
+        this.auth = auth
         this.sessionId = session.id
         this.metadata = session.metadata
         this.metadataVersion = session.metadataVersion
@@ -121,12 +122,11 @@ export class ApiSessionClient extends EventEmitter {
             registerCommonHandlers(this.rpcHandlerManager, this.metadata.path)
         }
 
+        const socketAuth = auth.kind === 'runner'
+            ? { kind: 'runner' as const, credential: auth.credential, machineId: auth.machineId, clientType: 'session-scoped' as const, sessionId: this.sessionId }
+            : { token: auth.token, clientType: 'session-scoped' as const, sessionId: this.sessionId }
         this.socket = io(`${configuration.apiUrl}/cli`, {
-            auth: {
-                token: this.token,
-                clientType: 'session-scoped' as const,
-                sessionId: this.sessionId
-            },
+            auth: socketAuth,
             path: '/socket.io/',
             reconnection: true,
             reconnectionAttempts: Infinity,
@@ -305,6 +305,12 @@ export class ApiSessionClient extends EventEmitter {
         this.socket.connect()
     }
 
+    private authHeaders(): Record<string, string> {
+        return this.auth.kind === 'legacy'
+            ? { Authorization: `Bearer ${this.auth.token}` }
+            : { Authorization: `Runner ${this.auth.credential.credentialId}.${this.auth.credential.secret}`, 'X-Hapi-Machine-Id': this.auth.machineId }
+    }
+
     onUserMessage(callback: (data: UserMessage, localId?: string) => void): void {
         this.pendingMessageCallback = callback
         while (this.pendingMessages.length > 0) {
@@ -373,7 +379,7 @@ export class ApiSessionClient extends EventEmitter {
                     {
                         params: { afterSeq: cursor, limit },
                         headers: buildHubRequestHeaders({
-                            Authorization: `Bearer ${this.token}`,
+                            ...this.authHeaders(),
                             'Content-Type': 'application/json'
                         }),
                         timeout: 15_000
@@ -497,7 +503,7 @@ export class ApiSessionClient extends EventEmitter {
             input,
             {
                 headers: buildHubRequestHeaders({
-                    Authorization: `Bearer ${this.token}`,
+                    ...this.authHeaders(),
                     'Content-Type': 'application/json'
                 }),
                 timeout: 15_000
@@ -516,7 +522,7 @@ export class ApiSessionClient extends EventEmitter {
             {},
             {
                 headers: buildHubRequestHeaders({
-                    Authorization: `Bearer ${this.token}`,
+                    ...this.authHeaders(),
                     'Content-Type': 'application/json'
                 }),
                 timeout: 15_000

@@ -34,6 +34,8 @@ import FilesPage from '@/routes/sessions/files'
 import FilePage from '@/routes/sessions/file'
 import TerminalPage from '@/routes/sessions/terminal'
 import SettingsPage from '@/routes/settings'
+import { RunnersPage } from '@/routes/runners'
+import { AdminPage } from '@/routes/admin'
 import DashboardPage from '@/routes/dashboard'
 import EditorPage from '@/routes/editor'
 import TeamChatsPage from '@/routes/team-chats'
@@ -84,6 +86,7 @@ function SessionPage() {
     const { sessionId } = useParams({ from: '/sessions/$sessionId' })
     const {
         session,
+        userCapability,
         refetch: refetchSession,
     } = useSession(api, sessionId)
     const {
@@ -199,6 +202,7 @@ function SessionPage() {
         <SessionChat
             api={api}
             session={session}
+            readOnly={userCapability === 'view'}
             messages={messages}
             messagesWarning={messagesWarning}
             hasMoreMessages={messagesHasMore}
@@ -531,6 +535,18 @@ const settingsRoute = createRoute({
     component: SettingsPage,
 })
 
+const runnersRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/runners',
+    component: RunnersPage,
+})
+
+const adminRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/admin',
+    component: AdminPage,
+})
+
 export type TeamChatsSearch = {
     machine?: string
     project?: string
@@ -575,6 +591,8 @@ export const routeTree = rootRoute.addChildren([
     teamChatsRoute,
     teamChatDetailRoute,
     settingsRoute,
+    runnersRoute,
+    adminRoute,
 ])
 
 type RouterHistory = Parameters<typeof createRouter>[0]['history']

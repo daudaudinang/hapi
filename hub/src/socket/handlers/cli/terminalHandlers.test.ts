@@ -4,12 +4,33 @@ import type { StoredMachine, StoredSession } from '../../../store'
 import type { CliSocketWithData } from '../../socketTypes'
 import { TerminalRegistry } from '../../terminalRegistry'
 import { TerminalSessionStateStore } from '../../terminalSessionState'
-import { registerTerminalHandlers } from './terminalHandlers'
-import { broadcastLostTerminalLists } from './index'
+import { registerTerminalHandlers as registerTerminalHandlersProduction, type TerminalHandlersDeps } from './terminalHandlers'
+import { broadcastLostTerminalLists as broadcastLostTerminalListsProduction } from './index'
 
 type EmittedEvent = {
     event: string
     data: unknown
+}
+
+const allowAllCapabilities = () => 'manage' as const
+
+function registerTerminalHandlers(
+    socket: CliSocketWithData,
+    deps: Omit<TerminalHandlersDeps, 'resolveCapability'> & Partial<Pick<TerminalHandlersDeps, 'resolveCapability'>>
+): void {
+    const namespace = deps.terminalNamespace as unknown as FakeNamespace
+    for (const recipient of namespace.sockets.values()) {
+        recipient.data.membershipId ??= 'test-member'
+        recipient.data.organizationRole ??= 'admin'
+    }
+    registerTerminalHandlersProduction(socket, {
+        ...deps,
+        resolveCapability: deps.resolveCapability ?? allowAllCapabilities
+    })
+}
+
+function broadcastLostTerminalLists(...args: Parameters<typeof broadcastLostTerminalListsProduction> extends [infer A, infer B, unknown] ? [A, B] : never): void {
+    broadcastLostTerminalListsProduction(...args, allowAllCapabilities)
 }
 
 class FakeSocket {
@@ -17,9 +38,10 @@ class FakeSocket {
     readonly data: Record<string, unknown> = {}
     readonly emitted: EmittedEvent[] = []
     readonly rooms = new Set<string>()
+    readonly leftRooms = new Set<string>()
     private readonly handlers = new Map<string, (...args: unknown[]) => void>()
 
-    constructor(id: string) {
+    constructor(id: string, private readonly onEmit?: (event: string, data: unknown) => void) {
         this.id = id
     }
 
@@ -30,7 +52,13 @@ class FakeSocket {
 
     emit(event: string, data: unknown): boolean {
         this.emitted.push({ event, data })
+        this.onEmit?.(event, data)
         return true
+    }
+
+    leave(room: string): void {
+        this.rooms.delete(room)
+        this.leftRooms.add(room)
     }
 
     trigger(event: string, data?: unknown): void {
@@ -49,6 +77,21 @@ class FakeSocket {
 class FakeNamespace {
     readonly sockets = new Map<string, FakeSocket>()
     readonly roomEmits: EmittedEvent[] = []
+    readonly roomMembers = new Map<string, Set<string>>()
+    private activeRoom = ''
+    readonly adapter = { rooms: { get: (room: string) => {
+        this.activeRoom = room
+        return this.roomMembers.get(room) ?? new Set(['authorized-recipient'])
+    } } }
+
+    constructor() {
+        const recipient = new FakeSocket('authorized-recipient', (event, data) => {
+            this.roomEmits.push({ event: `${this.activeRoom}:${event}`, data })
+        })
+        recipient.data.membershipId = 'test-member'
+        recipient.data.organizationRole = 'admin'
+        this.sockets.set(recipient.id, recipient)
+    }
 
     to(room: string): { emit: (event: string, data: unknown) => boolean } {
         return {
@@ -382,6 +425,7 @@ describe('cli terminal handlers', () => {
         const terminalNamespace = new FakeNamespace()
         const terminalRegistry = new TerminalRegistry({ idleTimeoutMs: 0 })
         terminalSocket.rooms.add('terminal:default:session:session-1')
+        terminalNamespace.roomMembers.set('terminal:default:session:session-1', new Set([terminalSocket.id]))
 
         terminalNamespace.sockets.set(terminalSocket.id, terminalSocket)
         terminalRegistry.register({
@@ -408,11 +452,10 @@ describe('cli terminal handlers', () => {
             data: 'hello'
         })
 
-        expect(terminalNamespace.roomEmits).toEqual([{
-            event: 'terminal:default:session:session-1:terminal:output',
-            data: { sessionId: 'session-1', terminalId: 'terminal-1', data: 'hello' }
-        }])
-        expect(lastEmit(terminalSocket, 'terminal:output')).toBeUndefined()
+        expect(terminalNamespace.roomEmits).toEqual([])
+        expect(lastEmit(terminalSocket, 'terminal:output')?.data).toEqual({
+            sessionId: 'session-1', terminalId: 'terminal-1', data: 'hello'
+        })
     })
 
     it('does not emit terminal output room when access is denied', () => {
@@ -666,5 +709,50 @@ describe('cli terminal handlers', () => {
             'terminal:default:machine:machine-1:terminal:error'
         ])
         expect(terminalNamespace.roomEmits.some((entry) => entry.event.startsWith('terminal:default:session:machine-1:'))).toBe(false)
+    })
+
+    it('filters mixed room output live and detaches only the expired recipient', () => {
+        const cliSocket = new FakeSocket('cli-socket')
+        cliSocket.data.namespace = 'default'
+        const affected = new FakeSocket('affected')
+        affected.data.membershipId = 'expired-member'
+        affected.data.organizationRole = 'member'
+        const unrelated = new FakeSocket('unrelated')
+        unrelated.data.membershipId = 'allowed-member'
+        unrelated.data.organizationRole = 'member'
+        const terminalNamespace = new FakeNamespace()
+        terminalNamespace.sockets.set(affected.id, affected)
+        terminalNamespace.sockets.set(unrelated.id, unrelated)
+        const room = 'terminal:default:session:session-1'
+        terminalNamespace.roomMembers.set(room, new Set([affected.id, unrelated.id]))
+        const terminalRegistry = new TerminalRegistry({ idleTimeoutMs: 0 })
+        terminalRegistry.register({
+            terminalId: 'terminal-1', sessionId: 'session-1', namespace: 'default',
+            socketId: affected.id, cliSocketId: cliSocket.id
+        })
+
+        registerTerminalHandlersProduction(cliSocket as unknown as CliSocketWithData, {
+            terminalRegistry,
+            terminalNamespace: terminalNamespace as never,
+            resolveSessionAccess: () => ({ ok: true, value: storedSession() }),
+            resolveMachineAccess: () => ({ ok: true, value: storedMachine() }),
+            emitAccessError: () => { throw new Error('Unexpected access error') },
+            resolveCapability: ({ membershipId }) => membershipId === 'allowed-member' ? 'operate' : null
+        })
+        cliSocket.trigger('terminal:output', {
+            sessionId: 'session-1', terminalId: 'terminal-1', data: 'allowed-only'
+        })
+
+        expect(affected.leftRooms.has(room)).toBe(true)
+        expect(unrelated.leftRooms.has(room)).toBe(false)
+        expect(terminalRegistry.get('terminal-1')).toBeNull()
+        expect(lastEmit(cliSocket, 'terminal:detach')?.data).toEqual({
+            sessionId: 'session-1', terminalId: 'terminal-1'
+        })
+        expect(lastEmit(cliSocket, 'terminal:close')).toBeUndefined()
+        expect(lastEmit(unrelated, 'terminal:output')?.data).toEqual({
+            sessionId: 'session-1', terminalId: 'terminal-1', data: 'allowed-only'
+        })
+        expect(lastEmit(affected, 'terminal:output')).toBeUndefined()
     })
 })

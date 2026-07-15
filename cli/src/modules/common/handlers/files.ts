@@ -30,7 +30,7 @@ interface WriteFileResponse {
 
 export function registerFileHandlers(rpcHandlerManager: RpcHandlerManager, workingDirectory: string): void {
     rpcHandlerManager.registerHandler<ReadFileRequest, ReadFileResponse>('readFile', async (data) => {
-        logger.debug('Read file request:', data.path)
+        logger.debug('Read file request received')
 
         const validation = validatePath(data.path, workingDirectory)
         if (!validation.valid) {
@@ -49,7 +49,7 @@ export function registerFileHandlers(rpcHandlerManager: RpcHandlerManager, worki
     })
 
     rpcHandlerManager.registerHandler<WriteFileRequest, WriteFileResponse>('writeFile', async (data) => {
-        logger.debug('Write file request:', data.path)
+        logger.debug('Write file request received')
 
         const validation = validatePath(data.path, workingDirectory)
         if (!validation.valid) {

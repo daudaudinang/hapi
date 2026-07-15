@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import type { SyncEngine } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
-import { requireSessionFromParam, requireSyncEngine } from './guards'
+import { requireSessionFromParam, requireSyncEngine, type RestCapabilityResolver } from './guards'
 
 const fileSearchSchema = z.object({
     query: z.string().optional(),
@@ -31,7 +31,10 @@ async function runRpc<T>(fn: () => Promise<T>): Promise<T | { success: false; er
     }
 }
 
-export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<WebAppEnv> {
+export function createGitRoutes(
+    getSyncEngine: () => SyncEngine | null,
+    capabilityResolver: RestCapabilityResolver
+): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
     app.get('/sessions/:id/git-status', async (c) => {
@@ -40,7 +43,7 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine)
+        const sessionResult = requireSessionFromParam(c, engine, { capabilityResolver, requiredCapability: 'view' })
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -60,7 +63,7 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine)
+        const sessionResult = requireSessionFromParam(c, engine, { capabilityResolver, requiredCapability: 'view' })
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -81,7 +84,7 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine)
+        const sessionResult = requireSessionFromParam(c, engine, { capabilityResolver, requiredCapability: 'view' })
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -111,7 +114,7 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine)
+        const sessionResult = requireSessionFromParam(c, engine, { capabilityResolver, requiredCapability: 'view' })
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -136,7 +139,7 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine)
+        const sessionResult = requireSessionFromParam(c, engine, { capabilityResolver, requiredCapability: 'view' })
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -190,7 +193,7 @@ export function createGitRoutes(getSyncEngine: () => SyncEngine | null): Hono<We
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine)
+        const sessionResult = requireSessionFromParam(c, engine, { capabilityResolver, requiredCapability: 'view' })
         if (sessionResult instanceof Response) {
             return sessionResult
         }

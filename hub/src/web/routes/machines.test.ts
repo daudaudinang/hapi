@@ -4,6 +4,8 @@ import type { Machine, SyncEngine } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
 import { createMachinesRoutes } from './machines'
 
+const allowAllCapabilities = () => 'manage' as const
+
 function createMachine(overrides?: Partial<Machine>): Machine {
     return {
         id: 'machine-1',
@@ -26,6 +28,48 @@ function createMachine(overrides?: Partial<Machine>): Machine {
 }
 
 describe('machines routes', () => {
+    it('filters ungranted machines and denies spawn before side effects', async () => {
+        const machine = createMachine()
+        let spawns = 0
+        const engine = {
+            getOnlineMachinesByNamespace: () => [machine],
+            getMachine: () => machine,
+            spawnSession: async () => { spawns++; return { type: 'success', sessionId: 's1' } }
+        } as Partial<SyncEngine>
+        const app = new Hono<WebAppEnv>()
+        app.use('*', async (c, next) => {
+            c.set('organizationId', 'default')
+            c.set('membershipId', 'member')
+            c.set('organizationRole', 'member')
+            await next()
+        })
+        app.route('/api', createMachinesRoutes(() => engine as SyncEngine, () => null))
+
+        expect(await (await app.request('/api/machines')).json()).toEqual({ machines: [] })
+        expect((await app.request('/api/machines/machine-1/spawn', {
+            method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"directory":"/repo"}'
+        })).status).toBe(403)
+        expect(spawns).toBe(0)
+    })
+
+    it('does not reveal a cross-organization machine', async () => {
+        const machine = createMachine({ namespace: 'other' })
+        const app = new Hono<WebAppEnv>()
+        app.use('*', async (c, next) => {
+            c.set('organizationId', 'default')
+            c.set('membershipId', 'admin')
+            c.set('organizationRole', 'admin')
+            await next()
+        })
+        app.route('/api', createMachinesRoutes(
+            () => ({ getMachine: () => machine }) as unknown as SyncEngine,
+            allowAllCapabilities
+        ))
+        const response = await app.request('/api/machines/machine-1/codex-models')
+        expect(response.status).toBe(404)
+        expect(await response.json()).toEqual({ error: 'Machine not found' })
+    })
+
     it('returns Codex models for an online machine', async () => {
         const machine = createMachine()
         const engine = {
@@ -42,9 +86,10 @@ describe('machines routes', () => {
         const app = new Hono<WebAppEnv>()
         app.use('*', async (c, next) => {
             c.set('namespace', 'default')
+            c.set('organizationId', 'default')
             await next()
         })
-        app.route('/api', createMachinesRoutes(() => engine as SyncEngine))
+        app.route('/api', createMachinesRoutes(() => engine as SyncEngine, allowAllCapabilities))
 
         const response = await app.request('/api/machines/machine-1/codex-models')
 
@@ -68,9 +113,10 @@ describe('machines routes', () => {
         const app = new Hono<WebAppEnv>()
         app.use('*', async (c, next) => {
             c.set('namespace', 'default')
+            c.set('organizationId', 'default')
             await next()
         })
-        app.route('/api', createMachinesRoutes(() => engine as SyncEngine))
+        app.route('/api', createMachinesRoutes(() => engine as SyncEngine, allowAllCapabilities))
 
         const response = await app.request('/api/machines/machine-1/opencode-models')
 
@@ -102,9 +148,10 @@ describe('machines routes', () => {
         const app = new Hono<WebAppEnv>()
         app.use('*', async (c, next) => {
             c.set('namespace', 'default')
+            c.set('organizationId', 'default')
             await next()
         })
-        app.route('/api', createMachinesRoutes(() => engine as SyncEngine))
+        app.route('/api', createMachinesRoutes(() => engine as SyncEngine, allowAllCapabilities))
 
         const response = await app.request(
             '/api/machines/machine-1/opencode-models?cwd=' + encodeURIComponent('/home/user/proj')
@@ -146,9 +193,10 @@ describe('machines routes', () => {
         const app = new Hono<WebAppEnv>()
         app.use('*', async (c, next) => {
             c.set('namespace', 'default')
+            c.set('organizationId', 'default')
             await next()
         })
-        app.route('/api', createMachinesRoutes(() => engine as SyncEngine))
+        app.route('/api', createMachinesRoutes(() => engine as SyncEngine, allowAllCapabilities))
 
         const response = await app.request('/api/machines/machine-1/spawn', {
             method: 'POST',

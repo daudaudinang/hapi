@@ -6,12 +6,12 @@ import { TrackedSession } from './types';
 import { RunnerState, Metadata } from '@/api/types';
 import { SpawnSessionOptions, SpawnSessionResult } from '@/modules/common/rpcTypes';
 import { logger } from '@/ui/logger';
-import { authAndSetupMachineIfNeeded } from '@/ui/auth';
 import { configuration } from '@/configuration';
 import packageJson from '../../package.json';
 import { getEnvironmentInfo } from '@/ui/doctor';
 import { spawnHappyCLI } from '@/utils/spawnHappyCLI';
-import { writeRunnerState, RunnerLocallyPersistedState, readRunnerState, acquireRunnerLock, releaseRunnerLock } from '@/persistence';
+import { RunnerLocallyPersistedState } from '@/persistence';
+import { acquireRunnerProfileLock,readRunnerProfile,readRunnerProfileState,writeRunnerProfileState } from './profile';
 import { isProcessAlive, isWindows, killProcess, killProcessByChildProcess } from '@/utils/process';
 import { PERMISSION_MODES } from '@hapi/protocol/modes';
 import { withRetry } from '@/utils/time';
@@ -23,9 +23,11 @@ import { createWorktree, removeWorktree, type WorktreeInfo } from './worktree';
 import { join } from 'path';
 import { buildMachineMetadata } from '@/agent/sessionFactory';
 import { resolveWorkspaceRoot } from '@/utils/workspaceRoot';
-import { hashRunnerCliApiToken } from './runnerIdentity';
 
-export async function startRunner(options: { workspaceRoot?: string } = {}): Promise<void> {
+export async function startRunner(options: { workspaceRoot?: string; profile?:string } = {}): Promise<void> {
+  if(!options.profile)throw new Error('Runner profile is required')
+  const enrolled=await readRunnerProfile(process.env.HAPI_PROFILE_BASE_HOME??configuration.happyHomeDir,options.profile)
+  configuration._setApiUrl(enrolled.profile.hubUrl)
   // We don't have cleanup function at the time of server construction
   // Control flow is:
   // 1. Create promise that will resolve when shutdown is requested
@@ -111,11 +113,7 @@ export async function startRunner(options: { workspaceRoot?: string } = {}): Pro
   }
 
   // Acquire exclusive lock (proves runner is running)
-  const runnerLockHandle = await acquireRunnerLock(5, 200);
-  if (!runnerLockHandle) {
-    logger.debug('[RUNNER RUN] Runner lock file already held, another runner is running');
-    process.exit(0);
-  }
+  const releaseProfileLock=await acquireRunnerProfileLock(enrolled.paths)
 
   // At this point we should be safe to startup the runner:
   // 1. Not have a stale runner state
@@ -123,7 +121,7 @@ export async function startRunner(options: { workspaceRoot?: string } = {}): Pro
 
   try {
     // Ensure auth and machine registration BEFORE anything else
-    const { machineId } = await authAndSetupMachineIfNeeded();
+    const machineId=enrolled.profile.machineId
     logger.debug('[RUNNER RUN] Auth and machine setup complete');
 
     // Setup state - key by PID
@@ -698,10 +696,9 @@ export async function startRunner(options: { workspaceRoot?: string } = {}): Pro
       startedWithCliMtimeMs,
       startedWithApiUrl: configuration.apiUrl,
       startedWithMachineId: machineId,
-      startedWithCliApiTokenHash: hashRunnerCliApiToken(configuration.cliApiToken),
       runnerLogPath: logger.logFilePath
     };
-    writeRunnerState(fileState);
+    await writeRunnerProfileState(enrolled.paths,fileState);
     logger.debug('[RUNNER RUN] Runner state written');
 
     // Prepare initial runner state
@@ -713,7 +710,7 @@ export async function startRunner(options: { workspaceRoot?: string } = {}): Pro
     };
 
     // Create API client
-    const api = await ApiClient.create();
+    const api = ApiClient.createForRunner(enrolled.credential.credential,machineId);
 
     const workspaceRoot = resolveWorkspaceRoot(options.workspaceRoot);
     logger.debug(`[RUNNER RUN] Workspace root: ${workspaceRoot ?? '(not set)'}`);
@@ -858,7 +855,7 @@ export async function startRunner(options: { workspaceRoot?: string } = {}): Pro
 
       // Before wrecklessly overriting the runner state file, we should check if we are the ones who own it
       // Race condition is possible, but thats okay for the time being :D
-      const runnerState = await readRunnerState();
+      const runnerState = await readRunnerProfileState<RunnerLocallyPersistedState>(enrolled.paths);
       if (runnerState && runnerState.pid !== process.pid) {
         logger.debug('[RUNNER RUN] Somehow a different runner was started without killing us. We should kill ourselves.')
         requestShutdown('exception', 'A different runner was started without killing us. We should kill ourselves.')
@@ -878,7 +875,7 @@ export async function startRunner(options: { workspaceRoot?: string } = {}): Pro
           lastHeartbeat: new Date().toLocaleString(),
           runnerLogPath: fileState.runnerLogPath
         };
-        writeRunnerState(updatedState);
+        await writeRunnerProfileState(enrolled.paths,updatedState);
         if (process.env.DEBUG) {
           logger.debug(`[RUNNER RUN] Health check completed at ${updatedState.lastHeartbeat}`);
         }
@@ -913,7 +910,7 @@ export async function startRunner(options: { workspaceRoot?: string } = {}): Pro
       apiMachine.shutdown();
       await stopControlServer();
       await cleanupRunnerState();
-      await releaseRunnerLock(runnerLockHandle);
+      await releaseProfileLock();
 
       logger.debug('[RUNNER RUN] Cleanup completed, exiting process');
       process.exit(0);

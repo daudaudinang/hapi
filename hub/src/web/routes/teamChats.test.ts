@@ -9,6 +9,7 @@ function createApp(namespace: string, engine: Record<string, unknown>) {
     const app = new Hono<WebAppEnv>()
     app.use('*', async (c, next) => {
         c.set('namespace', namespace)
+        c.set('organizationId', namespace)
         await next()
     })
     app.route('/api', createTeamChatsRoutes(() => engine as unknown as SyncEngine))

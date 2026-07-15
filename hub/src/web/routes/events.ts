@@ -8,6 +8,7 @@ import type { VisibilityState } from '../../visibility/visibilityTracker'
 import type { VisibilityTracker } from '../../visibility/visibilityTracker'
 import type { WebAppEnv } from '../middleware/auth'
 import { requireSession } from './guards'
+import { capabilitySatisfies, type ResourceCapabilityResolver } from '../../auth/resourceCapability'
 
 function parseOptionalId(value: string | undefined): string | null {
     if (!value) {
@@ -35,7 +36,8 @@ const visibilitySchema = z.object({
 export function createEventsRoutes(
     getSseManager: () => SSEManager | null,
     getSyncEngine: () => SyncEngine | null,
-    getVisibilityTracker: () => VisibilityTracker | null
+    getVisibilityTracker: () => VisibilityTracker | null,
+    capabilityResolver: ResourceCapabilityResolver
 ): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
@@ -51,7 +53,7 @@ export function createEventsRoutes(
         const machineId = parseOptionalId(query.machineId)
         const subscriptionId = randomUUID()
         const visibility = parseVisibility(query.visibility)
-        const namespace = c.get('namespace')
+        const organizationId = c.get('organizationId')
         let resolvedSessionId = sessionId
 
         if (sessionId || machineId) {
@@ -65,14 +67,34 @@ export function createEventsRoutes(
                     return sessionResult
                 }
                 resolvedSessionId = sessionResult.sessionId
+                const capability = capabilityResolver({
+                    organizationId,
+                    membershipId: c.get('membershipId'),
+                    role: c.get('organizationRole'),
+                    resourceType: 'session',
+                    resourceId: resolvedSessionId
+                })
+                if (!capabilitySatisfies(capability, 'view')) {
+                    return c.json({ error: 'Resource access denied', code: 'forbidden' }, 403)
+                }
             }
             if (machineId) {
                 const machine = engine.getMachine(machineId)
                 if (!machine) {
                     return c.json({ error: 'Machine not found' }, 404)
                 }
-                if (machine.namespace !== namespace) {
-                    return c.json({ error: 'Machine access denied' }, 403)
+                if (machine.namespace !== organizationId) {
+                    return c.json({ error: 'Machine not found' }, 404)
+                }
+                const capability = capabilityResolver({
+                    organizationId,
+                    membershipId: c.get('membershipId'),
+                    role: c.get('organizationRole'),
+                    resourceType: 'machine',
+                    resourceId: machineId
+                })
+                if (!capabilitySatisfies(capability, 'view')) {
+                    return c.json({ error: 'Resource access denied', code: 'forbidden' }, 403)
                 }
             }
         }
@@ -80,17 +102,25 @@ export function createEventsRoutes(
         return streamSSE(c, async (stream) => {
             manager.subscribe({
                 id: subscriptionId,
-                namespace,
+                namespace: organizationId,
+                membershipId: c.get('membershipId'),
                 all,
                 sessionId: resolvedSessionId,
                 machineId,
                 visibility,
+                authorize: ({ resourceType, resourceId }) => capabilitySatisfies(capabilityResolver({
+                    organizationId,
+                    membershipId: c.get('membershipId'),
+                    role: c.get('organizationRole'),
+                    resourceType,
+                    resourceId
+                }), 'view'),
                 send: (event) => stream.writeSSE({ data: JSON.stringify(event) }),
                 sendHeartbeat: async () => {
                     await stream.writeSSE({
                         data: JSON.stringify({
                             type: 'heartbeat',
-                            namespace,
+                            namespace: organizationId,
                             data: {
                                 timestamp: Date.now()
                             }
@@ -131,8 +161,8 @@ export function createEventsRoutes(
             return c.json({ error: 'Invalid body' }, 400)
         }
 
-        const namespace = c.get('namespace')
-        const updated = tracker.setVisibility(parsed.data.subscriptionId, namespace, parsed.data.visibility)
+        const organizationId = c.get('organizationId')
+        const updated = tracker.setVisibility(parsed.data.subscriptionId, organizationId, parsed.data.visibility)
         if (!updated) {
             return c.json({ error: 'Subscription not found' }, 404)
         }

@@ -4,6 +4,12 @@ import type { DefaultEventsMap, Server, Socket } from 'socket.io'
 export type SocketData = {
     namespace?: string
     userId?: number
+    principalKind?: 'legacy-session' | 'runner'
+    runnerId?: string
+    machineId?: string
+    organizationId?: string
+    membershipId?: string
+    organizationRole?: 'admin' | 'member' | 'viewer'
 }
 
 export type SocketServer = Server<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, SocketData>

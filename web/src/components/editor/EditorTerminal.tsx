@@ -61,7 +61,7 @@ function EditorTerminalBody(props: {
     compactFontSize?: boolean
     mobileMode?: boolean
 }) {
-    const { token, baseUrl } = useAppContext()
+    const { baseUrl } = useAppContext()
     const sessionId = props.tab.sessionId ?? null
     const machineId = props.tab.machineId ?? null
     const cwd = props.tab.cwd ?? undefined
@@ -87,7 +87,6 @@ function EditorTerminalBody(props: {
         onOutput,
         onExit,
     } = useTerminalSocket({
-        token,
         baseUrl,
         sessionId: sessionId ?? '',
         machineId: machineId ?? '',

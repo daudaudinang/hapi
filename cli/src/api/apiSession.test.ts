@@ -180,7 +180,7 @@ describe('ApiSessionClient.updateMetadata', () => {
         const fakeSocket = makeSocket()
         ioMock.mockReturnValue(fakeSocket)
         const current: Metadata = { path: '/tmp/project', host: 'test-host' }
-        const client = new ApiSessionClient('cli-token', makeSession(current))
+        const client = new ApiSessionClient({ kind: 'legacy' as const, token: 'cli-token' }, makeSession(current))
 
         await new Promise<void>((resolve) => {
             client.updateMetadata((metadata) => {
@@ -221,7 +221,7 @@ describe('ApiSessionClient.updateMetadata', () => {
                 }
             }
         })
-        const client = new ApiSessionClient('cli-token', makeSession({ path: '/tmp/project', host: 'test-host' }))
+        const client = new ApiSessionClient({ kind: 'legacy' as const, token: 'cli-token' }, makeSession({ path: '/tmp/project', host: 'test-host' }))
 
         const result = await client.markTeamMentionNoAction({ requestId: 'req/1' })
 
@@ -244,7 +244,7 @@ describe('ApiSessionClient.updateMetadata', () => {
         const fakeSocket = makeSocket()
         ioMock.mockReturnValue(fakeSocket)
         const closeAllSpy = vi.spyOn(TerminalManager.prototype, 'closeAll')
-        new ApiSessionClient('cli-token', makeSession({ path: '/tmp/project', host: 'test-host' }))
+        new ApiSessionClient({ kind: 'legacy' as const, token: 'cli-token' }, makeSession({ path: '/tmp/project', host: 'test-host' }))
 
         fakeSocket.trigger('disconnect', 'transport close')
 
@@ -255,7 +255,7 @@ describe('ApiSessionClient.updateMetadata', () => {
     it('emits terminal list when hub requests session terminal list', () => {
         const fakeSocket = makeSocket()
         ioMock.mockReturnValue(fakeSocket)
-        new ApiSessionClient('cli-token', makeSession({ path: '/tmp/project', host: 'test-host' }))
+        new ApiSessionClient({ kind: 'legacy' as const, token: 'cli-token' }, makeSession({ path: '/tmp/project', host: 'test-host' }))
 
         fakeSocket.trigger('terminal:list', { scopeType: 'session', sessionId: 'session-1' })
 
@@ -269,7 +269,7 @@ describe('ApiSessionClient.updateMetadata', () => {
     it('handles terminal keepalive without shell input and re-emits updated list', () => {
         const fakeSocket = makeSocket()
         ioMock.mockReturnValue(fakeSocket)
-        new ApiSessionClient('cli-token', makeSession({ path: '/tmp/project', host: 'test-host' }))
+        new ApiSessionClient({ kind: 'legacy' as const, token: 'cli-token' }, makeSession({ path: '/tmp/project', host: 'test-host' }))
 
         fakeSocket.trigger('terminal:keepalive', { scopeType: 'session', sessionId: 'session-1', terminalId: 't1' })
 
@@ -303,7 +303,7 @@ describe('ApiSessionClient.updateMetadata', () => {
         const liveT3 = { ...closedTerminal, terminalId: 't3', label: 'Terminal 3', status: 'detached' as const, closeReason: null }
         const closeSpy = vi.spyOn(TerminalManager.prototype, 'close').mockImplementation(() => {})
         vi.spyOn(TerminalManager.prototype, 'list').mockReturnValue([closedTerminal, liveT2, liveT3])
-        new ApiSessionClient('cli-token', makeSession({ path: '/tmp/project', host: 'test-host' }))
+        new ApiSessionClient({ kind: 'legacy' as const, token: 'cli-token' }, makeSession({ path: '/tmp/project', host: 'test-host' }))
 
         fakeSocket.trigger('terminal:close', { sessionId: 'session-1', terminalId: 't1' })
 
@@ -337,7 +337,7 @@ describe('ApiSessionClient.updateMetadata', () => {
             hardExpiresAt: 3
         }
         vi.spyOn(TerminalManager.prototype, 'list').mockReturnValue([archivedTerminal])
-        new ApiSessionClient('cli-token', makeSession({ path: '/tmp/project', host: 'test-host' }))
+        new ApiSessionClient({ kind: 'legacy' as const, token: 'cli-token' }, makeSession({ path: '/tmp/project', host: 'test-host' }))
 
         fakeSocket.trigger('terminal:close-all', {
             scopeType: 'session',
@@ -357,7 +357,7 @@ describe('ApiSessionClient.updateMetadata', () => {
         const fakeSocket = makeSocket()
         ioMock.mockReturnValue(fakeSocket)
         const closeAllSpy = vi.spyOn(TerminalManager.prototype, 'closeAll').mockImplementation(() => {})
-        new ApiSessionClient('cli-token', makeSession({ path: '/tmp/project', host: 'test-host' }))
+        new ApiSessionClient({ kind: 'legacy' as const, token: 'cli-token' }, makeSession({ path: '/tmp/project', host: 'test-host' }))
 
         for (const payload of [
             { scopeType: 'session', sessionId: 'other-session', reason: 'archive' },
@@ -376,7 +376,7 @@ describe('ApiSessionClient.updateMetadata', () => {
     it('emits terminal:warning when TerminalManager reports a session warning', () => {
         const fakeSocket = makeSocket()
         ioMock.mockReturnValue(fakeSocket)
-        const client = new ApiSessionClient('cli-token', makeSession({ path: '/tmp/project', host: 'test-host' }))
+        const client = new ApiSessionClient({ kind: 'legacy' as const, token: 'cli-token' }, makeSession({ path: '/tmp/project', host: 'test-host' }))
         const payload = {
             scopeType: 'session' as const,
             sessionId: 'session-1',
@@ -415,7 +415,7 @@ describe('ApiSessionClient.updateMetadata', () => {
                 }
             }
         })
-        const client = new ApiSessionClient('cli-token', makeSession({ path: '/tmp/project', host: 'test-host' }))
+        const client = new ApiSessionClient({ kind: 'legacy' as const, token: 'cli-token' }, makeSession({ path: '/tmp/project', host: 'test-host' }))
 
         const result = await client.reportToTeam({
             teamChatId: 'team/1',

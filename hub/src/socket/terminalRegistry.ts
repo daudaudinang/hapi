@@ -160,6 +160,16 @@ export class TerminalRegistry {
             .filter((entry): entry is TerminalRegistryEntry => Boolean(entry && entry.namespace === namespace))
     }
 
+    entriesForMachine(machineId: string, namespace: string): TerminalRegistryEntry[] {
+        const ids = this.terminalsByMachine.get(machineId)
+        if (!ids || ids.size === 0) {
+            return []
+        }
+        return Array.from(ids)
+            .map((terminalId) => this.terminals.get(terminalId))
+            .filter((entry): entry is TerminalRegistryEntry => Boolean(entry && entry.namespace === namespace))
+    }
+
     removeBySession(sessionId: string, namespace: string): TerminalRegistryEntry[] {
         return this.entriesForSession(sessionId, namespace)
             .map((entry) => this.remove(entry.terminalId))

@@ -51,6 +51,7 @@ function getOutlineTitle(session: Session): string {
 export function SessionChat(props: {
     api: ApiClient
     session: Session
+    readOnly?: boolean
     messages: DecryptedMessage[]
     messagesWarning: string | null
     hasMoreMessages: boolean
@@ -82,6 +83,7 @@ export function SessionChat(props: {
     const { t } = useTranslation()
     const navigate = useNavigate()
     const sessionInactive = !props.session.active
+    const readOnly = props.readOnly ?? false
     const terminalSupported = isRemoteTerminalSupported(props.session.metadata)
     const normalizedCacheRef = useRef<Map<string, { source: DecryptedMessage; normalized: NormalizedMessage | null }>>(new Map())
     const blocksByIdRef = useRef<Map<string, ChatBlock>>(new Map())
@@ -456,6 +458,14 @@ export function SessionChat(props: {
             )}
 
 
+            {readOnly && !sessionInactive && (
+                <div className="px-3 pt-3">
+                    <div className="mx-auto w-full max-w-content rounded-md bg-yellow-500/10 border border-yellow-500/20 p-2 text-xs text-yellow-600">
+                        Read-only shared view — you cannot send messages to this session.
+                    </div>
+                </div>
+            )}
+
             {sessionInactive ? (() => {
                 const meta = props.session.metadata
                 const hasResumeToken = !!(
@@ -515,7 +525,7 @@ export function SessionChat(props: {
                         api={props.api}
                         sessionId={props.session.id}
                         metadata={props.session.metadata}
-                        disabled={sessionInactive}
+                        disabled={sessionInactive || readOnly}
                         onRefresh={props.onRefresh}
                         onRetryMessage={props.onRetryMessage}
                         onFlushPending={props.onFlushPending}
@@ -568,7 +578,7 @@ export function SessionChat(props: {
                     <HappyComposer
                         key={`composer-${props.session.id}`}
                         sessionId={props.session.id}
-                        disabled={props.isSending}
+                        disabled={props.isSending || readOnly}
                         permissionMode={props.session.permissionMode}
                         collaborationMode={codexCollaborationModeSupported ? props.session.collaborationMode : undefined}
                         model={props.session.model}
@@ -597,23 +607,23 @@ export function SessionChat(props: {
                         contextWindow={reduced.latestUsage?.contextWindow}
                         controlledByUser={controlledByUser}
                         onCollaborationModeChange={
-                            codexCollaborationModeSupported && !controlledByUser
+                            codexCollaborationModeSupported && !controlledByUser && !readOnly
                                 ? handleCollaborationModeChange
                                 : undefined
                         }
-                        onPermissionModeChange={handlePermissionModeChange}
+                        onPermissionModeChange={readOnly ? undefined : handlePermissionModeChange}
                         onModelChange={
                             agentFlavor === 'codex'
-                                ? (!controlledByUser && !codexModelsError ? handleModelChange : undefined)
-                                : handleModelChange
+                                ? (!controlledByUser && !codexModelsError && !readOnly ? handleModelChange : undefined)
+                                : readOnly ? undefined : handleModelChange
                         }
                         onModelReasoningEffortChange={
-                            (agentFlavor === 'codex' || agentFlavor === 'opencode') && !controlledByUser
+                            (agentFlavor === 'codex' || agentFlavor === 'opencode') && !controlledByUser && !readOnly
                                 ? handleModelReasoningEffortChange
                                 : undefined
                         }
-                        onEffortChange={handleEffortChange}
-                        onSwitchToRemote={handleSwitchToRemote}
+                        onEffortChange={readOnly ? undefined : handleEffortChange}
+                        onSwitchToRemote={readOnly ? undefined : handleSwitchToRemote}
                         onTerminal={props.session.active && terminalSupported ? handleViewTerminal : undefined}
                         terminalUnsupported={props.session.active && !terminalSupported}
                         autocompleteSuggestions={props.autocompleteSuggestions}

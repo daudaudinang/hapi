@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { registerTerminalHandlers } from './terminal'
+import { registerTerminalHandlers as registerTerminalHandlersProduction, type TerminalHandlersDeps } from './terminal'
 import { TerminalRegistry } from '../terminalRegistry'
 import { TerminalSessionStateStore } from '../terminalSessionState'
 import { handleTerminalRegistryIdle, resolveTerminalLimitConfig } from '../server'
@@ -83,6 +83,18 @@ type Harness = {
     terminalRegistry: TerminalRegistry
 }
 
+function registerTerminalHandlers(
+    socket: SocketWithData,
+    deps: Omit<TerminalHandlersDeps, 'capabilityResolver'> & Partial<Pick<TerminalHandlersDeps, 'capabilityResolver'>>
+): void {
+    socket.data.membershipId ??= 'test-member'
+    socket.data.organizationRole ??= 'admin'
+    registerTerminalHandlersProduction(socket, {
+        ...deps,
+        capabilityResolver: deps.capabilityResolver ?? (() => 'manage')
+    })
+}
+
 function createHarness(options?: {
     socketNamespace?: string
     sessionActive?: boolean
@@ -92,6 +104,7 @@ function createHarness(options?: {
     maxTerminalsPerSocket?: number
     maxTerminalsPerSession?: number
     terminalSessionState?: TerminalSessionStateStore
+    capabilityResolver?: TerminalHandlersDeps['capabilityResolver']
 }): Harness {
     const io = new FakeServer()
     const terminalSocket = new FakeSocket('terminal-socket')
@@ -106,7 +119,8 @@ function createHarness(options?: {
         terminalRegistry,
         terminalSessionState: options?.terminalSessionState,
         maxTerminalsPerSocket: options?.maxTerminalsPerSocket ?? 4,
-        maxTerminalsPerSession: options?.maxTerminalsPerSession ?? 3
+        maxTerminalsPerSession: options?.maxTerminalsPerSession ?? 3,
+        capabilityResolver: options?.capabilityResolver
     })
 
     return { io, terminalSocket, cliNamespace, terminalRegistry }
@@ -993,5 +1007,27 @@ describe('terminal socket handlers', () => {
             terminalId: 'terminal-2',
             message: 'Too many terminals open (max 1).'
         })
+    })
+
+    it('rechecks operate before control and detaches without closing after expiry', () => {
+        let capability: 'operate' | 'view' = 'operate'
+        const { terminalSocket, cliNamespace, terminalRegistry } = createHarness({
+            capabilityResolver: () => capability
+        })
+        const cliSocket = new FakeSocket('cli-socket')
+        connectCliSocket(cliNamespace, cliSocket, 'session-1')
+
+        terminalSocket.trigger('terminal:create', {
+            sessionId: 'session-1', terminalId: 'terminal-expiring', cols: 80, rows: 24
+        })
+        capability = 'view'
+        terminalSocket.trigger('terminal:write', { terminalId: 'terminal-expiring', data: 'secret' })
+
+        expect(lastEmit(cliSocket, 'terminal:write')).toBeUndefined()
+        expect(lastEmit(cliSocket, 'terminal:detach')?.data).toEqual({
+            sessionId: 'session-1', terminalId: 'terminal-expiring'
+        })
+        expect(lastEmit(cliSocket, 'terminal:close')).toBeUndefined()
+        expect(terminalRegistry.get('terminal-expiring')).toBeNull()
     })
 })

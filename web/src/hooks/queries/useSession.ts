@@ -5,6 +5,7 @@ import { queryKeys } from '@/lib/query-keys'
 
 export function useSession(api: ApiClient | null, sessionId: string | null): {
     session: Session | null
+    userCapability: 'view' | 'interact' | 'operate' | 'manage'
     isLoading: boolean
     error: string | null
     refetch: () => Promise<unknown>
@@ -23,6 +24,7 @@ export function useSession(api: ApiClient | null, sessionId: string | null): {
 
     return {
         session: query.data?.session ?? null,
+        userCapability: query.data?.userCapability ?? 'interact',
         isLoading: query.isLoading,
         error: query.error instanceof Error ? query.error.message : query.error ? 'Failed to load session' : null,
         refetch: query.refetch,

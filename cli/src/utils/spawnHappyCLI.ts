@@ -115,8 +115,7 @@ export function spawnHappyCLI(args: string[], options: SpawnOptions = {}): Child
   // However, we log it as 'hapi' here because other engineers are typically looking
   // for when "hapi" was started and don't care about the underlying node process
   // details and flags we use to achieve the same result.
-  const fullCommand = `hapi ${args.join(' ')}`;
-  logger.debug(`[SPAWN HAPI CLI] Spawning: ${fullCommand} in ${directory}`);
+  logger.debug('[SPAWN HAPI CLI] Spawning HAPI process');
   
   const { command: spawnCommand, args: spawnArgs } = getHappyCliCommand(args);
 

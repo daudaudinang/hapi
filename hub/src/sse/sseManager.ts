@@ -5,12 +5,19 @@ import type { VisibilityTracker } from '../visibility/visibilityTracker'
 export type SSESubscription = {
     id: string
     namespace: string
+    membershipId: string
     all: boolean
     sessionId: string | null
     machineId: string | null
 }
 
+export type SSEEventResource = {
+    resourceType: 'session' | 'machine'
+    resourceId: string
+}
+
 type SSEConnection = SSESubscription & {
+    authorize: (resource: SSEEventResource) => boolean
     send: (event: SyncEvent) => void | Promise<void>
     sendHeartbeat: () => void | Promise<void>
 }
@@ -29,19 +36,23 @@ export class SSEManager {
     subscribe(options: {
         id: string
         namespace: string
+        membershipId: string
         all?: boolean
         sessionId?: string | null
         machineId?: string | null
         visibility?: VisibilityState
+        authorize: (resource: SSEEventResource) => boolean
         send: (event: SyncEvent) => void | Promise<void>
         sendHeartbeat: () => void | Promise<void>
     }): SSESubscription {
         const subscription: SSEConnection = {
             id: options.id,
             namespace: options.namespace,
+            membershipId: options.membershipId,
             all: Boolean(options.all),
             sessionId: options.sessionId ?? null,
             machineId: options.machineId ?? null,
+            authorize: options.authorize,
             send: options.send,
             sendHeartbeat: options.sendHeartbeat
         }
@@ -56,6 +67,7 @@ export class SSEManager {
         return {
             id: subscription.id,
             namespace: subscription.namespace,
+            membershipId: subscription.membershipId,
             all: subscription.all,
             sessionId: subscription.sessionId,
             machineId: subscription.machineId
@@ -77,6 +89,9 @@ export class SSEManager {
                 continue
             }
             if (!this.visibilityTracker.isVisibleConnection(connection.id)) {
+                continue
+            }
+            if (!this.shouldSend(connection, { ...event, namespace })) {
                 continue
             }
 
@@ -113,6 +128,26 @@ export class SSEManager {
             void Promise.resolve(connection.send(event)).catch(() => {
                 this.unsubscribe(connection.id)
             })
+        }
+    }
+
+    /**
+     * Disconnect all subscriptions for an organization. Used when a member is
+     * disabled or access is revoked so affected SSE streams close immediately.
+     */
+    disconnectOrganization(organizationId: string): void {
+        for (const [id, connection] of this.connections) {
+            if (connection.namespace === organizationId) {
+                this.unsubscribe(id)
+            }
+        }
+    }
+
+    disconnectMembership(organizationId: string, membershipId: string): void {
+        for (const [id, connection] of this.connections) {
+            if (connection.namespace === organizationId && connection.membershipId === membershipId) {
+                this.unsubscribe(id)
+            }
         }
     }
 
@@ -155,12 +190,21 @@ export class SSEManager {
             }
         }
 
-        if (event.type === 'message-received') {
-            return connection.all || connection.sessionId === event.sessionId
-        }
-
         if (event.type === 'connection-changed') {
             return true
+        }
+
+        if (event.type === 'heartbeat') {
+            return true
+        }
+
+        const resource = this.resourceForEvent(event)
+        if (!resource || !connection.authorize(resource)) {
+            return false
+        }
+
+        if (event.type === 'message-received') {
+            return connection.all || connection.sessionId === event.sessionId
         }
 
         if (connection.all) {
@@ -176,5 +220,21 @@ export class SSEManager {
         }
 
         return false
+    }
+
+    private resourceForEvent(event: SyncEvent): SSEEventResource | null {
+        if (event.type === 'toast') {
+            return { resourceType: 'session', resourceId: event.data.sessionId }
+        }
+        if (event.type.startsWith('team-')) {
+            return null
+        }
+        if ('sessionId' in event && typeof event.sessionId === 'string') {
+            return { resourceType: 'session', resourceId: event.sessionId }
+        }
+        if ('machineId' in event && typeof event.machineId === 'string') {
+            return { resourceType: 'machine', resourceId: event.machineId }
+        }
+        return null
     }
 }

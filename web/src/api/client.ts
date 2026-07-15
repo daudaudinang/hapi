@@ -7,7 +7,6 @@ import type {
     EditorGitListBranchesResponse,
     EditorGitStashListResponse,
     EditorProjectsResponse,
-    AuthResponse,
     CodexCollaborationMode,
     DeleteUploadResponse,
     ListDirectoryResponse,
@@ -59,6 +58,11 @@ function parseErrorCode(bodyText: string): string | undefined {
     }
 }
 
+function readCsrfCookie(): string | null {
+    const match = document.cookie.match(/(?:^|;\s*)__Host-hapi_csrf=([^;]*)/)
+    return match ? decodeURIComponent(match[1]) : null
+}
+
 export class ApiError extends Error {
     status: number
     code?: string
@@ -74,16 +78,10 @@ export class ApiError extends Error {
 }
 
 export class ApiClient {
-    private token: string
     private readonly baseUrl: string | null
-    private readonly getToken: (() => string | null) | null
-    private readonly onUnauthorized: (() => Promise<string | null>) | null
 
-    constructor(token: string, options?: ApiClientOptions) {
-        this.token = token
+    constructor(options?: ApiClientOptions) {
         this.baseUrl = options?.baseUrl ?? null
-        this.getToken = options?.getToken ?? null
-        this.onUnauthorized = options?.onUnauthorized ?? null
     }
 
     private buildUrl(path: string): string {
@@ -99,17 +97,14 @@ export class ApiClient {
 
     private async requestBlob(
         path: string,
-        init?: RequestInit,
-        attempt: number = 0,
-        overrideToken?: string | null
+        init?: RequestInit
     ): Promise<Blob> {
         const headers = new Headers(init?.headers)
-        const liveToken = this.getToken ? this.getToken() : null
-        const authToken = overrideToken !== undefined
-            ? (overrideToken ?? (liveToken ?? this.token))
-            : (liveToken ?? this.token)
-        if (authToken) {
-            headers.set('authorization', `Bearer ${authToken}`)
+        const method = init?.method ?? 'GET'
+        const isMutation = method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS'
+        if (isMutation) {
+            const csrfToken = readCsrfCookie()
+            if (csrfToken) headers.set('x-csrf-token', csrfToken)
         }
         if (init?.body !== undefined && !headers.has('content-type')) {
             headers.set('content-type', 'application/json')
@@ -117,18 +112,13 @@ export class ApiClient {
 
         const res = await fetch(this.buildUrl(path), {
             ...init,
-            headers
+            headers,
+            credentials: 'include'
         })
 
         if (res.status === 401) {
-            if (attempt === 0 && this.onUnauthorized) {
-                const refreshed = await this.onUnauthorized()
-                if (refreshed) {
-                    this.token = refreshed
-                    return await this.requestBlob(path, init, attempt + 1, refreshed)
-                }
-            }
-            throw new Error('Session expired. Please sign in again.')
+            window.location.href = (this.baseUrl ?? '') + '/api/auth/login'
+            throw new Error('Session expired.')
         }
 
         if (!res.ok) {
@@ -143,17 +133,14 @@ export class ApiClient {
 
     private async request<T>(
         path: string,
-        init?: RequestInit,
-        attempt: number = 0,
-        overrideToken?: string | null
+        init?: RequestInit
     ): Promise<T> {
         const headers = new Headers(init?.headers)
-        const liveToken = this.getToken ? this.getToken() : null
-        const authToken = overrideToken !== undefined
-            ? (overrideToken ?? (liveToken ?? this.token))
-            : (liveToken ?? this.token)
-        if (authToken) {
-            headers.set('authorization', `Bearer ${authToken}`)
+        const method = init?.method ?? 'GET'
+        const isMutation = method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS'
+        if (isMutation) {
+            const csrfToken = readCsrfCookie()
+            if (csrfToken) headers.set('x-csrf-token', csrfToken)
         }
         if (init?.body !== undefined && !headers.has('content-type')) {
             headers.set('content-type', 'application/json')
@@ -161,18 +148,13 @@ export class ApiClient {
 
         const res = await fetch(this.buildUrl(path), {
             ...init,
-            headers
+            headers,
+            credentials: 'include'
         })
 
         if (res.status === 401) {
-            if (attempt === 0 && this.onUnauthorized) {
-                const refreshed = await this.onUnauthorized()
-                if (refreshed) {
-                    this.token = refreshed
-                    return await this.request<T>(path, init, attempt + 1, refreshed)
-                }
-            }
-            throw new Error('Session expired. Please sign in again.')
+            window.location.href = (this.baseUrl ?? '') + '/api/auth/login'
+            throw new Error('Session expired.')
         }
 
         if (!res.ok) {
@@ -181,40 +163,6 @@ export class ApiClient {
         }
 
         return await res.json() as T
-    }
-
-    async authenticate(auth: { initData: string } | { accessToken: string }): Promise<AuthResponse> {
-        const res = await fetch(this.buildUrl('/api/auth'), {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify(auth)
-        })
-
-        if (!res.ok) {
-            const body = await res.text().catch(() => '')
-            const code = parseErrorCode(body)
-            const detail = body ? `: ${body}` : ''
-            throw new ApiError(`Auth failed: HTTP ${res.status} ${res.statusText}${detail}`, res.status, code, body || undefined)
-        }
-
-        return await res.json() as AuthResponse
-    }
-
-    async bind(auth: { initData: string; accessToken: string }): Promise<AuthResponse> {
-        const res = await fetch(this.buildUrl('/api/bind'), {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify(auth)
-        })
-
-        if (!res.ok) {
-            const body = await res.text().catch(() => '')
-            const code = parseErrorCode(body)
-            const detail = body ? `: ${body}` : ''
-            throw new ApiError(`Bind failed: HTTP ${res.status} ${res.statusText}${detail}`, res.status, code, body || undefined)
-        }
-
-        return await res.json() as AuthResponse
     }
 
     async getSessions(): Promise<SessionsResponse> {
@@ -464,8 +412,7 @@ export class ApiClient {
         const res = await fetch(this.buildUrl(`/api/sessions/${encodeURIComponent(sessionId)}/messages`), {
             method: 'POST',
             headers: {
-                'content-type': 'application/json',
-                'authorization': `Bearer ${(this.getToken ? this.getToken() : null) ?? this.token}`
+                'content-type': 'application/json'
             },
             body: JSON.stringify({
                 text,
@@ -914,5 +861,87 @@ export class ApiClient {
             method: 'POST',
             body: JSON.stringify(options || {})
         })
+    }
+
+    async createEnrollment(ownerMembershipId: string): Promise<{ enrollmentId: string; code: string; expiresAt: number }> {
+        return await this.request('/api/runner-enrollments', {
+            method: 'POST',
+            body: JSON.stringify({ ownerMembershipId })
+        })
+    }
+
+    async listEnrollments(): Promise<{ enrollments: Array<{ id: string; ownerMembershipId: string; expiresAt: number; consumed: boolean; cancelled: boolean; status: string }> }> {
+        return await this.request('/api/runner-enrollments')
+    }
+
+    async cancelEnrollment(enrollmentId: string): Promise<void> {
+        await this.request(`/api/runner-enrollments/${encodeURIComponent(enrollmentId)}`, { method: 'DELETE' })
+    }
+
+    async listRunners(): Promise<{ runners: Array<{ id: string; organizationId: string; ownerMembershipId: string; machineId: string; profile: string; name: string; status: string; createdAt: number }> }> {
+        return await this.request('/api/runners')
+    }
+
+    async revokeRunner(runnerId: string): Promise<{ runnerId: string; revoked: boolean }> {
+        return await this.request(`/api/runners/${encodeURIComponent(runnerId)}/revoke`, { method: 'POST' })
+    }
+
+    async cleanupRunner(runnerId: string): Promise<{ runnerId: string; cleaned: boolean }> {
+        return await this.request(`/api/runners/${encodeURIComponent(runnerId)}/cleanup`, { method: 'POST' })
+    }
+
+    async listMembers(): Promise<{ members: Array<{ membershipId: string; invitedEmail: string; role: string; status: string; identityId: string | null; identityIssuer: string | null; identitySubject: string | null; createdAt: number }> }> {
+        return await this.request('/api/members')
+    }
+
+    async updateMemberRole(membershipId: string, role: string): Promise<void> {
+        await this.request(`/api/members/${encodeURIComponent(membershipId)}/role`, {
+            method: 'PATCH',
+            body: JSON.stringify({ role })
+        })
+    }
+
+    async updateMemberStatus(membershipId: string, status: string): Promise<void> {
+        await this.request(`/api/members/${encodeURIComponent(membershipId)}/status`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status })
+        })
+    }
+
+    async listTeams(): Promise<{ teams: Array<{ id: string; organizationId: string; name: string; archivedAt: number | null }> }> {
+        return await this.request('/api/teams')
+    }
+
+    async createTeam(name: string, ownerMembershipId: string): Promise<{ team: { id: string; name: string } }> {
+        return await this.request('/api/teams', {
+            method: 'POST',
+            body: JSON.stringify({ name, ownerMembershipId })
+        })
+    }
+
+    async createGrant(input: {
+        principalType: 'user' | 'team'
+        principalId: string
+        resourceType: 'runner' | 'session'
+        resourceId: string
+        capability: 'view' | 'interact' | 'spawn' | 'operate' | 'manage'
+        expiresAt: number | null
+    }): Promise<{ id: string; capability: string }> {
+        return await this.request('/api/grants', {
+            method: 'POST',
+            body: JSON.stringify(input)
+        })
+    }
+
+    async revokeGrant(grantId: string): Promise<void> {
+        await this.request(`/api/grants/${encodeURIComponent(grantId)}`, { method: 'DELETE' })
+    }
+
+    async listGrants(): Promise<{ grants: Array<{ id: string; principalType: 'user' | 'team'; principalId: string; resourceType: 'runner' | 'session'; resourceId: string; capability: 'view' | 'interact' | 'spawn' | 'operate' | 'manage'; expiresAt: number | null; createdByMembershipId: string; createdAt: number }> }> {
+        return await this.request('/api/grants')
+    }
+
+    async listAuditEvents(limit = 100): Promise<{ events: Array<{ id: string; actorType: 'user' | 'runner'; actorId: string; action: string; resourceType: string; resourceId: string; outcome: string; createdAt: number }> }> {
+        return await this.request(`/api/audit-events?limit=${encodeURIComponent(String(limit))}`)
     }
 }

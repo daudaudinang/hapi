@@ -6,8 +6,9 @@ import { configuration } from '../../configuration'
 import { constantTimeEquals } from '../../utils/crypto'
 import { parseAccessToken } from '../../utils/accessToken'
 import type { Machine, Session, SyncEngine } from '../../sync/syncEngine'
+import type { RunnerAuthenticator } from '../../auth/runnerAuthenticator'
 
-const bearerSchema = z.string().regex(/^Bearer\s+(.+)$/i)
+const bearerSchema = z.string().regex(/^(Bearer|Runner)\s+(.+)$/i)
 
 const createOrLoadSessionSchema = z.object({
     tag: z.string().min(1),
@@ -32,6 +33,7 @@ const getMessagesQuerySchema = z.object({
 type CliEnv = {
     Variables: {
         namespace: string
+        authenticatedMachineId?: string
     }
 }
 
@@ -66,7 +68,7 @@ function resolveMachineForNamespace(
     return { ok: false, status: 404, error: 'Machine not found' }
 }
 
-export function createCliRoutes(getSyncEngine: () => SyncEngine | null): Hono<CliEnv> {
+export function createCliRoutes(getSyncEngine: () => SyncEngine | null, runnerAuthenticator?: RunnerAuthenticator): Hono<CliEnv> {
     const app = new Hono<CliEnv>()
 
     app.use('*', async (c, next) => {
@@ -82,7 +84,11 @@ export function createCliRoutes(getSyncEngine: () => SyncEngine | null): Hono<Cl
             return c.json({ error: 'Invalid Authorization header' }, 401)
         }
 
-        const token = parsed.data.replace(/^Bearer\s+/i, '')
+        const authorization=parsed.data
+        const runnerMatch=/^Runner\s+([^.\s]+)\.([^\s]+)$/i.exec(authorization)
+        const machineRoute=c.req.path==='/machines'||c.req.path.startsWith('/machines/')
+        if(machineRoute){const machineId=c.req.header('x-hapi-machine-id');const runner=runnerMatch&&runnerAuthenticator?runnerAuthenticator.authenticateAny({credentialId:runnerMatch[1],secret:runnerMatch[2]}):null;if(!runner)return c.json({error:'Invalid Runner credential'},401);if(!machineId||machineId!==runner.machineId)return c.json({error:'Machine binding mismatch'},403);c.set('namespace',runner.organizationId);c.set('authenticatedMachineId',runner.machineId);return await next()}
+        const token = authorization.replace(/^Bearer\s+/i, '')
         const parsedToken = parseAccessToken(token)
         if (!parsedToken || !constantTimeEquals(parsedToken.baseToken, configuration.cliApiToken)) {
             return c.json({ error: 'Invalid token' }, 401)
@@ -102,7 +108,6 @@ export function createCliRoutes(getSyncEngine: () => SyncEngine | null): Hono<Cl
         if (!parsed.success) {
             return c.json({ error: 'Invalid body' }, 400)
         }
-
         const namespace = c.get('namespace')
         const session = engine.getOrCreateSession(
             parsed.data.tag,
@@ -169,7 +174,6 @@ export function createCliRoutes(getSyncEngine: () => SyncEngine | null): Hono<Cl
         if (!parsed.success) {
             return c.json({ error: 'Invalid body' }, 400)
         }
-
         try {
             return c.json(engine.reportToTeam({
                 namespace,
@@ -230,6 +234,7 @@ export function createCliRoutes(getSyncEngine: () => SyncEngine | null): Hono<Cl
         if (!parsed.success) {
             return c.json({ error: 'Invalid body' }, 400)
         }
+        if(parsed.data.id!==c.get('authenticatedMachineId'))return c.json({error:'Machine binding mismatch'},403)
 
         const namespace = c.get('namespace')
         const existing = engine.getMachine(parsed.data.id)
@@ -246,6 +251,7 @@ export function createCliRoutes(getSyncEngine: () => SyncEngine | null): Hono<Cl
             return c.json({ error: 'Not ready' }, 503)
         }
         const machineId = c.req.param('id')
+        if(machineId!==c.get('authenticatedMachineId'))return c.json({error:'Machine binding mismatch'},403)
         const namespace = c.get('namespace')
         const resolved = resolveMachineForNamespace(engine, machineId, namespace)
         if (!resolved.ok) {

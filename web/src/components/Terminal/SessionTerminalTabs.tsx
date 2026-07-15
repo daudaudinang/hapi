@@ -77,9 +77,9 @@ function appendBounded(current: string, next: string): string {
 }
 
 export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
-    const { token, baseUrl } = useAppContext()
+    const { baseUrl } = useAppContext()
     const { t } = useTranslation()
-    const controller = useSessionTerminalSocket({ token, baseUrl, sessionId: props.sessionId })
+    const controller = useSessionTerminalSocket({ baseUrl, sessionId: props.sessionId })
     const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null)
     const [pendingCloseTerminalId, setPendingCloseTerminalId] = useState<string | null>(null)
     const [createError, setCreateError] = useState<string | null>(null)

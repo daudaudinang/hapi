@@ -11,6 +11,7 @@ import type { TerminalRegistry, TerminalRegistryEntry } from '../terminalRegistr
 import type { TerminalSessionStateStore } from '../terminalSessionState'
 import type { SocketServer, SocketWithData } from '../socketTypes'
 import { terminalScopeRoom } from '../terminalRooms'
+import { capabilitySatisfies, type ResourceCapabilityResolver } from '../../auth/resourceCapability'
 
 const terminalCreateSchema = TerminalOpenPayloadSchema
 
@@ -40,10 +41,11 @@ export type TerminalHandlersDeps = {
     terminalSessionState?: TerminalSessionStateStore
     maxTerminalsPerSocket: number
     maxTerminalsPerSession: number
+    capabilityResolver: ResourceCapabilityResolver
 }
 
 export function registerTerminalHandlers(socket: SocketWithData, deps: TerminalHandlersDeps): void {
-    const { io, getSession, getMachine, terminalRegistry, terminalSessionState, maxTerminalsPerSocket, maxTerminalsPerSession } = deps
+    const { io, getSession, getMachine, terminalRegistry, terminalSessionState, maxTerminalsPerSocket, maxTerminalsPerSession, capabilityResolver } = deps
     const cliNamespace = io.of('/cli')
     const namespace = typeof socket.data.namespace === 'string' ? socket.data.namespace : null
 
@@ -52,15 +54,23 @@ export function registerTerminalHandlers(socket: SocketWithData, deps: TerminalH
     }
 
     const authorizeScope = (scope: TerminalScopeTyped): boolean => {
-        if (!namespace) {
+        if (!namespace || !socket.data.membershipId || !socket.data.organizationRole) {
             return false
         }
         if (scope.scopeType === 'session') {
             const session = getSession(scope.sessionId)
-            return Boolean(session && session.active && session.namespace === namespace)
+            if (!session || !session.active || session.namespace !== namespace) return false
+        } else {
+            const machine = getMachine(scope.machineId)
+            if (!machine || !machine.active || machine.namespace !== namespace) return false
         }
-        const machine = getMachine(scope.machineId)
-        return Boolean(machine && machine.active && machine.namespace === namespace)
+        return capabilitySatisfies(capabilityResolver({
+            organizationId: namespace,
+            membershipId: socket.data.membershipId,
+            role: socket.data.organizationRole,
+            resourceType: scope.scopeType,
+            resourceId: scope.scopeType === 'session' ? scope.sessionId : scope.machineId
+        }), 'operate')
     }
 
     const legacyScopeFromTyped = (scope: TerminalScopeTyped): { sessionId: string } | { machineId: string } => {
@@ -84,16 +94,18 @@ export function registerTerminalHandlers(socket: SocketWithData, deps: TerminalH
         if (!entry) {
             return null
         }
-        if (entry.socketId === socket.id) {
-            return entry
-        }
-        if (!entry.sessionId || entry.namespace !== namespace) {
+        if (entry.namespace !== namespace) {
             return null
         }
-        const scope: TerminalScopeTyped = { scopeType: 'session', sessionId: entry.sessionId }
+        const scope: TerminalScopeTyped = entry.sessionId
+            ? { scopeType: 'session', sessionId: entry.sessionId }
+            : { scopeType: 'machine', machineId: entry.machineId! }
         if (!authorizeScope(scope)) {
+            detachEntry(entry, scope)
             return null
         }
+        if (entry.socketId === socket.id) return entry
+        if (!entry.sessionId) return null
         const room = roomForScope(scope)
         if (!room || !socket.rooms.has(room)) {
             return null
@@ -139,6 +151,25 @@ export function registerTerminalHandlers(socket: SocketWithData, deps: TerminalH
         cliSocket.emit('terminal:detach', { ...scope, terminalId: entry.terminalId })
     }
 
+    const detachEntry = (entry: TerminalRegistryEntry, scope: TerminalScopeTyped): void => {
+        const room = roomForScope(scope)
+        if (room) socket.leave(room)
+        if (entry.socketId !== socket.id) return
+        terminalRegistry.remove(entry.terminalId)
+        emitDetachToCli(entry)
+    }
+
+    const denyScope = (scope: TerminalScopeTyped): void => {
+        const room = roomForScope(scope)
+        if (room) socket.leave(room)
+        const entries = scope.scopeType === 'session'
+            ? terminalRegistry.entriesForSession(scope.sessionId, namespace ?? '')
+            : terminalRegistry.entriesForMachine(scope.machineId, namespace ?? '')
+        for (const entry of entries) {
+            if (entry.socketId === socket.id) detachEntry(entry, scope)
+        }
+    }
+
     const pickCliSocketId = (scope: { sessionId: string } | { machineId: string }): string | null => {
         const roomId = 'sessionId' in scope ? `session:${scope.sessionId}` : `machine:${scope.machineId}`
         const room = cliNamespace.adapter.rooms.get(roomId)
@@ -168,6 +199,7 @@ export function registerTerminalHandlers(socket: SocketWithData, deps: TerminalH
 
     const forwardToCli = (event: 'terminal:list' | 'terminal:keepalive', payload: TerminalListRequest | TerminalKeepalivePayload): boolean => {
         if (!authorizeScope(payload)) {
+            denyScope(payload)
             return false
         }
         const cliSocketId = pickCliSocketId(legacyScopeFromTyped(payload))
@@ -188,6 +220,7 @@ export function registerTerminalHandlers(socket: SocketWithData, deps: TerminalH
             return
         }
         if (!authorizeScope(parsed.data)) {
+            denyScope(parsed.data)
             return
         }
         const room = roomForScope(parsed.data)
@@ -214,6 +247,10 @@ export function registerTerminalHandlers(socket: SocketWithData, deps: TerminalH
     socket.on('terminal:list', (data: unknown) => {
         const parsed = TerminalListRequestSchema.safeParse(data)
         if (!parsed.success) {
+            return
+        }
+        if (!authorizeScope(parsed.data)) {
+            denyScope(parsed.data)
             return
         }
         const forwarded = forwardToCli('terminal:list', parsed.data)
@@ -254,16 +291,21 @@ export function registerTerminalHandlers(socket: SocketWithData, deps: TerminalH
 
         if (sessionId) {
             const session = getSession(sessionId)
-            if (!namespace || !session || session.namespace !== namespace || !session.active) {
+            if (!session || !session.active || session.namespace !== namespace) {
                 emitTerminalError(terminalId, 'Session is inactive or unavailable.')
                 return
             }
-        } else if (machineId) {
-            const machine = getMachine(machineId)
-            if (!namespace || !machine || machine.namespace !== namespace || !machine.active) {
+        } else {
+            const machine = getMachine(machineId!)
+            if (!machine || !machine.active || machine.namespace !== namespace) {
                 emitTerminalError(terminalId, 'Machine is inactive or unavailable.')
                 return
             }
+        }
+        if (!authorizeScope(typedScope)) {
+            denyScope(typedScope)
+            emitTerminalError(terminalId, 'Terminal access denied.')
+            return
         }
 
         const existingEntry = terminalRegistry.get(terminalId)
@@ -381,6 +423,7 @@ export function registerTerminalHandlers(socket: SocketWithData, deps: TerminalH
         const { terminalId } = parsed.data
         if ('scopeType' in parsed.data) {
             if (!authorizeScope(parsed.data)) {
+                denyScope(parsed.data)
                 return
             }
             const scope = legacyScopeFromTyped(parsed.data)
@@ -410,6 +453,14 @@ export function registerTerminalHandlers(socket: SocketWithData, deps: TerminalH
 
         const entry = resolveEntryForSocket(terminalId)
         if (!entry) {
+            return
+        }
+
+        const scope: TerminalScopeTyped = entry.sessionId
+            ? { scopeType: 'session', sessionId: entry.sessionId }
+            : { scopeType: 'machine', machineId: entry.machineId! }
+        if (!authorizeScope(scope)) {
+            detachEntry(entry, scope)
             return
         }
 

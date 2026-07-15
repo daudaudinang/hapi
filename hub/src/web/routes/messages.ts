@@ -3,7 +3,7 @@ import { AttachmentMetadataSchema } from '@hapi/protocol/schemas'
 import { z } from 'zod'
 import type { SyncEngine } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
-import { requireSessionFromParam, requireSyncEngine } from './guards'
+import { requireCapability, requireSessionFromParam, requireSyncEngine, type RestCapabilityResolver } from './guards'
 
 const querySchema = z.object({
     limit: z.coerce.number().int().min(1).max(200).optional(),
@@ -18,7 +18,10 @@ const sendMessageBodySchema = z.object({
     attachments: z.array(AttachmentMetadataSchema).optional()
 })
 
-export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null): Hono<WebAppEnv> {
+export function createMessagesRoutes(
+    getSyncEngine: () => SyncEngine | null,
+    capabilityResolver: RestCapabilityResolver
+): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
     app.get('/sessions/:id/messages', async (c) => {
@@ -27,7 +30,7 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null): Ho
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine)
+        const sessionResult = requireSessionFromParam(c, engine, { capabilityResolver, requiredCapability: 'view' })
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -58,7 +61,7 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null): Ho
         }
 
         // Allow inactive sessions — auto-resume will handle them
-        const sessionResult = requireSessionFromParam(c, engine)
+        const sessionResult = requireSessionFromParam(c, engine, { capabilityResolver, requiredCapability: 'interact' })
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -78,7 +81,9 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null): Ho
 
         // Auto-resume: if session is inactive, trigger resume and return 202
         if (!session.active) {
-            const namespace = c.get('namespace')
+            const spawnCapability = requireCapability(c, capabilityResolver, 'session', sessionId, 'spawn')
+            if (spawnCapability instanceof Response) return spawnCapability
+            const organizationId = c.get('organizationId')
             const canResume = engine.canAutoResume(sessionId)
 
             if (!canResume) {
@@ -89,7 +94,7 @@ export function createMessagesRoutes(getSyncEngine: () => SyncEngine | null): Ho
             }
 
             // Fire-and-forget: trigger resume in background
-            engine.triggerAutoResume(sessionId, namespace).catch(() => {
+            engine.triggerAutoResume(sessionId, organizationId).catch(() => {
                 // Resume errors are logged inside triggerAutoResume
             })
 

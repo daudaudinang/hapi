@@ -53,6 +53,7 @@ function createSession(overrides?: Partial<Session>): Session {
 function createApp(session: Session, opts?: {
     resumeSession?: (sessionId: string, namespace: string, resumeOpts?: { permissionMode?: string }) => Promise<{ type: string; sessionId?: string; message?: string; code?: string }>
     getTerminalLiveCount?: (sessionId: string, namespace: string) => number | undefined
+    getUserCapability?: () => 'view' | 'interact' | 'spawn' | 'operate' | 'manage' | null
 }) {
     const applySessionConfigCalls: Array<[string, Record<string, unknown>]> = []
     const applySessionConfig = async (sessionId: string, config: Record<string, unknown>) => {
@@ -95,16 +96,30 @@ function createApp(session: Session, opts?: {
     const app = new Hono<WebAppEnv>()
     app.use('*', async (c, next) => {
         c.set('namespace', session.namespace)
+        c.set('organizationId', session.namespace)
+        c.set('membershipId', 'member-1')
+        c.set('organizationRole', 'member')
         await next()
     })
     app.route('/api', createSessionsRoutes(() => engine as SyncEngine, {
-        getTerminalLiveCount: opts?.getTerminalLiveCount
+        capabilityResolver: () => opts?.getUserCapability ? opts.getUserCapability() : 'manage',
+        getTerminalLiveCount: opts?.getTerminalLiveCount,
+        getUserCapability: opts?.getUserCapability ?? (() => 'interact')
     }))
 
     return { app, applySessionConfigCalls, cacheCodexModelsForSessionCalls, cacheOpencodeModelsForSessionCalls }
 }
 
 describe('sessions routes', () => {
+    it('filters ungranted collections and rejects read-only bulk control', async () => {
+        const session = createSession()
+        const denied = createApp(session, { getUserCapability: () => null })
+        const readOnly = createApp(session, { getUserCapability: () => 'view' })
+
+        expect(await (await denied.app.request('/api/sessions')).json()).toEqual({ sessions: [] })
+        expect((await readOnly.app.request('/api/sessions/archive-all', { method: 'POST' })).status).toBe(403)
+    })
+
     it('includes known namespace-scoped live terminal count in session summaries', async () => {
         const session = createSession({ namespace: 'ns-a' })
         const { app } = createApp(session, {
@@ -124,6 +139,16 @@ describe('sessions routes', () => {
                 }
             ]
         })
+    })
+
+    it('returns the server-resolved effective capability and denies missing access', async () => {
+        const allowed = createApp(createSession(), { getUserCapability: () => 'view' })
+        const allowedResponse = await allowed.app.request('/api/sessions/session-1')
+        expect(allowedResponse.status).toBe(200)
+        expect(await allowedResponse.json()).toMatchObject({ userCapability: 'view' })
+
+        const denied = createApp(createSession(), { getUserCapability: () => null })
+        expect((await denied.app.request('/api/sessions/session-1')).status).toBe(403)
     })
 
     it('omits terminal count when live terminal count is unknown', async () => {

@@ -19,7 +19,7 @@ interface RipgrepResponse {
 
 export function registerRipgrepHandlers(rpcHandlerManager: RpcHandlerManager, workingDirectory: string): void {
     rpcHandlerManager.registerHandler<RipgrepRequest, RipgrepResponse>('ripgrep', async (data) => {
-        logger.debug('Ripgrep request with args:', data.args, 'cwd:', data.cwd)
+        logger.debug('Ripgrep request received')
 
         if (data.cwd) {
             const validation = validatePath(data.cwd, workingDirectory)

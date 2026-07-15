@@ -1,0 +1,12 @@
+import { afterEach,describe,expect,it } from 'vitest'
+import { mkdtemp,readFile,stat,symlink } from 'node:fs/promises'
+import { rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { acquireRunnerProfileLock,createRunnerProfile,readRunnerProfile,resolveRunnerProfilePaths,writeRunnerProfileState } from './profile'
+const roots:string[]=[]
+afterEach(async()=>{await Promise.all(roots.splice(0).map(r=>rm(r,{recursive:true,force:true})))})
+async function home(){const p=await mkdtemp(join(tmpdir(),'hapi-profile-'));roots.push(p);return p}
+const profile={version:1 as const,profile:'work',hubUrl:'https://hub.test',organizationId:'o1',runnerId:'r1',machineId:'m1'}
+const credential={version:1 as const,credential:{credentialId:'c1',secret:'x'.repeat(32)},generation:1}
+describe('Runner profile',()=>{it('writes isolated 0700/0600 files and refuses overwrite',async()=>{const h=await home(),paths=await createRunnerProfile(h,profile,credential);expect((await stat(paths.root)).mode&0o777).toBe(0o700);expect((await stat(paths.credentialFile)).mode&0o777).toBe(0o600);expect((await readRunnerProfile(h,'work')).credential).toEqual(credential);await expect(createRunnerProfile(h,profile,credential)).rejects.toThrow('profile_exists')});it('keeps the credential secret out of profile and daemon state',async()=>{const h=await home(),paths=await createRunnerProfile(h,profile,credential);await writeRunnerProfileState(paths,{pid:123,httpPort:456,startedAt:1,startedWithCliVersion:'test',runnerLogPath:join(paths.logsDir,'runner.log')});expect(await readFile(paths.credentialFile,'utf8')).toContain(credential.credential.secret);expect(await readFile(paths.profileFile,'utf8')).not.toContain(credential.credential.secret);expect(await readFile(paths.stateFile,'utf8')).not.toContain(credential.credential.secret)});it('rejects traversal, symlinks and lock contention',async()=>{const h=await home();expect(()=>resolveRunnerProfilePaths(h,'../bad')).toThrow();const paths=resolveRunnerProfilePaths(h,'work');await symlink(h,paths.root).catch(async()=>{await import('node:fs/promises').then(({mkdir})=>mkdir(join(h,'profiles'),{recursive:true}));await symlink(h,paths.root)});await expect(readRunnerProfile(h,'work')).rejects.toThrow('unsafe_profile');await rm(paths.root);await createRunnerProfile(h,profile,credential);const release=await acquireRunnerProfileLock(paths);await expect(acquireRunnerProfileLock(paths)).rejects.toThrow('profile_locked');await release()})})

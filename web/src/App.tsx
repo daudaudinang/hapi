@@ -4,7 +4,6 @@ import { useQueryClient } from '@tanstack/react-query'
 import { getTelegramWebApp, isTelegramApp } from '@/hooks/useTelegram'
 import { initializeTheme } from '@/hooks/useTheme'
 import { useAuth } from '@/hooks/useAuth'
-import { useAuthSource } from '@/hooks/useAuthSource'
 import { useServerUrl } from '@/hooks/useServerUrl'
 import { useSSE } from '@/hooks/useSSE'
 import { useSyncingState } from '@/hooks/useSyncingState'
@@ -21,6 +20,7 @@ import { ActiveChatSessionProvider } from '@/lib/active-chat-session'
 import { requireHubUrlForLogin } from '@/lib/runtime-config'
 import { LoginPrompt } from '@/components/LoginPrompt'
 import { InstallPrompt } from '@/components/InstallPrompt'
+import { NavBar } from '@/components/NavBar'
 import { OfflineBanner } from '@/components/OfflineBanner'
 import { SyncingBanner } from '@/components/SyncingBanner'
 import { ReconnectingBanner } from '@/components/ReconnectingBanner'
@@ -46,8 +46,7 @@ export function App() {
 function AppInner() {
     const { t } = useTranslation()
     const { serverUrl, baseUrl, setServerUrl, clearServerUrl } = useServerUrl()
-    const { authSource, isLoading: isAuthSourceLoading, setAccessToken } = useAuthSource(baseUrl)
-    const { token, api, isLoading: isAuthLoading, error: authError, needsBinding, bind } = useAuth(authSource, baseUrl)
+    const { session, api, isLoading: isAuthLoading, error: authError, login, loginWithInvitation, logout } = useAuth(baseUrl)
     const goBack = useAppGoBack()
     const pathname = useLocation({ select: (location) => location.pathname })
     const matchRoute = useMatchRoute()
@@ -145,7 +144,7 @@ function AppInner() {
 
     // Clean up URL params after successful auth (for direct access links)
     useEffect(() => {
-        if (!token || !api) return
+        if (!session || !api) return
         const { pathname, search, hash, state } = router.history.location
         const searchParams = new URLSearchParams(search)
         if (!searchParams.has('server') && !searchParams.has('hub') && !searchParams.has('token')) {
@@ -157,10 +156,10 @@ function AppInner() {
         const nextSearch = searchParams.toString()
         const nextHref = `${pathname}${nextSearch ? `?${nextSearch}` : ''}${hash}`
         router.history.replace(nextHref, state)
-    }, [token, api, router])
+    }, [session, api, router])
 
     useEffect(() => {
-        if (!api || !token) {
+        if (!api || !session) {
             pushPromptedRef.current = false
             return
         }
@@ -186,7 +185,7 @@ function AppInner() {
         }
 
         void run()
-    }, [api, isPushSupported, pushPermission, requestPermission, subscribe, token])
+    }, [api, isPushSupported, pushPermission, requestPermission, subscribe, session])
 
     const handleSseConnect = useCallback(() => {
         // Clear disconnected state on successful connection
@@ -281,8 +280,7 @@ function AppInner() {
     }, [selectedSessionId])
 
     const { subscriptionId } = useSSE({
-        enabled: Boolean(api && token),
-        token: token ?? '',
+        enabled: Boolean(api && session),
         baseUrl,
         subscription: eventSubscription,
         onConnect: handleSseConnect,
@@ -294,11 +292,11 @@ function AppInner() {
     useVisibilityReporter({
         api,
         subscriptionId,
-        enabled: Boolean(api && token)
+        enabled: Boolean(api && session)
     })
 
-    // Loading auth source
-    if (isAuthSourceLoading) {
+    // Loading auth
+    if (isAuthLoading) {
         return (
             <div className="h-full flex items-center justify-center p-4">
                 <LoadingState label={t('loading')} className="text-sm" />
@@ -306,77 +304,32 @@ function AppInner() {
         )
     }
 
-    // No auth source (browser environment, not logged in)
-    if (!authSource) {
+    // Not authenticated — show login
+    if (!session) {
         return (
             <LoginPrompt
-                onLogin={setAccessToken}
-                baseUrl={baseUrl}
-                serverUrl={serverUrl}
-                setServerUrl={setServerUrl}
-                clearServerUrl={clearServerUrl}
-                requireServerUrl={REQUIRE_SERVER_URL}
+                isLoading={isAuthLoading}
+                error={authError}
+                onLogin={login}
+                onLoginWithInvitation={loginWithInvitation}
             />
         )
     }
 
-    if (needsBinding) {
+    // Auth error — show login with error
+    if (authError) {
         return (
             <LoginPrompt
-                mode="bind"
-                onBind={bind}
-                baseUrl={baseUrl}
-                serverUrl={serverUrl}
-                setServerUrl={setServerUrl}
-                clearServerUrl={clearServerUrl}
-                requireServerUrl={REQUIRE_SERVER_URL}
-                error={authError ?? undefined}
+                isLoading={isAuthLoading}
+                error={authError}
+                onLogin={login}
+                onLoginWithInvitation={loginWithInvitation}
             />
-        )
-    }
-
-    // Authenticating (also covers the gap before useAuth effect starts)
-    if (isAuthLoading || (authSource && !token && !authError)) {
-        return (
-            <div className="h-full flex items-center justify-center p-4">
-                <LoadingState label={t('authorizing')} className="text-sm" />
-            </div>
-        )
-    }
-
-    // Auth error
-    if (authError || !token || !api) {
-        // If using access token and auth failed, show login again
-        if (authSource.type === 'accessToken') {
-            return (
-                <LoginPrompt
-                    onLogin={setAccessToken}
-                    baseUrl={baseUrl}
-                    serverUrl={serverUrl}
-                    setServerUrl={setServerUrl}
-                    clearServerUrl={clearServerUrl}
-                    requireServerUrl={REQUIRE_SERVER_URL}
-                    error={authError ?? t('login.error.authFailed')}
-                />
-            )
-        }
-
-        // Telegram auth failed
-        return (
-            <div className="p-4 space-y-3">
-                <div className="text-base font-semibold">{t('login.title')}</div>
-                <div className="text-sm text-red-600">
-                    {authError ?? t('login.error.authFailed')}
-                </div>
-                <div className="text-xs text-[var(--app-hint)]">
-                    Open this page from Telegram using the bot's "Open App" button (not "Open in browser").
-                </div>
-            </div>
         )
     }
 
     return (
-        <AppContextProvider value={{ api, token, baseUrl }}>
+        <AppContextProvider value={{ api: api!, baseUrl, role: session?.role ?? 'member' }}>
             <ActiveChatSessionProvider value={{ setActiveEditorSessionId, setActiveOverlaySessionId }}>
                 <VoiceProvider>
                     <SyncingBanner isSyncing={isSyncing} />
@@ -387,6 +340,7 @@ function AppInner() {
                     <VoiceErrorBanner />
                     <OfflineBanner />
                     <div className="h-full min-h-0 flex flex-col">
+                        <NavBar session={session!} />
                         <Outlet />
                     </div>
                     <GlobalModalManager />

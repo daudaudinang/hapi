@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getTelegramWebApp, isTelegramEnvironment } from './useTelegram'
-import type { AuthSource } from './useAuth'
+
+type AuthSource =
+    | { type: 'telegram'; initData: string }
+    | { type: 'accessToken'; token: string }
 
 const ACCESS_TOKEN_PREFIX = 'hapi_access_token::'
 

@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import type { SyncEngine } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
-import { requireMachine } from './guards'
+import { requireMachine, requireCapability, type RestCapabilityResolver } from './guards'
 
 const spawnBodySchema = z.object({
     directory: z.string().min(1),
@@ -20,7 +20,10 @@ const pathsExistsSchema = z.object({
     paths: z.array(z.string().min(1)).max(1000)
 })
 
-export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null): Hono<WebAppEnv> {
+export function createMachinesRoutes(
+    getSyncEngine: () => SyncEngine | null,
+    capabilityResolver: RestCapabilityResolver
+): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
     app.get('/machines', (c) => {
@@ -29,8 +32,9 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null): Ho
             return c.json({ error: 'Not connected' }, 503)
         }
 
-        const namespace = c.get('namespace')
-        const machines = engine.getOnlineMachinesByNamespace(namespace)
+        const organizationId = c.get('organizationId')
+        const machines = engine.getOnlineMachinesByNamespace(organizationId).filter((machine) =>
+            !(requireCapability(c, capabilityResolver, 'machine', machine.id, 'view') instanceof Response))
         return c.json({ machines })
     })
 
@@ -41,7 +45,7 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null): Ho
         }
 
         const machineId = c.req.param('id')
-        const machine = requireMachine(c, engine, machineId)
+        const machine = requireMachine(c, engine, machineId, { capabilityResolver, requiredCapability: 'spawn' })
         if (machine instanceof Response) {
             return machine
         }
@@ -74,7 +78,7 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null): Ho
         }
 
         const machineId = c.req.param('id')
-        const machine = requireMachine(c, engine, machineId)
+        const machine = requireMachine(c, engine, machineId, { capabilityResolver, requiredCapability: 'view' })
         if (machine instanceof Response) {
             return machine
         }
@@ -100,7 +104,7 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null): Ho
         }
 
         const machineId = c.req.param('id')
-        const machine = requireMachine(c, engine, machineId)
+        const machine = requireMachine(c, engine, machineId, { capabilityResolver, requiredCapability: 'view' })
         if (machine instanceof Response) {
             return machine
         }
@@ -131,7 +135,7 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null): Ho
         }
 
         const machineId = c.req.param('id')
-        const machine = requireMachine(c, engine, machineId)
+        const machine = requireMachine(c, engine, machineId, { capabilityResolver, requiredCapability: 'view' })
         if (machine instanceof Response) {
             return machine
         }
@@ -154,7 +158,7 @@ export function createMachinesRoutes(getSyncEngine: () => SyncEngine | null): Ho
         }
 
         const machineId = c.req.param('id')
-        const machine = requireMachine(c, engine, machineId)
+        const machine = requireMachine(c, engine, machineId, { capabilityResolver, requiredCapability: 'view' })
         if (machine instanceof Response) {
             return machine
         }

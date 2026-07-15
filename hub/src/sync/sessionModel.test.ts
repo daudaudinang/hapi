@@ -727,7 +727,8 @@ describe('session model', () => {
                 getMachine: () => null,
                 terminalRegistry,
                 maxTerminalsPerSocket: 4,
-                maxTerminalsPerSession: 3
+                maxTerminalsPerSession: 3,
+                capabilityResolver: () => 'manage'
             })
             ;(engine as any).rpcGateway.killSession = () => pendingKill
 

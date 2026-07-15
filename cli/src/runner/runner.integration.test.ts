@@ -15,24 +15,16 @@
  * - CLI_API_TOKEN=... (must match the hub)
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll } from 'vitest';
 import { execSync, spawn } from 'child_process';
 import { existsSync, unlinkSync, readFileSync, writeFileSync, readdirSync } from 'fs';
 import path, { join } from 'path';
 import { configuration } from '@/configuration';
-import { 
-  listRunnerSessions, 
-  stopRunnerSession, 
-  spawnRunnerSession, 
-  stopRunnerHttp, 
-  notifyRunnerSessionStarted, 
-  stopRunner
-} from '@/runner/controlClient';
-import { readRunnerState, clearRunnerState } from '@/persistence';
+import type { RunnerLocallyPersistedState } from '@/persistence';
 import { Metadata } from '@/api/types';
 import { spawnHappyCLI } from '@/utils/spawnHappyCLI';
-import { getLatestRunnerLog } from '@/ui/logger';
 import { isProcessAlive, isWindows, killProcess, killProcessByChildProcess } from '@/utils/process';
+import { createRunnerProfile, readRunnerProfileState, resolveRunnerProfilePaths } from './profile';
 
 // Utility to wait for condition
 async function waitFor(
@@ -51,14 +43,17 @@ async function waitFor(
 // Check if dev hub is running and properly configured
 async function isServerHealthy(): Promise<boolean> {
   try {
-    if (!configuration.cliApiToken) {
-      console.log('[TEST] Missing CLI_API_TOKEN (required for direct-connect integration tests)');
+    if (!process.env.HAPI_TEST_RUNNER_MACHINE_ID || !process.env.HAPI_TEST_RUNNER_CREDENTIAL_ID || !process.env.HAPI_TEST_RUNNER_CREDENTIAL_SECRET) {
+      console.log('[TEST] Missing isolated enrolled Runner integration profile fixture');
       return false;
     }
 
     const url = `${configuration.apiUrl}/cli/machines/__healthcheck__`;
     const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${configuration.cliApiToken}` },
+      headers: {
+        Authorization: `Runner ${process.env.HAPI_TEST_RUNNER_CREDENTIAL_ID}.${process.env.HAPI_TEST_RUNNER_CREDENTIAL_SECRET}`,
+        'X-Hapi-Machine-Id': process.env.HAPI_TEST_RUNNER_MACHINE_ID
+      },
       signal: AbortSignal.timeout(1000)
     });
 
@@ -80,6 +75,48 @@ async function isServerHealthy(): Promise<boolean> {
 
 describe.skipIf(!await isServerHealthy())('Runner Integration Tests', { timeout: 20_000 }, () => {
   let runnerPid: number;
+  const profile = `integration-${process.pid}`;
+  const profilePaths = resolveRunnerProfilePaths(configuration.happyHomeDir, profile);
+
+  const readRunnerState = () => readRunnerProfileState<RunnerLocallyPersistedState>(profilePaths);
+  async function runnerPost(route: string, body: unknown = {}): Promise<any> {
+    const current = await readRunnerState();
+    if (!current?.httpPort) throw new Error('Runner is not running');
+    const response = await fetch(`http://127.0.0.1:${current.httpPort}${route}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    if (!response.ok) throw new Error(`Runner control request failed: ${response.status}`);
+    return response.json();
+  }
+  const listRunnerSessions = async () => (await runnerPost('/list')).children;
+  const stopRunnerSession = async (sessionId: string) => Boolean((await runnerPost('/stop-session', { sessionId })).success);
+  const spawnRunnerSession = async (directory: string, approvedNewDirectoryCreation?: string) => runnerPost('/spawn-session', { directory, approvedNewDirectoryCreation });
+  const stopRunnerHttp = async () => { await runnerPost('/stop'); };
+  const notifyRunnerSessionStarted = async (sessionId: string, metadata: Metadata) => { await runnerPost('/session-started', { sessionId, metadata }); };
+  const clearRunnerState = async () => { await import('node:fs/promises').then(({ rm }) => rm(profilePaths.stateFile, { force: true })); };
+  const stopRunner = async () => {
+    const current = await readRunnerState();
+    if (!current) return;
+    await runnerPost('/stop').catch(() => killProcess(current.pid, true));
+    await waitFor(async () => !isProcessAlive(current.pid), 5_000).catch(() => {});
+  };
+
+  beforeAll(async () => {
+    await createRunnerProfile(configuration.happyHomeDir, {
+      version: 1,
+      profile,
+      hubUrl: configuration.apiUrl,
+      organizationId: process.env.HAPI_TEST_RUNNER_ORGANIZATION_ID ?? 'integration-test',
+      runnerId: process.env.HAPI_TEST_RUNNER_ID ?? 'integration-test',
+      machineId: process.env.HAPI_TEST_RUNNER_MACHINE_ID!
+    }, {
+      version: 1,
+      credential: { credentialId: process.env.HAPI_TEST_RUNNER_CREDENTIAL_ID!, secret: process.env.HAPI_TEST_RUNNER_CREDENTIAL_SECRET! },
+      generation: Number(process.env.HAPI_TEST_RUNNER_CREDENTIAL_GENERATION ?? 1)
+    });
+  });
+
+  afterAll(async () => {
+    await import('node:fs/promises').then(({ rm }) => rm(profilePaths.root, { recursive: true, force: true }));
+  });
 
   beforeEach(async () => {
     // First ensure no runner is running by checking PID in metadata file
@@ -87,7 +124,7 @@ describe.skipIf(!await isServerHealthy())('Runner Integration Tests', { timeout:
     
     // Start fresh runner for this test
     // This will return and start a background process - we don't need to wait for it
-    void spawnHappyCLI(['runner', 'start'], {
+    void spawnHappyCLI(['runner', 'start', '--profile', profile], {
       stdio: 'ignore'
     });
     
@@ -189,7 +226,7 @@ describe.skipIf(!await isServerHealthy())('Runner Integration Tests', { timeout:
     await stopRunnerHttp();
 
     // Verify metadata file is cleaned up
-    await waitFor(async () => !existsSync(configuration.runnerStateFile), 1000);
+    await waitFor(async () => !existsSync(profilePaths.stateFile), 1000);
   });
 
   it('should track both runner-spawned and terminal sessions', async () => {
@@ -200,7 +237,8 @@ describe.skipIf(!await isServerHealthy())('Runner Integration Tests', { timeout:
     ], {
       cwd: '/tmp',
       detached: true,
-      stdio: 'ignore'
+      stdio: 'ignore',
+      env: { ...process.env, HAPI_HOME: profilePaths.root }
     });
     if (!terminalHappyProcess || !terminalHappyProcess.pid) {
       throw new Error('Failed to spawn terminal hapi process');
@@ -257,7 +295,7 @@ describe.skipIf(!await isServerHealthy())('Runner Integration Tests', { timeout:
   it('should not allow starting a second runner', async () => {
     // Runner is already running from beforeEach
     // Try to start another runner
-    const secondChild = spawn('bun', ['src/index.ts', 'runner', 'start-sync'], {
+    const secondChild = spawn('bun', ['src/index.ts', 'runner', 'start-sync', '--profile', profile], {
       cwd: process.cwd(),
       env: process.env,
       stdio: ['ignore', 'pipe', 'pipe']
@@ -319,7 +357,7 @@ describe.skipIf(!await isServerHealthy())('Runner Integration Tests', { timeout:
 
   it('should die with logs when SIGKILL is sent', async () => {
     // SIGKILL test - runner should die immediately
-    const logsDir = configuration.logsDir;
+    const logsDir = profilePaths.logsDir;
     const { readdirSync } = await import('fs');
     
     // Get initial log files
@@ -348,10 +386,11 @@ describe.skipIf(!await isServerHealthy())('Runner Integration Tests', { timeout:
 
   it('should die with cleanup logs when a graceful shutdown is requested', async () => {
     // Graceful shutdown test - runner should cleanup gracefully
-    const logFile = await getLatestRunnerLog();
-    if (!logFile) {
+    const logName = readdirSync(profilePaths.logsDir).sort().at(-1);
+    if (!logName) {
       throw new Error('No log file found');
     }
+    const logFile = join(profilePaths.logsDir, logName);
     
     if (isWindows()) {
       // Windows taskkill does not deliver SIGTERM/SIGBREAK to Node handlers.
@@ -369,7 +408,7 @@ describe.skipIf(!await isServerHealthy())('Runner Integration Tests', { timeout:
     expect(isDead).toBe(true);
     
     // Read the log file to check for cleanup messages
-    const logContent = readFileSync(logFile.path, 'utf8');
+    const logContent = readFileSync(logFile, 'utf8');
     
     // Should contain cleanup messages
     if (!isWindows()) {

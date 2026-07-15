@@ -11,6 +11,7 @@ import { registerRpcHandlers } from './rpcHandlers'
 import { registerSessionHandlers } from './sessionHandlers'
 import { cleanupTerminalHandlers, registerTerminalHandlers } from './terminalHandlers'
 import { terminalScopeRoom } from '../../terminalRooms'
+import type { ResourceCapabilityResolver } from '../../../auth/resourceCapability'
 
 type SessionAlivePayload = {
     sid: string
@@ -48,23 +49,43 @@ export type CliHandlersDeps = {
     onSessionActivity?: (sessionId: string, updatedAt: number) => void
     onSessionCrashed?: (sessionId: string, error?: string) => void
     onAgentTextMessage?: (input: { namespace: string; sessionId: string; text: string; requestId?: string | null }) => void
+    resolveCapability: ResourceCapabilityResolver
 }
 
 type SocketNamespace = ReturnType<SocketServer['of']>
 
 export function broadcastLostTerminalLists(
     terminalNamespace: SocketNamespace,
-    lostLists: LostSessionTerminalList[]
+    lostLists: LostSessionTerminalList[],
+    resolveCapability: ResourceCapabilityResolver
 ): void {
     for (const lostList of lostLists) {
-        terminalNamespace
-            .to(terminalScopeRoom(lostList.namespace, lostList.payload))
-            .emit('terminal:list', lostList.payload)
+        const room = terminalScopeRoom(lostList.namespace, lostList.payload)
+        const recipients = terminalNamespace.adapter.rooms.get(room) ?? new Set<string>()
+        for (const socketId of recipients) {
+            const recipient = terminalNamespace.sockets.get(socketId)
+            if (!recipient?.data.membershipId || !recipient.data.organizationRole) {
+                recipient?.leave(room)
+                continue
+            }
+            const capability = resolveCapability({
+                organizationId: lostList.namespace,
+                membershipId: recipient.data.membershipId,
+                role: recipient.data.organizationRole,
+                resourceType: 'session',
+                resourceId: lostList.payload.sessionId
+            })
+            if (capability !== 'operate' && capability !== 'manage') {
+                recipient.leave(room)
+                continue
+            }
+            recipient.emit('terminal:list', lostList.payload)
+        }
     }
 }
 
 export function registerCliHandlers(socket: CliSocketWithData, deps: CliHandlersDeps): void {
-    const { io, store, rpcRegistry, terminalRegistry, terminalSessionState, onSessionAlive, onSessionEnd, onMachineAlive, onWebappEvent, onBackgroundTaskDelta, onSessionActivity, onSessionCrashed, onAgentTextMessage } = deps
+    const { io, store, rpcRegistry, terminalRegistry, terminalSessionState, onSessionAlive, onSessionEnd, onMachineAlive, onWebappEvent, onBackgroundTaskDelta, onSessionActivity, onSessionCrashed, onAgentTextMessage, resolveCapability } = deps
     const terminalNamespace = io.of('/terminal')
     const namespace = typeof socket.data.namespace === 'string' ? socket.data.namespace : null
 
@@ -116,6 +137,19 @@ export function registerCliHandlers(socket: CliSocketWithData, deps: CliHandlers
         socket.emit('error', { message, code: reason, scope, id })
     }
 
+    if (socket.data.principalKind === 'runner') {
+        registerMachineHandlers(socket, {
+            store,
+            resolveMachineAccess: (id) => id === socket.data.machineId
+                ? resolveMachineAccess(id)
+                : { ok: false, reason: 'access-denied' },
+            emitAccessError,
+            onMachineAlive,
+            onWebappEvent
+        })
+        return
+    }
+
     registerRpcHandlers(socket, rpcRegistry)
     registerSessionHandlers(socket, {
         store,
@@ -129,20 +163,14 @@ export function registerCliHandlers(socket: CliSocketWithData, deps: CliHandlers
         onSessionCrashed,
         onAgentTextMessage
     })
-    registerMachineHandlers(socket, {
-        store,
-        resolveMachineAccess,
-        emitAccessError,
-        onMachineAlive,
-        onWebappEvent
-    })
     registerTerminalHandlers(socket, {
         terminalRegistry,
         terminalSessionState,
         terminalNamespace,
         resolveSessionAccess,
         resolveMachineAccess,
-        emitAccessError
+        emitAccessError,
+        resolveCapability
     })
 
     socket.on('ping', (callback: () => void) => {
@@ -156,7 +184,7 @@ export function registerCliHandlers(socket: CliSocketWithData, deps: CliHandlers
             Date.now(),
             namespace && sessionId ? { namespace, sessionId } : null
         ) ?? []
-        broadcastLostTerminalLists(terminalNamespace, lostLists)
-        cleanupTerminalHandlers(socket, { terminalRegistry, terminalNamespace })
+        broadcastLostTerminalLists(terminalNamespace, lostLists, resolveCapability)
+        cleanupTerminalHandlers(socket, { terminalRegistry, terminalNamespace, resolveCapability })
     })
 }

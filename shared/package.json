@@ -8,6 +8,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./messages": "./src/messages.ts",
+    "./auth": "./src/auth.ts",
+    "./runner-enrollment": "./src/runnerEnrollment.ts",
     "./modes": "./src/modes.ts",
     "./schemas": "./src/schemas.ts",
     "./types": "./src/types.ts",

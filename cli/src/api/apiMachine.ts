@@ -3,6 +3,7 @@
  */
 
 import { io, type Socket } from 'socket.io-client'
+import type { ApiAuthentication } from './api'
 import { readdir, realpath, stat } from 'node:fs/promises'
 import { realpathSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join, relative, resolve as resolvePath } from 'node:path'
@@ -117,7 +118,7 @@ export class ApiMachineClient {
     private readonly normalizedWorkspaceRoot: string | undefined
 
     constructor(
-        private readonly token: string,
+        private readonly authentication: ApiAuthentication | string,
         private readonly machine: Machine,
         private readonly workspaceRoot?: string
     ) {
@@ -432,11 +433,7 @@ export class ApiMachineClient {
     connect(): void {
         this.socket = io(`${configuration.apiUrl}/cli`, {
             transports: ['websocket'],
-            auth: {
-                token: this.token,
-                clientType: 'machine-scoped' as const,
-                machineId: this.machine.id
-            },
+            auth: typeof this.authentication==='string'?{token:this.authentication,clientType:'machine-scoped' as const,machineId:this.machine.id}:this.authentication.kind==='runner'?{kind:'runner' as const,credential:this.authentication.credential,machineId:this.authentication.machineId}:{token:this.authentication.token,clientType:'machine-scoped' as const,machineId:this.machine.id},
             path: '/socket.io/',
             reconnection: true,
             reconnectionDelay: 1000,

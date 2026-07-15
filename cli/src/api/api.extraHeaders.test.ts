@@ -119,7 +119,7 @@ describe('API extra headers integration', () => {
         }
         ioMock.mockReturnValue(fakeSocket)
 
-        new ApiSessionClient('cli-token', {
+        new ApiSessionClient({ kind: 'legacy' as const, token: 'cli-token' }, {
             id: 'session-1',
             namespace: 'default',
             seq: 1,

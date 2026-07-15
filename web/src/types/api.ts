@@ -83,7 +83,7 @@ export type AuthResponse = {
 }
 
 export type SessionsResponse = { sessions: SessionSummary[] }
-export type SessionResponse = { session: Session }
+export type SessionResponse = { session: Session; userCapability?: 'view' | 'interact' | 'operate' | 'manage' }
 export type MessagesResponse = {
     messages: DecryptedMessage[]
     page: {

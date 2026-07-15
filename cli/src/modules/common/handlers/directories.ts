@@ -44,7 +44,7 @@ interface GetDirectoryTreeResponse {
 
 export function registerDirectoryHandlers(rpcHandlerManager: RpcHandlerManager, workingDirectory: string): void {
     rpcHandlerManager.registerHandler<ListDirectoryRequest, ListDirectoryResponse>('listDirectory', async (data) => {
-        logger.debug('List directory request:', data.path)
+        logger.debug('List directory request received')
 
         const targetPath = data.path || '.'
 
@@ -78,7 +78,7 @@ export function registerDirectoryHandlers(rpcHandlerManager: RpcHandlerManager, 
                             size = stats.size
                             modified = stats.mtime.getTime()
                         } catch (error) {
-                            logger.debug(`Failed to stat ${fullPath}:`, error)
+                            logger.debug('Failed to stat directory entry:', error)
                         }
                     }
 
@@ -105,7 +105,7 @@ export function registerDirectoryHandlers(rpcHandlerManager: RpcHandlerManager, 
     })
 
     rpcHandlerManager.registerHandler<GetDirectoryTreeRequest, GetDirectoryTreeResponse>('getDirectoryTree', async (data) => {
-        logger.debug('Get directory tree request:', data.path, 'maxDepth:', data.maxDepth)
+        logger.debug('Get directory tree request received; maxDepth:', data.maxDepth)
 
         const targetPath = data.path || '.'
 
@@ -135,7 +135,7 @@ export function registerDirectoryHandlers(rpcHandlerManager: RpcHandlerManager, 
                     await Promise.all(
                         entries.map(async (entry) => {
                             if (entry.isSymbolicLink()) {
-                                logger.debug(`Skipping symlink: ${join(path, entry.name)}`)
+                                logger.debug('Skipping symlink in directory tree')
                                 return
                             }
 
@@ -158,7 +158,7 @@ export function registerDirectoryHandlers(rpcHandlerManager: RpcHandlerManager, 
 
                 return node
             } catch (error) {
-                logger.debug(`Failed to process ${path}:`, error instanceof Error ? error.message : String(error))
+                logger.debug('Failed to process directory tree entry:', error instanceof Error ? error.message : String(error))
                 return null
             }
         }

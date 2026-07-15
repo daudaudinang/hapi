@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import type { SyncEngine, ReadEditorFileRawResult } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
+import { requireMachine, type RestCapabilityResolver } from './guards'
 
 const directoryBodySchema = z.object({
     machineId: z.string().min(1),
@@ -42,8 +43,32 @@ const gitBranchBodySchema = gitRepoBodySchema.extend({
     branch: z.string().min(1)
 })
 
-export function createEditorRoutes(getSyncEngine: () => SyncEngine | null): Hono<WebAppEnv> {
+const EDITOR_VIEW_PATHS = new Set([
+    '/editor/directory', '/editor/file', '/editor/file/raw', '/editor/projects',
+    '/editor/git-status-v2', '/editor/git-diff-file', '/editor/git-list-branches',
+    '/editor/git-stash-list'
+])
+
+export function createEditorRoutes(
+    getSyncEngine: () => SyncEngine | null,
+    capabilityResolver: RestCapabilityResolver
+): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
+
+    app.use('/editor/*', async (c, next) => {
+        const engine = getSyncEngine()
+        if (!engine) return c.json({ success: false, error: 'Not connected' }, 503)
+        const parsed = z.object({ machineId: z.string().min(1) }).safeParse(
+            await c.req.raw.clone().json().catch(() => null)
+        )
+        if (!parsed.success) return await next()
+        const machine = requireMachine(c, engine, parsed.data.machineId, {
+            capabilityResolver,
+            requiredCapability: [...EDITOR_VIEW_PATHS].some((path) => c.req.path.endsWith(path)) ? 'view' : 'operate'
+        })
+        if (machine instanceof Response) return machine
+        return await next()
+    })
 
     app.post('/editor/directory', async (c) => {
         const engine = getSyncEngine()
@@ -56,6 +81,9 @@ export function createEditorRoutes(getSyncEngine: () => SyncEngine | null): Hono
         if (!parsed.success) {
             return c.json({ success: false, error: 'Invalid body' }, 400)
         }
+
+        const machineGuard = requireMachine(c, engine, parsed.data.machineId)
+        if (machineGuard instanceof Response) return machineGuard
 
         try {
             const result = await engine.listEditorDirectory(parsed.data.machineId, parsed.data.path)
@@ -80,6 +108,9 @@ export function createEditorRoutes(getSyncEngine: () => SyncEngine | null): Hono
             return c.json({ success: false, error: 'Invalid body' }, 400)
         }
 
+        const machineGuard = requireMachine(c, engine, parsed.data.machineId)
+        if (machineGuard instanceof Response) return machineGuard
+
         try {
             const result = await engine.readEditorFile(parsed.data.machineId, parsed.data.path)
             return c.json(result)
@@ -102,6 +133,9 @@ export function createEditorRoutes(getSyncEngine: () => SyncEngine | null): Hono
         if (!parsed.success) {
             return c.json({ success: false, error: 'Invalid body' }, 400)
         }
+
+        const machineGuard = requireMachine(c, engine, parsed.data.machineId)
+        if (machineGuard instanceof Response) return machineGuard
 
         try {
             const result = await engine.readEditorFileRaw(parsed.data.machineId, parsed.data.path)
@@ -133,6 +167,9 @@ export function createEditorRoutes(getSyncEngine: () => SyncEngine | null): Hono
             return c.json({ success: false, error: 'Invalid body' }, 400)
         }
 
+        const machineGuard = requireMachine(c, engine, parsed.data.machineId)
+        if (machineGuard instanceof Response) return machineGuard
+
         try {
             const result = await engine.writeEditorFile(parsed.data.machineId, parsed.data.path, parsed.data.content)
             return c.json(result)
@@ -155,6 +192,9 @@ export function createEditorRoutes(getSyncEngine: () => SyncEngine | null): Hono
         if (!parsed.success) {
             return c.json({ success: false, error: 'Invalid body' }, 400)
         }
+
+        const machineGuard = requireMachine(c, engine, parsed.data.machineId)
+        if (machineGuard instanceof Response) return machineGuard
 
         try {
             const result = await engine.createEditorFile(parsed.data.machineId, parsed.data.path, parsed.data.content)
@@ -179,6 +219,9 @@ export function createEditorRoutes(getSyncEngine: () => SyncEngine | null): Hono
             return c.json({ success: false, error: 'Invalid body' }, 400)
         }
 
+        const machineGuard = requireMachine(c, engine, parsed.data.machineId)
+        if (machineGuard instanceof Response) return machineGuard
+
         try {
             const result = await engine.deleteEditorFile(parsed.data.machineId, parsed.data.path)
             return c.json(result)
@@ -201,6 +244,9 @@ export function createEditorRoutes(getSyncEngine: () => SyncEngine | null): Hono
         if (!parsed.success) {
             return c.json({ success: false, error: 'Invalid body' }, 400)
         }
+
+        const machineGuard = requireMachine(c, engine, parsed.data.machineId)
+        if (machineGuard instanceof Response) return machineGuard
 
         try {
             const result = await engine.listEditorProjects(parsed.data.machineId)

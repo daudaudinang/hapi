@@ -4,7 +4,8 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import type { SyncEngine, Session } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
-import { requireSessionFromParam, requireSyncEngine } from './guards'
+import type { Capability, OrganizationRole } from '@hapi/protocol/auth'
+import { requireCapability, requireSessionFromParam, requireSyncEngine, type RestCapabilityResolver } from './guards'
 
 const permissionModeSchema = z.object({
     mode: PermissionModeSchema
@@ -54,7 +55,14 @@ function estimateBase64Bytes(base64: string): number {
 }
 
 export type SessionsRoutesOptions = {
-    getTerminalLiveCount?: (sessionId: string, namespace: string) => number | undefined
+    capabilityResolver: RestCapabilityResolver
+    getTerminalLiveCount?: (sessionId: string, organizationId: string) => number | undefined
+    getUserCapability?: (input: {
+        organizationId: string
+        membershipId: string
+        role: OrganizationRole
+        sessionId: string
+    }) => Capability | null
 }
 
 function withKnownTerminalCount<T extends { terminalLiveCount?: number }>(
@@ -72,7 +80,7 @@ function withKnownTerminalCount<T extends { terminalLiveCount?: number }>(
 
 export function createSessionsRoutes(
     getSyncEngine: () => SyncEngine | null,
-    options: SessionsRoutesOptions = {}
+    options: SessionsRoutesOptions
 ): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
@@ -84,8 +92,11 @@ export function createSessionsRoutes(
 
         const getPendingCount = (s: Session) => s.agentState?.requests ? Object.keys(s.agentState.requests).length : 0
 
-        const namespace = c.get('namespace')
-        const sessions = engine.getSessionsByNamespace(namespace)
+        const organizationId = c.get('organizationId')
+        const sessions = engine.getSessionsByNamespace(organizationId)
+            .filter((session) => !(requireCapability(
+                c, options.capabilityResolver, 'session', session.id, 'view'
+            ) instanceof Response))
             .sort((a, b) => {
                 // Active sessions first
                 if (a.active !== b.active) {
@@ -102,7 +113,7 @@ export function createSessionsRoutes(
             })
             .map((session) => withKnownTerminalCount(
                 toSessionSummary(session),
-                options.getTerminalLiveCount?.(session.id, namespace)
+                options.getTerminalLiveCount?.(session.id, organizationId)
             ))
 
         return c.json({ sessions })
@@ -114,9 +125,16 @@ export function createSessionsRoutes(
             return engine
         }
 
-        const namespace = c.get('namespace')
-        const sessions = engine.getSessionsByNamespace(namespace)
-        const activeSessions = sessions.filter(s => s.active)
+        const organizationId = c.get('organizationId')
+        const sessions = engine.getSessionsByNamespace(organizationId)
+        const activeSessions = sessions.filter((s) => s.active && !(requireCapability(
+            c, options.capabilityResolver, 'session', s.id, 'view'
+        ) instanceof Response))
+        if (activeSessions.some((session) => requireCapability(
+            c, options.capabilityResolver, 'session', session.id, 'operate'
+        ) instanceof Response)) {
+            return c.json({ error: 'Resource access denied', code: 'forbidden' }, 403)
+        }
 
         let archived = 0
         for (const s of activeSessions) {
@@ -137,9 +155,16 @@ export function createSessionsRoutes(
             return engine
         }
 
-        const namespace = c.get('namespace')
-        const sessions = engine.getSessionsByNamespace(namespace)
-        const inactiveSessions = sessions.filter(s => !s.active)
+        const organizationId = c.get('organizationId')
+        const sessions = engine.getSessionsByNamespace(organizationId)
+        const inactiveSessions = sessions.filter((s) => !s.active && !(requireCapability(
+            c, options.capabilityResolver, 'session', s.id, 'view'
+        ) instanceof Response))
+        if (inactiveSessions.some((session) => requireCapability(
+            c, options.capabilityResolver, 'session', session.id, 'operate'
+        ) instanceof Response)) {
+            return c.json({ error: 'Resource access denied', code: 'forbidden' }, 403)
+        }
 
         let deleted = 0
         for (const s of inactiveSessions) {
@@ -160,17 +185,29 @@ export function createSessionsRoutes(
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine)
+        const sessionResult = requireSessionFromParam(c, engine, {
+            capabilityResolver: options.capabilityResolver, requiredCapability: 'view'
+        })
         if (sessionResult instanceof Response) {
             return sessionResult
         }
 
-        const namespace = c.get('namespace')
+        const organizationId = c.get('organizationId')
+        const userCapability = options.getUserCapability?.({
+            organizationId,
+            membershipId: c.get('membershipId'),
+            role: c.get('organizationRole'),
+            sessionId: sessionResult.session.id
+        }) ?? null
+        if (!userCapability) {
+            return c.json({ error: 'Session access denied' }, 403)
+        }
         return c.json({
             session: withKnownTerminalCount(
                 sessionResult.session,
-                options.getTerminalLiveCount?.(sessionResult.session.id, namespace)
-            )
+                options.getTerminalLiveCount?.(sessionResult.session.id, organizationId)
+            ),
+            userCapability
         })
     })
 
@@ -180,7 +217,9 @@ export function createSessionsRoutes(
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine)
+        const sessionResult = requireSessionFromParam(c, engine, {
+            capabilityResolver: options.capabilityResolver, requiredCapability: 'spawn'
+        })
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -199,10 +238,10 @@ export function createSessionsRoutes(
             }
         }
 
-        const namespace = c.get('namespace')
+        const organizationId = c.get('organizationId')
         const result = await engine.resumeSession(
             sessionResult.sessionId,
-            namespace,
+            organizationId,
             permissionMode !== undefined ? { permissionMode } : undefined
         )
         if (result.type === 'error') {
@@ -222,7 +261,9 @@ export function createSessionsRoutes(
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine, { requireActive: true })
+        const sessionResult = requireSessionFromParam(c, engine, {
+            requireActive: true, capabilityResolver: options.capabilityResolver, requiredCapability: 'operate'
+        })
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -260,7 +301,9 @@ export function createSessionsRoutes(
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine, { requireActive: true })
+        const sessionResult = requireSessionFromParam(c, engine, {
+            requireActive: true, capabilityResolver: options.capabilityResolver, requiredCapability: 'operate'
+        })
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -288,7 +331,9 @@ export function createSessionsRoutes(
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine, { requireActive: true })
+        const sessionResult = requireSessionFromParam(c, engine, {
+            requireActive: true, capabilityResolver: options.capabilityResolver, requiredCapability: 'operate'
+        })
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -303,7 +348,9 @@ export function createSessionsRoutes(
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine, { requireActive: true })
+        const sessionResult = requireSessionFromParam(c, engine, {
+            requireActive: true, capabilityResolver: options.capabilityResolver, requiredCapability: 'operate'
+        })
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -318,7 +365,9 @@ export function createSessionsRoutes(
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine, { requireActive: true })
+        const sessionResult = requireSessionFromParam(c, engine, {
+            requireActive: true, capabilityResolver: options.capabilityResolver, requiredCapability: 'operate'
+        })
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -333,7 +382,9 @@ export function createSessionsRoutes(
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine)
+        const sessionResult = requireSessionFromParam(c, engine, {
+            capabilityResolver: options.capabilityResolver, requiredCapability: 'operate'
+        })
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -371,7 +422,9 @@ export function createSessionsRoutes(
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine)
+        const sessionResult = requireSessionFromParam(c, engine, {
+            capabilityResolver: options.capabilityResolver, requiredCapability: 'operate'
+        })
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -405,7 +458,9 @@ export function createSessionsRoutes(
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine)
+        const sessionResult = requireSessionFromParam(c, engine, {
+            capabilityResolver: options.capabilityResolver, requiredCapability: 'operate'
+        })
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -439,7 +494,9 @@ export function createSessionsRoutes(
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine)
+        const sessionResult = requireSessionFromParam(c, engine, {
+            capabilityResolver: options.capabilityResolver, requiredCapability: 'operate'
+        })
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -475,7 +532,9 @@ export function createSessionsRoutes(
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine, { requireActive: true })
+        const sessionResult = requireSessionFromParam(c, engine, {
+            requireActive: true, capabilityResolver: options.capabilityResolver, requiredCapability: 'operate'
+        })
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -506,7 +565,9 @@ export function createSessionsRoutes(
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine)
+        const sessionResult = requireSessionFromParam(c, engine, {
+            capabilityResolver: options.capabilityResolver, requiredCapability: 'operate'
+        })
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -536,7 +597,9 @@ export function createSessionsRoutes(
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine)
+        const sessionResult = requireSessionFromParam(c, engine, {
+            capabilityResolver: options.capabilityResolver, requiredCapability: 'operate'
+        })
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -565,7 +628,9 @@ export function createSessionsRoutes(
         }
 
         // Session must exist but doesn't need to be active
-        const sessionResult = requireSessionFromParam(c, engine)
+        const sessionResult = requireSessionFromParam(c, engine, {
+            capabilityResolver: options.capabilityResolver, requiredCapability: 'view'
+        })
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -591,7 +656,9 @@ export function createSessionsRoutes(
         }
 
         // Session must exist but doesn't need to be active
-        const sessionResult = requireSessionFromParam(c, engine)
+        const sessionResult = requireSessionFromParam(c, engine, {
+            capabilityResolver: options.capabilityResolver, requiredCapability: 'view'
+        })
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -613,7 +680,9 @@ export function createSessionsRoutes(
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine)
+        const sessionResult = requireSessionFromParam(c, engine, {
+            capabilityResolver: options.capabilityResolver, requiredCapability: 'view'
+        })
         if (sessionResult instanceof Response) {
             return sessionResult
         }
@@ -652,7 +721,9 @@ export function createSessionsRoutes(
             return engine
         }
 
-        const sessionResult = requireSessionFromParam(c, engine)
+        const sessionResult = requireSessionFromParam(c, engine, {
+            capabilityResolver: options.capabilityResolver, requiredCapability: 'view'
+        })
         if (sessionResult instanceof Response) {
             return sessionResult
         }
