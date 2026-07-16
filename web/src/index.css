@@ -501,7 +501,7 @@ html[data-theme="dark"] .shiki span {
     min-height: 1px;
     align-items: center;
     justify-content: center;
-    transform-origin: 50% 50%;
+    transform-origin: 0 0;
 }
 
 .mermaid-preview__content > svg {

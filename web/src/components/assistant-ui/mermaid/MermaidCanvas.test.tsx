@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MermaidCanvas } from './MermaidCanvas'
 
@@ -60,14 +60,43 @@ describe('MermaidCanvas', () => {
 
     it('reports Panzoom scale changes', () => {
         const onScaleChange = vi.fn()
-        const { getByRole } = render(<MermaidCanvas svg={SVG} fullscreen={false} ariaLabel="Diagram" onScaleChange={onScaleChange} />)
-        fireEvent(getByRole('application'), new CustomEvent('panzoomchange', { detail: { scale: 2 } }))
+        const { container } = render(<MermaidCanvas svg={SVG} fullscreen={false} ariaLabel="Diagram" onScaleChange={onScaleChange} />)
+        fireEvent(container.querySelector('.mermaid-preview__content')!, new CustomEvent('panzoomchange', { detail: { scale: 2 } }))
         expect(onScaleChange).toHaveBeenCalledWith(2)
+    })
+
+    it('sizes the transform wrapper from the SVG viewBox before fitting', () => {
+        const { container } = render(<MermaidCanvas svg={SVG} fullscreen={false} ariaLabel="Diagram" onScaleChange={() => {}} />)
+        const content = container.querySelector('.mermaid-preview__content') as HTMLDivElement
+        expect(content.style.width).toBe('100px')
+        expect(content.style.height).toBe('50px')
     })
 
     it('destroys Panzoom and removes listeners on unmount', () => {
         const { unmount } = render(<MermaidCanvas svg={SVG} fullscreen={false} ariaLabel="Diagram" onScaleChange={() => {}} />)
         unmount()
         expect(panzoom.destroy).toHaveBeenCalled()
+    })
+
+    it('fits after a bounded wait when web fonts never settle', async () => {
+        vi.useFakeTimers()
+        const originalFonts = Object.getOwnPropertyDescriptor(document, 'fonts')
+        Object.defineProperty(document, 'fonts', {
+            configurable: true,
+            value: { ready: new Promise<never>(() => {}) },
+        })
+
+        render(<MermaidCanvas svg={SVG} fullscreen={false} ariaLabel="Diagram" onScaleChange={() => {}} />)
+        await act(async () => { await vi.advanceTimersByTimeAsync(20) })
+        panzoom.zoom.mockClear()
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(600)
+            await vi.runOnlyPendingTimersAsync()
+        })
+        expect(panzoom.zoom).toHaveBeenCalled()
+
+        if (originalFonts) Object.defineProperty(document, 'fonts', originalFonts)
+        else Reflect.deleteProperty(document, 'fonts')
+        vi.useRealTimers()
     })
 })

@@ -54,6 +54,13 @@ export const MermaidCanvas = forwardRef<MermaidCanvasHandle, Props>(function Mer
         const content = contentRef.current
         if (!canvas || !content) return
 
+        const initialDiagram = content.querySelector('svg')
+        if (initialDiagram) {
+            const { width, height } = svgDimensions(initialDiagram)
+            content.style.width = `${width}px`
+            content.style.height = `${height}px`
+        }
+
         const panzoom = Panzoom(content, {
             canvas: true,
             minScale: 0.1,
@@ -61,6 +68,7 @@ export const MermaidCanvas = forwardRef<MermaidCanvasHandle, Props>(function Mer
             step: 0.2,
             pinchAndPan: true,
             animate: false,
+            origin: '0 0',
             excludeClass: 'mermaid-panzoom-exclude',
         })
 
@@ -71,8 +79,10 @@ export const MermaidCanvas = forwardRef<MermaidCanvasHandle, Props>(function Mer
             const availableWidth = Math.max(canvas.clientWidth - FIT_PADDING * 2, 1)
             const availableHeight = Math.max(canvas.clientHeight - FIT_PADDING * 2, 1)
             const scale = Math.min(5, Math.max(0.1, Math.min(availableWidth / width, availableHeight / height)))
+            const centeredX = (canvas.clientWidth / scale - width) / 2
+            const centeredY = (canvas.clientHeight / scale - height) / 2
             panzoom.zoom(scale, { animate: false, force: true })
-            requestAnimationFrame(() => panzoom.pan(0, 0, { animate: false, force: true }))
+            requestAnimationFrame(() => panzoom.pan(centeredX, centeredY, { animate: false, force: true }))
         }
         stateRef.current = { panzoom, fit }
 
@@ -102,20 +112,29 @@ export const MermaidCanvas = forwardRef<MermaidCanvasHandle, Props>(function Mer
         }
 
         canvas.addEventListener('wheel', onWheel, { passive: false })
-        canvas.addEventListener('panzoomchange', onChange)
+        content.addEventListener('panzoomchange', onChange)
         canvas.addEventListener('keydown', onKeyDown)
 
         let cancelled = false
-        const fitAfterFonts = async () => {
-            if ('fonts' in document) await document.fonts.ready
-            if (!cancelled) requestAnimationFrame(fit)
+        const initialFitTimeout = setTimeout(fit, 0)
+        let fontTimeout: ReturnType<typeof setTimeout> | undefined
+        let fontReadyFitTimeout: ReturnType<typeof setTimeout> | undefined
+        if ('fonts' in document) {
+            fontTimeout = setTimeout(() => {
+                if (!cancelled) fit()
+            }, 500)
+            void document.fonts.ready.then(() => {
+                if (!cancelled) fontReadyFitTimeout = setTimeout(fit, 0)
+            }, () => undefined)
         }
-        void fitAfterFonts()
 
         return () => {
             cancelled = true
+            clearTimeout(initialFitTimeout)
+            if (fontTimeout) clearTimeout(fontTimeout)
+            if (fontReadyFitTimeout) clearTimeout(fontReadyFitTimeout)
             canvas.removeEventListener('wheel', onWheel)
-            canvas.removeEventListener('panzoomchange', onChange)
+            content.removeEventListener('panzoomchange', onChange)
             canvas.removeEventListener('keydown', onKeyDown)
             panzoom.destroy()
             if (stateRef.current?.panzoom === panzoom) stateRef.current = null
