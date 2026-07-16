@@ -388,3 +388,200 @@ html[data-theme="dark"] .shiki span {
         font-size: calc(105% * var(--app-font-scale, 1));
     }
 }
+
+/* Mermaid preview */
+.mermaid-preview {
+    container-type: inline-size;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    border: 1px solid var(--app-border);
+    border-radius: 0.5rem;
+    background: var(--app-bg);
+}
+
+.mermaid-preview__header {
+    display: flex;
+    min-height: 48px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    border-bottom: 1px solid var(--app-border);
+    background: var(--app-subtle-bg);
+    padding: 0.25rem 0.375rem 0.25rem 0.75rem;
+}
+
+.mermaid-preview__identity,
+.mermaid-preview__toolbar,
+.mermaid-preview__action {
+    display: flex;
+    align-items: center;
+}
+
+.mermaid-preview__identity {
+    min-width: 0;
+    gap: 0.5rem;
+}
+
+.mermaid-preview__title {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.mermaid-preview__badge {
+    border-radius: 9999px;
+    background: var(--app-bg);
+    padding: 0.125rem 0.5rem;
+    color: var(--app-hint);
+    font-size: 0.6875rem;
+}
+
+.mermaid-preview__toolbar {
+    flex: 0 0 auto;
+    justify-content: flex-end;
+    gap: 0.125rem;
+}
+
+.mermaid-preview__action {
+    min-width: 36px;
+    min-height: 36px;
+    justify-content: center;
+    gap: 0.375rem;
+    border-radius: 0.375rem;
+    padding: 0.375rem;
+    color: var(--app-hint);
+    transition: color 120ms ease, background-color 120ms ease;
+}
+
+.mermaid-preview__action:hover:not(:disabled) {
+    background: var(--app-bg);
+    color: var(--app-fg);
+}
+
+.mermaid-preview__action:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+}
+
+.mermaid-preview__action:focus-visible,
+.mermaid-preview__canvas:focus-visible,
+.mermaid-preview__error button:focus-visible {
+    outline: 2px solid var(--app-link);
+    outline-offset: 2px;
+}
+
+.mermaid-preview__label,
+.mermaid-preview__scale {
+    font-size: 0.6875rem;
+    white-space: nowrap;
+}
+
+.mermaid-preview__scale {
+    min-width: 3rem;
+    color: var(--app-hint);
+    text-align: center;
+}
+
+.mermaid-preview__canvas {
+    height: clamp(260px, 45vh, 520px);
+    overflow: hidden;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+}
+
+.mermaid-preview__canvas:active {
+    cursor: grabbing;
+}
+
+.mermaid-preview__content {
+    display: inline-flex;
+    min-width: 1px;
+    min-height: 1px;
+    align-items: center;
+    justify-content: center;
+    transform-origin: 50% 50%;
+}
+
+.mermaid-preview__content > svg {
+    display: block;
+    max-width: none;
+    height: auto;
+}
+
+.mermaid-preview__status,
+.mermaid-preview__notice,
+.mermaid-preview__error {
+    padding: 0.75rem;
+    color: var(--app-hint);
+    font-size: 0.75rem;
+}
+
+.mermaid-preview__error {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    border-bottom: 1px solid var(--app-border);
+}
+
+.mermaid-preview__error button {
+    flex: 0 0 auto;
+    border-radius: 0.375rem;
+    background: var(--app-subtle-bg);
+    padding: 0.375rem 0.625rem;
+    color: var(--app-fg);
+}
+
+.mermaid-preview:fullscreen {
+    width: 100vw;
+    height: 100vh;
+    border: 0;
+    border-radius: 0;
+    background: var(--app-bg);
+    padding-top: env(safe-area-inset-top);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    overscroll-behavior: contain;
+}
+
+.mermaid-preview:fullscreen .mermaid-preview__canvas {
+    height: calc(100vh - 48px);
+}
+
+@container (max-width: 519px) {
+    .mermaid-preview__label,
+    .mermaid-preview__badge,
+    .mermaid-preview__scale {
+        display: none;
+    }
+
+    .mermaid-preview__action {
+        min-width: 44px;
+        min-height: 44px;
+    }
+}
+
+@container (max-width: 359px) {
+    .mermaid-preview__header {
+        flex-wrap: wrap;
+    }
+
+    .mermaid-preview__toolbar {
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    .mermaid-preview__canvas {
+        height: min(45vh, 320px);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .mermaid-preview__action,
+    .mermaid-preview__content {
+        transition: none;
+    }
+}

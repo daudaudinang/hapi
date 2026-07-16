@@ -412,4 +412,20 @@ export default {
   'dashboard.openInNewTab': 'Open in new tab',
   'dashboard.rightClickForMenu': 'Right-click for menu',
   'misc.scrollToBottom': 'Scroll to bottom',
+
+  // Mermaid preview
+  'mermaid.preview': 'Preview',
+  'mermaid.viewSource': 'View source',
+  'mermaid.viewDiagram': 'View diagram',
+  'mermaid.copySource': 'Copy Mermaid source',
+  'mermaid.zoomIn': 'Zoom in',
+  'mermaid.zoomOut': 'Zoom out',
+  'mermaid.fit': 'Fit diagram',
+  'mermaid.enterFullscreen': 'Enter fullscreen',
+  'mermaid.exitFullscreen': 'Exit fullscreen',
+  'mermaid.canvas': 'Interactive Mermaid diagram. Drag to pan.',
+  'mermaid.loading': 'Rendering diagram…',
+  'mermaid.renderError': 'Could not preview this Mermaid diagram.',
+  'mermaid.retry': 'Retry preview',
+  'mermaid.fullscreenUnavailable': 'Fullscreen is unavailable in this browser.',
 } as const

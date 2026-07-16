@@ -411,4 +411,20 @@ export default {
   'dashboard.openInNewTab': '在新标签页打开',
   'dashboard.rightClickForMenu': '右键打开菜单',
   'misc.scrollToBottom': '滚动到底部',
+
+  // Mermaid 预览
+  'mermaid.preview': '预览',
+  'mermaid.viewSource': '查看源代码',
+  'mermaid.viewDiagram': '查看图表',
+  'mermaid.copySource': '复制 Mermaid 源代码',
+  'mermaid.zoomIn': '放大',
+  'mermaid.zoomOut': '缩小',
+  'mermaid.fit': '适应画布',
+  'mermaid.enterFullscreen': '进入全屏',
+  'mermaid.exitFullscreen': '退出全屏',
+  'mermaid.canvas': 'Mermaid 交互式图表。拖动以平移。',
+  'mermaid.loading': '正在渲染图表…',
+  'mermaid.renderError': '无法预览此 Mermaid 图表。',
+  'mermaid.retry': '重试预览',
+  'mermaid.fullscreenUnavailable': '此浏览器不支持全屏。',
 } as const

@@ -406,4 +406,20 @@ export default {
   'dashboard.openInNewTab': 'Mở trong tab mới',
   'dashboard.rightClickForMenu': 'Nhấn chuột phải để mở menu',
   'misc.scrollToBottom': 'Cuộn xuống dưới cùng',
+
+  // Xem trước Mermaid
+  'mermaid.preview': 'Xem trước',
+  'mermaid.viewSource': 'Xem mã nguồn',
+  'mermaid.viewDiagram': 'Xem sơ đồ',
+  'mermaid.copySource': 'Sao chép mã Mermaid',
+  'mermaid.zoomIn': 'Phóng to',
+  'mermaid.zoomOut': 'Thu nhỏ',
+  'mermaid.fit': 'Vừa khung',
+  'mermaid.enterFullscreen': 'Toàn màn hình',
+  'mermaid.exitFullscreen': 'Thoát toàn màn hình',
+  'mermaid.canvas': 'Sơ đồ Mermaid tương tác. Kéo để di chuyển.',
+  'mermaid.loading': 'Đang dựng sơ đồ…',
+  'mermaid.renderError': 'Không thể xem trước sơ đồ Mermaid này.',
+  'mermaid.retry': 'Thử xem trước lại',
+  'mermaid.fullscreenUnavailable': 'Trình duyệt này không hỗ trợ toàn màn hình.',
 } as const
