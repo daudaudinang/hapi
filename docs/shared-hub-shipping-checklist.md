@@ -1,6 +1,7 @@
 # Shared Hub shipping checklist
 
 Companion plan: [`shared-hub-shipping-plan.md`](./shared-hub-shipping-plan.md)
+Operator runbook: [`shared-hub-release-qualification-walkthrough.md`](./shared-hub-release-qualification-walkthrough.md)
 Valid states: `pending`, `in-progress`, `completed`, `blocked`
 Current verdict: `not-ready`
 
