@@ -10,7 +10,7 @@ import { MermaidToolbar } from './MermaidToolbar'
 import { useMermaidRender } from './use-mermaid-render'
 
 export function MermaidBlock(props: SyntaxHighlighterProps) {
-    const streaming = useAssistantState(({ message }) => message.status?.type === 'running')
+    const streaming = useAssistantState(({ part }) => part.status?.type === 'running')
     const { colorScheme } = useTheme()
     const { t } = useTranslation()
     const generatedId = useId().replace(/:/g, '')

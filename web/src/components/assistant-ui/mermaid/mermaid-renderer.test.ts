@@ -86,4 +86,14 @@ describe('createMermaidRenderer', () => {
         })).rejects.toMatchObject({ name: 'AbortError' })
         expect(api.render).not.toHaveBeenCalled()
     })
+
+    it('rejects oversized source before loading Mermaid', async () => {
+        const loadMermaid = vi.fn(async () => fakeApi([]))
+        const renderer = createMermaidRenderer(loadMermaid)
+
+        await expect(renderer.render({
+            id: 'too-long', code: 'x'.repeat(50_001), theme: 'light',
+        })).rejects.toThrow('text limit')
+        expect(loadMermaid).not.toHaveBeenCalled()
+    })
 })
