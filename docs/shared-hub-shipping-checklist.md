@@ -8,15 +8,15 @@ Evidence must identify the release commit and exact verification command or manu
 
 ## Current implementation run — 2026-07-16
 
-Candidate base SHA: `868d856` with Codex-owned dirty implementation changes; therefore no item below is promoted to `completed` yet.
+Release-candidate SHA: `a4a93b7a5247ea3bd07d3da45300f56b2c5d9100` (`0.17.6`), produced from Codex-owned implementation changes and verified on Linux x64 (`bun-linux-x64-baseline`).
 
 - `bun typecheck`: passed.
 - `bun run test`: passed in one combined run: CLI 637/637 plus TerminalManager 50/50, Hub 397/397, and Web 562/562. All 12 Runner integration tests passed; no skipped tests. Claude Remote timing regressions also passed 10/10 focused repetitions before the combined run.
 - `bun run test:e2e`: passed, 2 mocked-browser authentication flows; not a production-like Keycloak fixture.
 - `bun run build:single-exe`: passed for host `bun-linux-x64-baseline`.
-- `bun run checksums:release`: generated and verified one host artifact checksum during the dirty run; regenerate from the release commit.
+- `bun run checksums:release`: generated one host artifact checksum from the release-candidate commit: `c147bfacf956585355303dc42d56004f71b8053208ffc49f2e6dbc5488c7e149` for `cli/dist-exe/bun-linux-x64-baseline/hapi`.
 - `git diff --check`: passed.
-- GitNexus change detection: CRITICAL scope, 51 files; expected authentication/startup/CLI Socket.IO processes plus lifecycle/Admin UI. Requires release review.
+- GitNexus change detection: CRITICAL scope, 78 files; expected authentication/startup/CLI Socket.IO processes plus lifecycle/Admin UI. Requires release review.
 - Production TypeScript search: no `CLI_API_TOKEN`, `parseAccessToken`, `legacy-session`, or legacy token getter remains.
 - Coverage reconciliation: [`shared-hub-authorization-coverage.md`](./shared-hub-authorization-coverage.md). Team Chat policy enforcement now passes dirty-tree Hub tests; production-like multi-user evidence remains a blocker.
 - Lifecycle audit matrix: Team membership/ownership, grants, invitations, and Runner enrollment/credential/ownership/cleanup mutations now write atomic sanitized audit and outbox records. Failure injection verifies invitation issue and Runner cleanup roll back with their audit write.
@@ -26,10 +26,10 @@ Candidate base SHA: `868d856` with Codex-owned dirty implementation changes; the
 
 ## 0 — Baseline and scope
 
-- [ ] `pending` Record candidate release SHA, dirty-tree owner, artifact version, and target environment.
-- [ ] `in-progress` Reconcile the earlier Phase 5 authorization contradiction with a route/event/action coverage inventory. Inventory committed; release-commit evidence pending.
+- [x] `completed` Record candidate release SHA, dirty-tree owner, artifact version, and target environment. Recorded above for `a4a93b7a5247ea3bd07d3da45300f56b2c5d9100`, version `0.17.6`, Linux x64 host qualification.
+- [x] `completed` Reconcile the earlier Phase 5 authorization contradiction with a route/event/action coverage inventory. Inventory committed in the release candidate.
 - [ ] `in-progress` Confirm exclusions: multi-org, HA, PostgreSQL, Windows service, directory sync, automatic upgrades. Scope documented; owner acceptance pending.
-- [ ] `in-progress` Fix or root-cause the timeout-prone CLI and Web tests; obtain one clean baseline run. Timed test paths no longer perform dynamic module loading; 10/10 focused repetitions and one complete dirty-tree baseline passed. Release-commit rerun pending.
+- [x] `completed` Fix or root-cause the timeout-prone CLI and Web tests; obtain one clean baseline run. Timed test paths no longer perform dynamic module loading; 10/10 focused repetitions and the complete release-candidate baseline passed.
 
 ## 1 — Authentication closure
 
@@ -84,13 +84,13 @@ Candidate base SHA: `868d856` with Codex-owned dirty implementation changes; the
 
 ## 5 — Automated release gates
 
-- [ ] `in-progress` `bun typecheck` passes from the release commit. Passed on dirty tree; release commit pending.
-- [ ] `in-progress` `bun run test` passes in one clean run. Passed on dirty tree; release commit pending.
+- [x] `completed` `bun typecheck` passes from the release commit. Passed at `a4a93b7a5247ea3bd07d3da45300f56b2c5d9100`.
+- [x] `completed` `bun run test` passes in one clean run. CLI 637 plus TerminalManager 50, Hub 397, and Web 562 passed at the release candidate.
 - [ ] `in-progress` `bun run test:e2e` passes with production-like Keycloak fixtures. Mocked E2E passes; production-like Keycloak fixture pending.
-- [ ] `in-progress` `bun run build:single-exe` passes for release targets. Host Linux x64 passed; full release targets pending.
-- [ ] `in-progress` Release artifacts and SHA-256 checksums are generated and verified. Automation added and host artifact verified; release artifacts pending.
-- [ ] `in-progress` `git diff --check` passes. Passed on dirty tree; release commit pending.
-- [ ] `in-progress` No unexpected skipped or flaky tests remain. Zero skips; both Claude Remote suites passed 10/10 focused repetitions and the full parallel run after moving module loading outside timed test bodies. Release-commit rerun pending.
+- [ ] `in-progress` `bun run build:single-exe` passes for release targets. Release-candidate Linux x64 host build passed; macOS/full release targets pending.
+- [ ] `in-progress` Release artifacts and SHA-256 checksums are generated and verified. Linux x64 artifact and checksum generated; macOS/full release artifacts pending.
+- [x] `completed` `git diff --check` passes. Passed at the release candidate.
+- [x] `completed` No unexpected skipped or flaky tests remain. Zero skips; both Claude Remote suites passed 10/10 focused repetitions and the full release-candidate parallel run.
 - [ ] `in-progress` GitNexus upstream impact reviewed before central-symbol edits; all d=1 dependents updated/tested. Critical surfaces reviewed and package tests pass; release review pending.
 - [ ] `in-progress` GitNexus change detection matches intended symbols and execution flows. Detection run; CRITICAL expected scope requires reviewer acceptance.
 - [ ] `pending` No unresolved Critical or High security finding remains.
@@ -138,11 +138,11 @@ Candidate base SHA: `868d856` with Codex-owned dirty implementation changes; the
 ## Final verdict record
 
 - Verdict: `not-ready`
-- Release SHA: unset
-- Artifact/checksum: unset
-- Review date: unset
+- Release SHA: `a4a93b7a5247ea3bd07d3da45300f56b2c5d9100`
+- Artifact/checksum: `cli/dist-exe/bun-linux-x64-baseline/hapi` / `c147bfacf956585355303dc42d56004f71b8053208ffc49f2e6dbc5488c7e149`
+- Review date: `2026-07-16`
 - Product owner: unset
 - Engineering owner: unset
 - Security reviewer: unset
 - Operations owner: unset
-- Remaining risks: all checklist items pending
+- Remaining risks: production-like Keycloak/multi-user qualification; macOS qualification; backup/restore, proxy, monitoring, and rollback rehearsal; Critical/High security review; product, engineering, security, and operations sign-off
