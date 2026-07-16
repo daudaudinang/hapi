@@ -4,7 +4,7 @@ export type MermaidTheme = 'light' | 'dark'
 
 export type MermaidApi = {
     initialize(config: MermaidConfig): void
-    parse?(code: string): void | Promise<void>
+    parse?(code: string): unknown | Promise<unknown>
     render(id: string, code: string): Promise<{ svg: string }>
 }
 
