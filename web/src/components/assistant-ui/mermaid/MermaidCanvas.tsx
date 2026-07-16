@@ -72,6 +72,8 @@ export const MermaidCanvas = forwardRef<MermaidCanvasHandle, Props>(function Mer
             excludeClass: 'mermaid-panzoom-exclude',
         })
 
+        let cancelled = false
+        let panFrame: number | undefined
         const fit = () => {
             const diagram = content.querySelector('svg')
             if (!diagram) return
@@ -82,7 +84,11 @@ export const MermaidCanvas = forwardRef<MermaidCanvasHandle, Props>(function Mer
             const centeredX = (canvas.clientWidth / scale - width) / 2
             const centeredY = (canvas.clientHeight / scale - height) / 2
             panzoom.zoom(scale, { animate: false, force: true })
-            requestAnimationFrame(() => panzoom.pan(centeredX, centeredY, { animate: false, force: true }))
+            if (panFrame !== undefined) cancelAnimationFrame(panFrame)
+            panFrame = requestAnimationFrame(() => {
+                panFrame = undefined
+                if (!cancelled) panzoom.pan(centeredX, centeredY, { animate: false, force: true })
+            })
         }
         stateRef.current = { panzoom, fit }
 
@@ -115,17 +121,25 @@ export const MermaidCanvas = forwardRef<MermaidCanvasHandle, Props>(function Mer
         content.addEventListener('panzoomchange', onChange)
         canvas.addEventListener('keydown', onKeyDown)
 
-        let cancelled = false
         const initialFitTimeout = setTimeout(fit, 0)
         let fontTimeout: ReturnType<typeof setTimeout> | undefined
         let fontReadyFitTimeout: ReturnType<typeof setTimeout> | undefined
+        let fontFitSettled = false
+        const scheduleFontFit = () => {
+            if (cancelled || fontFitSettled) return
+            fontFitSettled = true
+            if (fontTimeout) {
+                clearTimeout(fontTimeout)
+                fontTimeout = undefined
+            }
+            fontReadyFitTimeout = setTimeout(fit, 0)
+        }
         if ('fonts' in document) {
             fontTimeout = setTimeout(() => {
-                if (!cancelled) fit()
+                fontTimeout = undefined
+                scheduleFontFit()
             }, 500)
-            void document.fonts.ready.then(() => {
-                if (!cancelled) fontReadyFitTimeout = setTimeout(fit, 0)
-            }, () => undefined)
+            void document.fonts.ready.then(scheduleFontFit, () => undefined)
         }
 
         return () => {
@@ -133,6 +147,7 @@ export const MermaidCanvas = forwardRef<MermaidCanvasHandle, Props>(function Mer
             clearTimeout(initialFitTimeout)
             if (fontTimeout) clearTimeout(fontTimeout)
             if (fontReadyFitTimeout) clearTimeout(fontReadyFitTimeout)
+            if (panFrame !== undefined) cancelAnimationFrame(panFrame)
             canvas.removeEventListener('wheel', onWheel)
             content.removeEventListener('panzoomchange', onChange)
             canvas.removeEventListener('keydown', onKeyDown)

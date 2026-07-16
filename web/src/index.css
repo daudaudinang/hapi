@@ -466,7 +466,8 @@ html[data-theme="dark"] .shiki span {
 
 .mermaid-preview__action:focus-visible,
 .mermaid-preview__canvas:focus-visible,
-.mermaid-preview__error button:focus-visible {
+.mermaid-preview__error button:focus-visible,
+.mermaid-preview__notice button:focus-visible {
     outline: 2px solid var(--app-link);
     outline-offset: 2px;
 }
@@ -510,6 +511,10 @@ html[data-theme="dark"] .shiki span {
     height: auto;
 }
 
+.mermaid-preview__source {
+    min-width: 0;
+}
+
 .mermaid-preview__status,
 .mermaid-preview__notice,
 .mermaid-preview__error {
@@ -534,7 +539,30 @@ html[data-theme="dark"] .shiki span {
     color: var(--app-fg);
 }
 
+.mermaid-preview__notice {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.mermaid-preview__notice button {
+    flex: 0 0 auto;
+    min-width: 36px;
+    min-height: 36px;
+    border-radius: 0.375rem;
+    color: var(--app-hint);
+}
+
+.mermaid-preview__notice button:hover {
+    background: var(--app-subtle-bg);
+    color: var(--app-fg);
+}
+
 .mermaid-preview:fullscreen {
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
     width: 100vw;
     height: 100vh;
     border: 0;
@@ -548,7 +576,15 @@ html[data-theme="dark"] .shiki span {
 }
 
 .mermaid-preview:fullscreen .mermaid-preview__canvas {
-    height: calc(100vh - 48px);
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+}
+
+.mermaid-preview:fullscreen .mermaid-preview__source {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
 }
 
 @container (max-width: 519px) {

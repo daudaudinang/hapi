@@ -42,6 +42,46 @@ describe('useMermaidRender', () => {
         expect(result.current.svg).toBe('<svg id="first"></svg>')
     })
 
+    it('uses a unique Mermaid DOM id for every render attempt', async () => {
+        mockedRender.mockResolvedValue('<svg></svg>')
+        const { rerender } = renderHook(
+            ({ code }) => useMermaidRender({
+                id: 'm-1', code, theme: 'light', streaming: false, retryKey: 0,
+            }),
+            { initialProps: { code: 'flowchart LR\nA-->B' } },
+        )
+        await act(async () => { await Promise.resolve() })
+        const firstId = mockedRender.mock.calls[0]?.[0].id
+
+        rerender({ code: 'flowchart LR\nA-->C' })
+        await act(async () => { await Promise.resolve() })
+        const secondId = mockedRender.mock.calls[1]?.[0].id
+
+        expect(firstId).toBeDefined()
+        expect(secondId).toBeDefined()
+        expect(secondId).not.toBe(firstId)
+    })
+
+    it('does not let an older render overwrite a newer result', async () => {
+        let resolveFirst: ((svg: string) => void) | undefined
+        let resolveSecond: ((svg: string) => void) | undefined
+        mockedRender
+            .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve }))
+            .mockImplementationOnce(() => new Promise((resolve) => { resolveSecond = resolve }))
+        const { rerender, result } = renderHook(
+            ({ code }) => useMermaidRender({
+                id: 'm-1', code, theme: 'light', streaming: false, retryKey: 0,
+            }),
+            { initialProps: { code: 'flowchart LR\nA-->B' } },
+        )
+        rerender({ code: 'flowchart LR\nA-->C' })
+
+        await act(async () => { resolveSecond?.('<svg id="new"></svg>') })
+        expect(result.current.svg).toBe('<svg id="new"></svg>')
+        await act(async () => { resolveFirst?.('<svg id="old"></svg>') })
+        expect(result.current.svg).toBe('<svg id="new"></svg>')
+    })
+
     it('ignores AbortError but exposes a settled syntax error', async () => {
         mockedRender.mockRejectedValueOnce(new DOMException('stale', 'AbortError'))
         const { rerender, result } = renderHook(

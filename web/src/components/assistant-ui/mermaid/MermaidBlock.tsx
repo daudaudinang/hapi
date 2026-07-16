@@ -43,9 +43,13 @@ export function MermaidBlock(props: SyntaxHighlighterProps) {
     const toggleFullscreen = () => {
         setFullscreenStatus(null)
         if (fullscreen) {
-            const exit = document.exitFullscreen?.()
-            if (exit) {
-                void exit.catch(() => setFullscreenStatus(t('mermaid.fullscreenUnavailable')))
+            try {
+                const exit = document.exitFullscreen?.()
+                if (exit) {
+                    void exit.catch(() => setFullscreenStatus(t('mermaid.fullscreenUnavailable')))
+                }
+            } catch {
+                setFullscreenStatus(t('mermaid.fullscreenUnavailable'))
             }
             return
         }
@@ -55,11 +59,19 @@ export function MermaidBlock(props: SyntaxHighlighterProps) {
             setFullscreenStatus(t('mermaid.fullscreenUnavailable'))
             return
         }
-        const request = block.requestFullscreen()
-        void request.catch(() => setFullscreenStatus(t('mermaid.fullscreenUnavailable')))
+        try {
+            const request = block.requestFullscreen()
+            void request.catch(() => setFullscreenStatus(t('mermaid.fullscreenUnavailable')))
+        } catch {
+            setFullscreenStatus(t('mermaid.fullscreenUnavailable'))
+        }
     }
 
-    const source = <CodeBlock code={props.code} language="text" showCopyButton={false} />
+    const source = (
+        <div className="mermaid-preview__source" data-mermaid-source>
+            <CodeBlock code={props.code} language="text" showCopyButton={false} />
+        </div>
+    )
     const content = showSource ? source : render.svg ? (
         <MermaidCanvas
             ref={canvasRef}
@@ -101,7 +113,18 @@ export function MermaidBlock(props: SyntaxHighlighterProps) {
                     </button>
                 </div>
             ) : null}
-            {fullscreenStatus ? <div className="mermaid-preview__notice" role="status">{fullscreenStatus}</div> : null}
+            {fullscreenStatus ? (
+                <div className="mermaid-preview__notice mermaid-panzoom-exclude">
+                    <span role="status">{fullscreenStatus}</span>
+                    <button
+                        type="button"
+                        aria-label={t('button.dismiss')}
+                        onClick={() => setFullscreenStatus(null)}
+                    >
+                        ×
+                    </button>
+                </div>
+            ) : null}
             <MermaidErrorBoundary
                 resetKey={`${props.code}:${colorScheme}:${retryKey}`}
                 fallback={source}

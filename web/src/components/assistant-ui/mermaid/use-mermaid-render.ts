@@ -22,7 +22,7 @@ export function useMermaidRender(input: {
             setState((previous) => ({ ...previous, loading: previous.svg === null, error: null }))
             try {
                 const svg = await renderMermaid({
-                    id: input.id,
+                    id: `${input.id}-${current}`,
                     code: input.code,
                     theme: input.theme,
                     signal: controller.signal,

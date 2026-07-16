@@ -99,4 +99,39 @@ describe('MermaidCanvas', () => {
         else Reflect.deleteProperty(document, 'fonts')
         vi.useRealTimers()
     })
+
+    it('does not run the font fallback after fonts are ready', async () => {
+        vi.useFakeTimers()
+        const originalFonts = Object.getOwnPropertyDescriptor(document, 'fonts')
+        Object.defineProperty(document, 'fonts', {
+            configurable: true,
+            value: { ready: Promise.resolve() },
+        })
+
+        render(<MermaidCanvas svg={SVG} fullscreen={false} ariaLabel="Diagram" onScaleChange={() => {}} />)
+        await act(async () => {
+            await Promise.resolve()
+            await vi.advanceTimersByTimeAsync(10)
+        })
+        const callsAfterFontsReady = panzoom.zoom.mock.calls.length
+        await act(async () => { await vi.advanceTimersByTimeAsync(600) })
+        expect(panzoom.zoom).toHaveBeenCalledTimes(callsAfterFontsReady)
+
+        if (originalFonts) Object.defineProperty(document, 'fonts', originalFonts)
+        else Reflect.deleteProperty(document, 'fonts')
+        vi.useRealTimers()
+    })
+
+    it('cancels a pending fit frame when the canvas unmounts', async () => {
+        vi.useFakeTimers()
+        const cancelFrame = vi.spyOn(window, 'cancelAnimationFrame')
+        const { unmount } = render(
+            <MermaidCanvas svg={SVG} fullscreen={false} ariaLabel="Diagram" onScaleChange={() => {}} />,
+        )
+        await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+        unmount()
+        expect(cancelFrame).toHaveBeenCalled()
+        cancelFrame.mockRestore()
+        vi.useRealTimers()
+    })
 })

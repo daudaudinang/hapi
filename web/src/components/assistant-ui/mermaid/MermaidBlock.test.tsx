@@ -57,6 +57,7 @@ describe('MermaidBlock', () => {
     afterEach(() => {
         cleanup()
         delete (HTMLElement.prototype as Partial<HTMLElement>).requestFullscreen
+        delete (document as Partial<Document>).exitFullscreen
     })
 
     it('defaults to preview and toggles exact source text', () => {
@@ -64,7 +65,12 @@ describe('MermaidBlock', () => {
         renderBlock('flowchart LR\nA-->B', vi.fn().mockResolvedValue(undefined))
         expect(screen.getByTestId('mermaid-canvas')).toBeInTheDocument()
         fireEvent.click(screen.getByRole('button', { name: /view source/i }))
-        expect(screen.getByText((_, element) => element?.textContent === 'flowchart LR\nA-->B')).toBeInTheDocument()
+        const source = document.querySelector('[data-mermaid-source]')
+        expect(source).toBeInTheDocument()
+        expect(source?.textContent).toBe('flowchart LR\nA-->B')
+        expect(screen.queryByRole('button', { name: /zoom in/i })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /zoom out/i })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /fit diagram/i })).not.toBeInTheDocument()
         fireEvent.click(screen.getByRole('button', { name: /view diagram/i }))
         expect(screen.getByTestId('mermaid-canvas')).toBeInTheDocument()
     })
@@ -96,9 +102,38 @@ describe('MermaidBlock', () => {
         expect(screen.getByRole('button', { name: /exit fullscreen/i })).toBeInTheDocument()
     })
 
+    it('ignores a foreign fullscreen element and exits through the native API', () => {
+        mockedHook.mockReturnValue({ svg: '<svg></svg>', loading: false, error: null })
+        const exitFullscreen = vi.fn().mockResolvedValue(undefined)
+        Object.defineProperty(document, 'exitFullscreen', { configurable: true, value: exitFullscreen })
+        const { block } = renderBlock('flowchart LR', vi.fn().mockResolvedValue(undefined))
+
+        Object.defineProperty(document, 'fullscreenElement', {
+            configurable: true,
+            value: document.createElement('div'),
+        })
+        fireEvent(document, new Event('fullscreenchange'))
+        expect(screen.getByRole('button', { name: /enter fullscreen/i })).toBeInTheDocument()
+
+        Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: block })
+        fireEvent(document, new Event('fullscreenchange'))
+        fireEvent.click(screen.getByRole('button', { name: /exit fullscreen/i }))
+        expect(exitFullscreen).toHaveBeenCalledTimes(1)
+    })
+
     it('keeps preview and shows a local status when fullscreen rejects', async () => {
         mockedHook.mockReturnValue({ svg: '<svg></svg>', loading: false, error: null })
         renderBlock('flowchart LR', vi.fn().mockRejectedValue(new TypeError('denied')))
+        fireEvent.click(screen.getByRole('button', { name: /enter fullscreen/i }))
+        expect(await screen.findByRole('status')).toHaveTextContent(/fullscreen is unavailable/i)
+        expect(screen.getByTestId('mermaid-canvas')).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: /dismiss/i }))
+        expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    })
+
+    it('keeps preview and shows a local status when fullscreen throws synchronously', async () => {
+        mockedHook.mockReturnValue({ svg: '<svg></svg>', loading: false, error: null })
+        renderBlock('flowchart LR', vi.fn(() => { throw new TypeError('denied') }))
         fireEvent.click(screen.getByRole('button', { name: /enter fullscreen/i }))
         expect(await screen.findByRole('status')).toHaveTextContent(/fullscreen is unavailable/i)
         expect(screen.getByTestId('mermaid-canvas')).toBeInTheDocument()
@@ -107,6 +142,6 @@ describe('MermaidBlock', () => {
     it('disables fullscreen when the API is absent', () => {
         mockedHook.mockReturnValue({ svg: '<svg></svg>', loading: false, error: null })
         renderBlock('flowchart LR', undefined)
-        expect(screen.getByRole('button', { name: /enter fullscreen/i })).toBeDisabled()
+        expect(screen.getByRole('button', { name: /fullscreen is unavailable/i })).toBeDisabled()
     })
 })

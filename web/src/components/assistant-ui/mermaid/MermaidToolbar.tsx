@@ -48,6 +48,9 @@ export function MermaidToolbar(props: Props) {
     const { t } = useTranslation()
     const { copy } = useCopyToClipboard()
     const diagramControlsDisabled = props.sourceMode || props.renderFailed
+    const fullscreenLabel = props.fullscreenSupported
+        ? t(props.fullscreen ? 'mermaid.exitFullscreen' : 'mermaid.enterFullscreen')
+        : t('mermaid.fullscreenUnavailable')
 
     return (
         <div className="mermaid-preview__toolbar" role="toolbar" aria-label="Mermaid">
@@ -65,21 +68,23 @@ export function MermaidToolbar(props: Props) {
             <Action label={t('mermaid.copySource')} onClick={() => { void copy(props.code) }}>
                 <CopyIcon />
             </Action>
-            <Action label={t('mermaid.zoomOut')} onClick={props.onZoomOut} disabled={diagramControlsDisabled}>
-                <MinusIcon />
-            </Action>
-            <span className="mermaid-preview__scale" aria-live="polite">
-                {Math.round(props.scale * 100)}%
-            </span>
-            <Action label={t('mermaid.zoomIn')} onClick={props.onZoomIn} disabled={diagramControlsDisabled}>
-                <PlusIcon />
-            </Action>
-            <Action label={t('mermaid.fit')} onClick={props.onFit} disabled={diagramControlsDisabled}>
-                <FitIcon />
-                <span className="mermaid-preview__label">{t('mermaid.fit')}</span>
-            </Action>
+            {!diagramControlsDisabled ? <>
+                <Action label={t('mermaid.zoomOut')} onClick={props.onZoomOut}>
+                    <MinusIcon />
+                </Action>
+                <span className="mermaid-preview__scale" aria-live="polite">
+                    {Math.round(props.scale * 100)}%
+                </span>
+                <Action label={t('mermaid.zoomIn')} onClick={props.onZoomIn}>
+                    <PlusIcon />
+                </Action>
+                <Action label={t('mermaid.fit')} onClick={props.onFit}>
+                    <FitIcon />
+                    <span className="mermaid-preview__label">{t('mermaid.fit')}</span>
+                </Action>
+            </> : null}
             <Action
-                label={t(props.fullscreen ? 'mermaid.exitFullscreen' : 'mermaid.enterFullscreen')}
+                label={fullscreenLabel}
                 onClick={props.onToggleFullscreen}
                 disabled={!props.fullscreenSupported}
             >
