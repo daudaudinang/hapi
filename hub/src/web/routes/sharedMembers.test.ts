@@ -97,4 +97,33 @@ describe('shared Member routes', () => {
         })
         expect(response.status).toBe(403)
     })
+
+    it('issues, lists, and cancels invitations without caching the one-time token', async () => {
+        const instance = app()
+        const issued = await instance.request('/api/invitations', {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ email: 'new@example.com', role: 'member' })
+        })
+        expect(issued.status).toBe(201)
+        expect(issued.headers.get('cache-control')).toBe('no-store')
+        const body = await issued.json() as { invitationId: string; token: string }
+        expect(body.token.length).toBeGreaterThanOrEqual(32)
+
+        const listed = await (await instance.request('/api/invitations')).json() as { invitations: Array<{ id: string; status: string }> }
+        expect(listed.invitations).toEqual([expect.objectContaining({ id: body.invitationId, status: 'active' })])
+        expect(JSON.stringify(listed)).not.toContain(body.token)
+
+        expect((await instance.request(`/api/invitations/${body.invitationId}`, { method: 'DELETE' })).status).toBe(204)
+        const cancelled = await (await instance.request('/api/invitations')).json() as { invitations: Array<{ status: string }> }
+        expect(cancelled.invitations[0]?.status).toBe('cancelled')
+    })
+
+    it('rejects invitation lifecycle access for non-admins', async () => {
+        const instance = app({ role: 'member', membershipId: 'm1' })
+        expect((await instance.request('/api/invitations')).status).toBe(403)
+        expect((await instance.request('/api/invitations', {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ email: 'new@example.com', role: 'member' })
+        })).status).toBe(403)
+    })
 })

@@ -37,7 +37,8 @@ export function createEventsRoutes(
     getSseManager: () => SSEManager | null,
     getSyncEngine: () => SyncEngine | null,
     getVisibilityTracker: () => VisibilityTracker | null,
-    capabilityResolver: ResourceCapabilityResolver
+    capabilityResolver: ResourceCapabilityResolver,
+    authorizeTeamChat: (input: { organizationId: string; membershipId: string; teamChatId: string }) => boolean
 ): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
 
@@ -104,17 +105,20 @@ export function createEventsRoutes(
                 id: subscriptionId,
                 namespace: organizationId,
                 membershipId: c.get('membershipId'),
+                organizationRole: c.get('organizationRole'),
                 all,
                 sessionId: resolvedSessionId,
                 machineId,
                 visibility,
-                authorize: ({ resourceType, resourceId }) => capabilitySatisfies(capabilityResolver({
-                    organizationId,
-                    membershipId: c.get('membershipId'),
-                    role: c.get('organizationRole'),
-                    resourceType,
-                    resourceId
-                }), 'view'),
+                authorize: ({ resourceType, resourceId }) => resourceType === 'team-chat'
+                    ? authorizeTeamChat({ organizationId, membershipId: c.get('membershipId'), teamChatId: resourceId })
+                    : capabilitySatisfies(capabilityResolver({
+                        organizationId,
+                        membershipId: c.get('membershipId'),
+                        role: c.get('organizationRole'),
+                        resourceType,
+                        resourceId
+                    }), 'view'),
                 send: (event) => stream.writeSSE({ data: JSON.stringify(event) }),
                 sendHeartbeat: async () => {
                     await stream.writeSSE({

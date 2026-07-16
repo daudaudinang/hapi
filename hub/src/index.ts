@@ -41,6 +41,7 @@ import { SessionSecurityProjection } from './application/sessionSecurityProjecti
 import { RunnerEnrollmentService } from './application/runnerEnrollmentService'
 import { RunnerLifecycleService } from './application/runnerLifecycleService'
 import { RunnerAuthenticator } from './auth/runnerAuthenticator'
+import { OutboxDispatcher } from './application/outboxDispatcher'
 
 /** Format config source for logging */
 function formatSource(source: ConfigSource | 'generated'): string {
@@ -135,9 +136,6 @@ async function main() {
         ? mergeCorsOrigins(baseCorsOrigins, relayCorsOrigin ? [relayCorsOrigin] : [])
         : baseCorsOrigins
 
-    // Never print credentials. Runner enrollment replaces this legacy CLI token path in Phase 4.
-    console.log(`[Hub] legacy CLI credential: ${config.cliApiTokenIsNew ? 'generated' : 'loaded'} (${formatSource(config.sources.cliApiToken)})`)
-
     // Display other configuration sources
     console.log(`[Hub] HAPI_LISTEN_HOST: ${config.listenHost} (${formatSource(config.sources.listenHost)})`)
     console.log(`[Hub] HAPI_LISTEN_PORT: ${config.listenPort} (${formatSource(config.sources.listenPort)})`)
@@ -189,12 +187,26 @@ async function main() {
 
     visibilityTracker = new VisibilityTracker()
     sseManager = new SSEManager(30_000, visibilityTracker)
+    const publishSharedHubEvent = (event: { id: string; name: string; organizationId: string; resourceType: string; resourceId: string }) => {
+        sseManager?.broadcast({
+            type: 'shared-hub-updated',
+            namespace: event.organizationId,
+            eventId: event.id,
+            name: event.name,
+            resourceType: event.resourceType,
+            resourceId: event.resourceId
+        })
+    }
+    const outboxDispatcher = new OutboxDispatcher(sharedStore, publishSharedHubEvent)
+    outboxDispatcher.start()
 
     let teamAuthorization: TeamAuthorizationService | null = null
     const socketServer = createSocketServer({
         store,
         jwtSecret,
         runnerAuthenticator,
+        authorizeRunnerSession: (organizationId, runnerId, sessionId) =>
+            sharedStore.findSessionRunner(organizationId, sessionId)?.id === runnerId,
         validateWebSession: (sessionToken) => identityService.validateSession(sessionToken, { mutation: false }),
         resolveCapability: (input) => {
             if (!teamAuthorization) return null
@@ -225,7 +237,7 @@ async function main() {
     teamAuthorization = new TeamAuthorizationService(
         sharedStore,
         new AuthorizationService(),
-        undefined,
+        publishSharedHubEvent,
         ({ organizationId, membershipIds }) => {
             for (const membershipId of membershipIds) {
                 sseManager?.disconnectMembership(organizationId, membershipId)
@@ -251,6 +263,9 @@ async function main() {
         syncEngine
     )
     sessionSecurityProjection.start()
+    const grantExpiryTimer = setInterval(() => {
+        teamAuthorization?.expireDueGrants(sharedConfig.organizationId)
+    }, 1_000)
 
     const notificationChannels: NotificationChannel[] = [
         new PushNotificationChannel(pushService, sseManager, visibilityTracker, config.publicUrl)
@@ -298,6 +313,8 @@ async function main() {
         runnerEnrollment,
         runnerLifecycle,
         runnerAuthenticator,
+        authorizeRunnerSession: (organizationId, runnerId, sessionId) =>
+            sharedStore.findSessionRunner(organizationId, sessionId)?.id === runnerId,
         onMemberDisabled: (organizationId, membershipId) => {
             sseManager?.disconnectMembership(organizationId, membershipId)
             socketServer.disconnectMembership(organizationId, membershipId)
@@ -382,6 +399,8 @@ async function main() {
         await tunnelManager?.stop()
         await happyBot?.stop()
         notificationHub?.stop()
+        outboxDispatcher.stop()
+        clearInterval(grantExpiryTimer)
         sessionSecurityProjection?.stop()
         syncEngine?.stop()
         sseManager?.stop()

@@ -34,6 +34,9 @@
     "test:cli": "cd cli && bun run test",
     "test:hub": "cd hub && bun run test",
     "test:web": "cd web && bun run test",
+    "test:e2e": "cd web && bun run test:e2e",
+    "checksums:release": "bun run scripts/generate-release-checksums.ts",
+    "verify:release": "bun typecheck && bun run test && bun run test:e2e && bun run build:single-exe && bun run checksums:release && git diff --check",
     "clean-session": "bun run hub/scripts/cleanup-sessions.ts",
     "release-all": "cd cli && bun run release-all",
     "release": "bun run scripts/release.ts"

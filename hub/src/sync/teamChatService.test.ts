@@ -85,4 +85,18 @@ describe('TeamChatService', () => {
         }))
     })
 
+    it('does not deliver mentions to inactive sessions', () => {
+        const store = new Store(':memory:')
+        const target = store.sessions.getOrCreateSession('backend', { path: '/repo' }, null, 'default')
+        const delivery = { deliver: mock(() => undefined) }
+        const service = new TeamChatService(store, createPublisher(), delivery, () => ({ active: false, thinking: false, agentState: null }))
+        const chat = service.createTeamChat({ namespace: 'default', name: 'Team Chat' })
+        const user = service.addParticipant({ namespace: 'default', teamChatId: chat.id, type: 'user', displayName: 'You', role: 'general', color: '#34d399' })
+        service.addParticipant({ namespace: 'default', teamChatId: chat.id, type: 'session', sessionId: target.id, displayName: 'Backend', role: 'backend', color: '#60a5fa' })
+
+        service.postMessage({ namespace: 'default', teamChatId: chat.id, authorParticipantId: user.id, text: '@Backend check this' })
+
+        expect(delivery.deliver).not.toHaveBeenCalled()
+    })
+
 })

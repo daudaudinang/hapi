@@ -234,6 +234,10 @@ function AppInner() {
     }, [])
 
     const handleSseEvent = useCallback((event: SyncEvent) => {
+        if (event.type === 'shared-hub-updated') {
+            window.dispatchEvent(new CustomEvent('hapi:shared-hub-updated', { detail: event }))
+            return
+        }
         if (event.type === 'team-mention-updated') {
             void queryClient.invalidateQueries({ queryKey: queryKeys.sessionTeamMentions(event.sessionId) })
             void queryClient.invalidateQueries({ queryKey: queryKeys.teamMentionRequestsBase })

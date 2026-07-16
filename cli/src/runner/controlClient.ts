@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import { isBunCompiled, projectPath } from '@/projectPath';
 import { isProcessAlive, killProcess } from '@/utils/process';
 import { configuration } from '@/configuration';
-import { hashRunnerCliApiToken, isRunnerStateCompatibleWithIdentity } from './runnerIdentity';
+import { isRunnerStateCompatibleWithIdentity } from './runnerIdentity';
 
 export function getInstalledCliMtimeMs(): number | undefined {
   if (isBunCompiled()) {
@@ -160,7 +160,10 @@ export async function checkIfRunnerRunningAndCleanupStaleState(): Promise<boolea
  * 
  * @returns true if versions match, false if versions differ or no runner running
  */
-export async function isRunnerRunningCurrentlyInstalledHappyVersion(): Promise<boolean> {
+export async function isRunnerRunningCurrentlyInstalledHappyVersion(expectedIdentity?: {
+  apiUrl: string;
+  machineId: string;
+}): Promise<boolean> {
   logger.debug('[RUNNER CONTROL] Checking if runner is running same version');
   const runningRunner = await checkIfRunnerRunningAndCleanupStaleState();
   if (!runningRunner) {
@@ -174,15 +177,13 @@ export async function isRunnerRunningCurrentlyInstalledHappyVersion(): Promise<b
     return false;
   }
 
-  const settings = await readSettings();
-  const currentApiUrl = process.env.HAPI_API_URL
-    || settings.apiUrl
-    || settings.serverUrl
-    || configuration.apiUrl;
-  const currentCliApiToken = process.env.CLI_API_TOKEN
-    || settings.cliApiToken
-    || configuration.cliApiToken;
-  const currentMachineId = settings.machineId;
+  const settings = expectedIdentity ? null : await readSettings();
+  const currentApiUrl = expectedIdentity?.apiUrl
+    ?? process.env.HAPI_API_URL
+    ?? settings?.apiUrl
+    ?? settings?.serverUrl
+    ?? configuration.apiUrl;
+  const currentMachineId = expectedIdentity?.machineId ?? settings?.machineId;
   
   try {
     const currentCliMtimeMs = getInstalledCliMtimeMs();
@@ -201,8 +202,7 @@ export async function isRunnerRunningCurrentlyInstalledHappyVersion(): Promise<b
 
     const currentIdentityMatches = isRunnerStateCompatibleWithIdentity(state, {
       apiUrl: currentApiUrl,
-      machineId: currentMachineId,
-      cliApiTokenHash: hashRunnerCliApiToken(currentCliApiToken)
+      machineId: currentMachineId
     });
     logger.debug(`[RUNNER CONTROL] Runner identity match: ${currentIdentityMatches}`, {
       currentApiUrl,

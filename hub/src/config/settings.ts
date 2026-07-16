@@ -6,7 +6,6 @@ export interface Settings {
     machineId?: string
     machineIdConfirmedByServer?: boolean
     runnerAutoStartWhenRunningHappy?: boolean
-    cliApiToken?: string
     vapidKeys?: {
         publicKey: string
         privateKey: string

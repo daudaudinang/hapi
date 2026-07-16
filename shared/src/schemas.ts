@@ -437,6 +437,13 @@ export const SyncEventSchema = z.discriminatedUnion('type', [
         type: z.literal('team-participant-updated'),
         teamChatId: z.string(),
         participantId: z.string()
+    }),
+    SessionEventBaseSchema.extend({
+        type: z.literal('shared-hub-updated'),
+        eventId: z.string(),
+        name: z.string(),
+        resourceType: z.string(),
+        resourceId: z.string()
     })
 ])
 

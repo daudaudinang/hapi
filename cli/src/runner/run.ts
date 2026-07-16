@@ -102,7 +102,10 @@ export async function startRunner(options: { workspaceRoot?: string; profile?:st
 
   // Check if already running
   // Check if running runner version matches current CLI version
-  const runningRunnerVersionMatches = await isRunnerRunningCurrentlyInstalledHappyVersion();
+  const runningRunnerVersionMatches = await isRunnerRunningCurrentlyInstalledHappyVersion({
+    apiUrl: enrolled.profile.hubUrl,
+    machineId: enrolled.profile.machineId
+  });
   if (!runningRunnerVersionMatches) {
     logger.debug('[RUNNER RUN] Runner version mismatch detected, restarting runner with current CLI version');
     await stopRunner();
@@ -432,7 +435,9 @@ export async function startRunner(options: { workspaceRoot?: string; profile?:st
           stdio: ['ignore', 'pipe', 'pipe'],  // Capture stdout/stderr for debugging
           env: {
             ...process.env,
-            ...extraEnv
+            ...extraEnv,
+            HAPI_RUNNER_PROFILE: enrolled.profile.profile,
+            HAPI_PROFILE_BASE_HOME: process.env.HAPI_PROFILE_BASE_HOME ?? configuration.happyHomeDir
           }
         });
 
@@ -839,7 +844,7 @@ export async function startRunner(options: { workspaceRoot?: string; profile?:st
         // 3. Next it will start a new runner with the latest version with runner-sync :D
         // Done!
         try {
-          spawnHappyCLI(['runner', 'start'], {
+          spawnHappyCLI(['runner', 'start', '--profile', enrolled.profile.profile], {
             detached: true,
             stdio: 'ignore'
           });
@@ -871,7 +876,6 @@ export async function startRunner(options: { workspaceRoot?: string; profile?:st
           startedWithCliMtimeMs,
           startedWithApiUrl: fileState.startedWithApiUrl,
           startedWithMachineId: fileState.startedWithMachineId,
-          startedWithCliApiTokenHash: fileState.startedWithCliApiTokenHash,
           lastHeartbeat: new Date().toLocaleString(),
           runnerLogPath: fileState.runnerLogPath
         };

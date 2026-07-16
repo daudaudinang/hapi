@@ -86,12 +86,13 @@ describe('API extra headers integration', () => {
             }
         })
 
-        const client = await ApiClient.create()
+        const client = ApiClient.createForRunner({ credentialId: 'cred', secret: 'x'.repeat(32) }, 'machine')
         await client.getOrCreateSession({
             tag: 'test',
             metadata: {
                 path: '/tmp/project',
-                host: 'test-host'
+                host: 'test-host',
+                machineId: 'machine'
             },
             state: null
         })
@@ -100,7 +101,7 @@ describe('API extra headers integration', () => {
         expect(axiosPostMock.mock.calls[0]?.[2]).toMatchObject({
             headers: {
                 Cookie: 'CF_Authorization=token',
-                Authorization: 'Bearer cli-token',
+                Authorization: `Runner cred.${'x'.repeat(32)}`,
                 'Content-Type': 'application/json'
             }
         })
@@ -119,7 +120,7 @@ describe('API extra headers integration', () => {
         }
         ioMock.mockReturnValue(fakeSocket)
 
-        new ApiSessionClient({ kind: 'legacy' as const, token: 'cli-token' }, {
+        new ApiSessionClient({ kind: 'runner' as const, credential: { credentialId: 'cred', secret: 'x'.repeat(32) }, machineId: 'machine' }, {
             id: 'session-1',
             namespace: 'default',
             seq: 1,

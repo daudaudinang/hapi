@@ -27,7 +27,7 @@ function createMachine(): Machine {
 
 describe('ApiMachineClient editor RPC registration', () => {
     it('registers session-less editor RPC handlers on the machine scope', () => {
-        const client = new ApiMachineClient('token', createMachine(), '/tmp/workspace') as unknown as {
+        const client = new ApiMachineClient({ kind: 'runner', credential: { credentialId: 'cred', secret: 'x'.repeat(32) }, machineId: 'machine' }, createMachine(), '/tmp/workspace') as unknown as {
             rpcHandlerManager: RpcHandlerManager
         }
 

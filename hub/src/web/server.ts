@@ -39,6 +39,7 @@ import { isBunCompiled } from '../utils/bunCompiled'
 import type { Store } from '../store'
 import type { RestCapabilityResolver } from './routes/guards'
 import { createResourceCapabilityResolver } from '../auth/resourceCapability'
+import { canAccessTeamChat } from '../auth/teamChatAuthorization'
 
 const SENSITIVE_RATE_WINDOW_MS = 60_000
 const SENSITIVE_RATE_LIMIT = 30
@@ -93,7 +94,8 @@ export function createWebApp(options: {
     teamAuthorization: TeamAuthorizationService
     runnerEnrollment?: RunnerEnrollmentService
     runnerLifecycle?: RunnerLifecycleService
-    runnerAuthenticator?: RunnerAuthenticator
+    runnerAuthenticator: RunnerAuthenticator
+    authorizeRunnerSession: (organizationId: string, runnerId: string, sessionId: string) => boolean
     onMemberDisabled?: (organizationId: string, membershipId: string) => void
     vapidPublicKey: string
     corsOrigins?: string[]
@@ -172,7 +174,7 @@ export function createWebApp(options: {
         return await next()
     })
 
-    app.route('/cli', createCliRoutes(options.getSyncEngine, options.runnerAuthenticator))
+    app.route('/cli', createCliRoutes(options.getSyncEngine, options.runnerAuthenticator, options.authorizeRunnerSession))
 
     app.route('/api', createSharedAuthRoutes(options.sharedAuth.routes))
     if (options.runnerEnrollment) app.route('/api', createRunnerExchangeRoutes(options.runnerEnrollment))
@@ -182,7 +184,17 @@ export function createWebApp(options: {
     app.route('/api', createSharedTeamsRoutes(options.teamAuthorization))
     app.route('/api', createSharedMembersRoutes(options.sharedAuth.routes.identity, options.onMemberDisabled))
     const resolveRestCapability = createRestCapabilityResolver(options.teamAuthorization)
-    app.route('/api', createEventsRoutes(options.getSseManager, options.getSyncEngine, options.getVisibilityTracker, resolveRestCapability))
+    app.route('/api', createEventsRoutes(
+        options.getSseManager,
+        options.getSyncEngine,
+        options.getVisibilityTracker,
+        resolveRestCapability,
+        ({ organizationId, membershipId, teamChatId }) => {
+            const engine = options.getSyncEngine()
+            const actor = options.teamAuthorization.resolveLiveSubject(organizationId, membershipId)
+            return Boolean(engine && actor && canAccessTeamChat(engine, actor, teamChatId, 'view'))
+        }
+    ))
     app.route('/api', createSessionsRoutes(options.getSyncEngine, {
         getTerminalLiveCount: options.getTerminalLiveCount,
         capabilityResolver: resolveRestCapability,
@@ -195,7 +207,7 @@ export function createWebApp(options: {
             }, 'session', sessionId)
     }))
     app.route('/api', createMessagesRoutes(options.getSyncEngine, resolveRestCapability))
-    app.route('/api', createTeamChatsRoutes(options.getSyncEngine))
+    app.route('/api', createTeamChatsRoutes(options.getSyncEngine, options.teamAuthorization, resolveRestCapability))
     app.route('/api', createPermissionsRoutes(options.getSyncEngine, resolveRestCapability))
     app.route('/api', createMachinesRoutes(options.getSyncEngine, resolveRestCapability))
     app.route('/api', createEditorRoutes(options.getSyncEngine, resolveRestCapability))
@@ -319,7 +331,8 @@ export async function startWebServer(options: {
     teamAuthorization: TeamAuthorizationService
     runnerEnrollment?: RunnerEnrollmentService
     runnerLifecycle?: RunnerLifecycleService
-    runnerAuthenticator?: RunnerAuthenticator
+    runnerAuthenticator: RunnerAuthenticator
+    authorizeRunnerSession: (organizationId: string, runnerId: string, sessionId: string) => boolean
     onMemberDisabled?: (organizationId: string, membershipId: string) => void
     vapidPublicKey: string
     socketEngine: SocketEngine
@@ -340,6 +353,7 @@ export async function startWebServer(options: {
         runnerEnrollment: options.runnerEnrollment,
         runnerLifecycle: options.runnerLifecycle,
         runnerAuthenticator: options.runnerAuthenticator,
+        authorizeRunnerSession: options.authorizeRunnerSession,
         onMemberDisabled: options.onMemberDisabled,
         vapidPublicKey: options.vapidPublicKey,
         corsOrigins: options.corsOrigins,

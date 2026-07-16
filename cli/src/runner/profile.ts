@@ -18,6 +18,28 @@ async function atomicWrite(path:string,value:unknown){await assertNoSymlink(path
 
 export async function createRunnerProfile(home:string,profile:RunnerProfile,credential:StoredRunnerCredential):Promise<RunnerProfilePaths>{const paths=resolveRunnerProfilePaths(home,profile.profile);try{await lstat(paths.root);throw new Error('profile_exists')}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error}await secureDirectories(paths);try{await atomicWrite(paths.profileFile,RunnerProfileSchema.parse(profile));await atomicWrite(paths.credentialFile,StoredRunnerCredentialSchema.parse(credential));return paths}catch(error){await rm(paths.root,{recursive:true,force:true});throw error}}
 export async function readRunnerProfile(home:string,name:string):Promise<{profile:RunnerProfile;credential:StoredRunnerCredential;paths:RunnerProfilePaths}>{const paths=resolveRunnerProfilePaths(home,name);await assertNoSymlink(paths.root);for(const file of[paths.profileFile,paths.credentialFile])await assertNoSymlink(file);const rootReal=await realpath(paths.root);if(rootReal!==paths.root)throw new Error('unsafe_profile');try{return{profile:RunnerProfileSchema.parse(JSON.parse(await readFile(paths.profileFile,'utf8'))),credential:StoredRunnerCredentialSchema.parse(JSON.parse(await readFile(paths.credentialFile,'utf8'))),paths}}catch{throw new Error('corrupt_profile')}}
-export async function acquireRunnerProfileLock(paths:RunnerProfilePaths){await secureDirectories(paths);try{const handle=await open(paths.lockFile,constants.O_CREAT|constants.O_EXCL|constants.O_WRONLY,0o600);await handle.writeFile(JSON.stringify({pid:process.pid,startedAt:Date.now()}));await handle.sync();return async()=>{await handle.close();await rm(paths.lockFile,{force:true})}}catch(error){if((error as NodeJS.ErrnoException).code==='EEXIST')throw new Error('profile_locked');throw error}}
+function processIsAlive(pid: number): boolean {
+    if (!Number.isSafeInteger(pid) || pid <= 0) return false
+    try { process.kill(pid, 0); return true } catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM' }
+}
+
+export async function acquireRunnerProfileLock(paths: RunnerProfilePaths) {
+    await secureDirectories(paths)
+    for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+            const handle = await open(paths.lockFile, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600)
+            await handle.writeFile(JSON.stringify({ pid: process.pid, startedAt: Date.now() }))
+            await handle.sync()
+            return async () => { await handle.close(); await rm(paths.lockFile, { force: true }) }
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+            let ownerPid = 0
+            try { ownerPid = Number(JSON.parse(await readFile(paths.lockFile, 'utf8')).pid) } catch { /* corrupt lock is stale */ }
+            if (processIsAlive(ownerPid)) throw new Error('profile_locked')
+            await rm(paths.lockFile, { force: true })
+        }
+    }
+    throw new Error('profile_locked')
+}
 export async function writeRunnerProfileState(paths:RunnerProfilePaths,state:unknown){await atomicWrite(paths.stateFile,state)}
 export async function readRunnerProfileState<T>(paths:RunnerProfilePaths):Promise<T|null>{try{await assertNoSymlink(paths.stateFile);return JSON.parse(await readFile(paths.stateFile,'utf8')) as T}catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return null;throw new Error('corrupt_profile_state')}}

@@ -11,6 +11,7 @@ type Runner = {
 type Team = {
     id: string; organizationId: string; name: string; archivedAt: number | null
 }
+type TeamMember = { membershipId: string; role: 'owner' | 'member' }
 type Grant = { id: string; principalType: 'user' | 'team'; principalId: string; resourceType: 'runner' | 'session'; resourceId: string; capability: string; expiresAt: number | null; createdAt: number }
 type AuditEvent = { id: string; actorType: 'user' | 'runner'; actorId: string; action: string; resourceType: string; resourceId: string; outcome: string; createdAt: number }
 type Tab = 'members' | 'teams' | 'runners' | 'audit'
@@ -23,6 +24,8 @@ export function AdminPage() {
     const [members, setMembers] = useState<Member[]>([])
     const [runners, setRunners] = useState<Runner[]>([])
     const [teams, setTeams] = useState<Team[]>([])
+    const [teamMembers, setTeamMembers] = useState<Record<string, TeamMember[]>>({})
+    const [teamMemberSelection, setTeamMemberSelection] = useState<Record<string, string>>({})
     const [grants, setGrants] = useState<Grant[]>([])
     const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([])
     const [loading, setLoading] = useState(true)
@@ -42,6 +45,9 @@ export function AdminPage() {
             setMembers(memberRes.members)
             setRunners(runnerRes.runners)
             setTeams(teamRes.teams)
+            const memberEntries = await Promise.all(teamRes.teams.filter((team) => !team.archivedAt).map(async (team) =>
+                [team.id, (await api.listTeamMembers(team.id)).members] as const))
+            setTeamMembers(Object.fromEntries(memberEntries))
             setGrants(grantRes.grants)
             setAuditEvents(auditRes.events)
             setError(null)
@@ -51,13 +57,19 @@ export function AdminPage() {
     }, [api])
 
     useEffect(() => { refresh() }, [refresh])
+    useEffect(() => {
+        const handleSharedHubUpdate = () => { void refresh() }
+        window.addEventListener('hapi:shared-hub-updated', handleSharedHubUpdate)
+        return () => window.removeEventListener('hapi:shared-hub-updated', handleSharedHubUpdate)
+    }, [refresh])
 
     const handleRoleChange = async (id: string, role: string) => { if (!api) return; try { await api.updateMemberRole(id, role); refresh() } catch (e) { setError((e as Error).message) } }
     const handleStatusChange = async (id: string, status: string) => { if (!api) return; try { await api.updateMemberStatus(id, status); refresh() } catch (e) { setError((e as Error).message) } }
-    const handleRevoke = async (id: string) => { if (!api) return; try { await api.revokeRunner(id); refresh() } catch (e) { setError((e as Error).message) } }
+    const handleRevoke = async (id: string) => { if (!api || !window.confirm('Revoke this Runner? Active remote access will disconnect immediately.')) return; try { await api.revokeRunner(id); refresh() } catch (e) { setError((e as Error).message) } }
     const handleCreateTeam = async () => { if (!api || !newTeamName || !newTeamOwner) return; try { await api.createTeam(newTeamName, newTeamOwner); setNewTeamName(''); setNewTeamOwner(''); refresh() } catch (e) { setError((e as Error).message) } }
     const handleCreateGrant = async (runnerId: string) => {
         if (!api) return
+        if (!window.confirm('Grant access to this whole Runner and every session on its machine?')) return
         try {
             await api.createGrant({
                 principalType: grantForm.principalType,
@@ -73,6 +85,11 @@ export function AdminPage() {
         } catch (e) { setError((e as Error).message) }
     }
     const handleRevokeGrant = async (grantId: string) => { if (!api) return; try { await api.revokeGrant(grantId); refresh() } catch (e) { setError((e as Error).message) } }
+    const handleAddTeamMember = async (teamId: string) => { const membershipId = teamMemberSelection[teamId]; if (!api || !membershipId) return; try { await api.addTeamMember(teamId, membershipId); setTeamMemberSelection({ ...teamMemberSelection, [teamId]: '' }); refresh() } catch (e) { setError((e as Error).message) } }
+    const handleRemoveTeamMember = async (teamId: string, membershipId: string) => { if (!api || !window.confirm('Remove this member from the Team? Team-derived access will be revoked immediately.')) return; try { await api.removeTeamMember(teamId, membershipId); refresh() } catch (e) { setError((e as Error).message) } }
+    const handleTransferTeam = async (teamId: string, sourceMembershipId: string) => { const targetMembershipId = teamMemberSelection[teamId]; if (!api || !targetMembershipId || !window.confirm('Transfer Team ownership?')) return; try { await api.transferTeamOwnership(teamId, sourceMembershipId, targetMembershipId); refresh() } catch (e) { setError((e as Error).message) } }
+    const handleArchiveTeam = async (teamId: string) => { if (!api || !window.confirm('Archive this Team? Its grants and membership access will stop.')) return; try { await api.archiveTeam(teamId); refresh() } catch (e) { setError((e as Error).message) } }
+    const handleTransferRunner = async (runnerId: string) => { const target = window.prompt('Target membership ID'); if (!api || !target || !window.confirm('Transfer Runner ownership?')) return; try { await api.transferRunner(runnerId, target); refresh() } catch (e) { setError((e as Error).message) } }
 
     const ownerEmail = (id: string) => members.find((m) => m.membershipId === id)?.invitedEmail || id
 
@@ -146,12 +163,19 @@ export function AdminPage() {
                     )}
                     <div className="space-y-2">
                         {teams.map((t) => (
-                            <div key={t.id} className="flex items-center justify-between rounded-lg border border-border px-4 py-3">
-                                <div className="flex items-center gap-2">
+                            <div key={t.id} className="rounded-lg border border-border px-4 py-3 space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
                                     <span className={`inline-block size-1.5 rounded-full ${t.archivedAt ? 'bg-muted-foreground' : 'bg-green-500'}`} />
                                     <span className="text-sm font-medium">{t.name}</span>
                                     {t.archivedAt && <span className="text-xs text-muted-foreground">(archived)</span>}
+                                  </div>
+                                  {isAdmin && !t.archivedAt && <button type="button" onClick={() => handleArchiveTeam(t.id)} className="text-xs text-destructive hover:underline">Archive</button>}
                                 </div>
+                                {!t.archivedAt && <>
+                                    <div className="flex flex-wrap gap-2 text-xs">{(teamMembers[t.id] ?? []).map((member) => <span key={member.membershipId} className="rounded bg-secondary px-2 py-1">{ownerEmail(member.membershipId)} · {member.role} {isAdmin && <button type="button" onClick={() => handleRemoveTeamMember(t.id, member.membershipId)} className="ml-1 text-destructive">×</button>}</span>)}</div>
+                                    {isAdmin && <div className="flex gap-2"><select value={teamMemberSelection[t.id] ?? ''} onChange={(e) => setTeamMemberSelection({ ...teamMemberSelection, [t.id]: e.target.value })} className="rounded border border-input bg-background px-2 py-1 text-xs"><option value="">Select member...</option>{members.filter((member) => member.status === 'active' && !(teamMembers[t.id] ?? []).some((teamMember) => teamMember.membershipId === member.membershipId)).map((member) => <option key={member.membershipId} value={member.membershipId}>{member.invitedEmail}</option>)}</select><button type="button" onClick={() => handleAddTeamMember(t.id)} className="text-xs text-primary">Add</button>{(teamMembers[t.id] ?? []).filter((member) => member.role === 'owner').map((owner) => <button key={owner.membershipId} type="button" onClick={() => handleTransferTeam(t.id, owner.membershipId)} className="text-xs text-primary">Transfer from {ownerEmail(owner.membershipId)}</button>)}</div>}
+                                </>}
                             </div>
                         ))}
                         {teams.length === 0 && <p className="text-sm text-muted-foreground">No teams created.</p>}
@@ -176,6 +200,7 @@ export function AdminPage() {
                                     {!isViewer && (
                                         <>
                                             <button type="button" onClick={() => setShowGrantForm(showGrantForm === r.id ? null : r.id)} className="text-xs text-primary hover:underline">Grant access</button>
+                                            <button type="button" onClick={() => handleTransferRunner(r.id)} className="text-xs text-primary hover:underline">Transfer</button>
                                             {r.status === 'active' && (
                                                 <button type="button" onClick={() => handleRevoke(r.id)} className="text-sm text-destructive hover:underline">Revoke</button>
                                             )}

@@ -65,6 +65,7 @@ export type StoredPushSubscription = {
 export type StoredTeamChat = {
     id: string
     namespace: string
+    ownerMembershipId: string | null
     name: string
     projectPath: string | null
     sharedContext: unknown | null

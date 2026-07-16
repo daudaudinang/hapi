@@ -88,7 +88,7 @@ describe('ApiMachineClient listOpencodeModelsForCwd handler', () => {
 
     it('rejects cwd outside the workspace root with the standard error shape', async () => {
         const machine = makeMachine('machine-1')
-        const client = new ApiMachineClient('cli-token', machine, workspaceRoot)
+        const client = new ApiMachineClient({ kind: 'runner', credential: { credentialId: 'cred', secret: 'x'.repeat(32) }, machineId: 'machine' }, machine, workspaceRoot)
 
         const outsideCwd = mkdtempSync(join(tmpdir(), 'hapi-outside-'))
         try {
@@ -103,7 +103,7 @@ describe('ApiMachineClient listOpencodeModelsForCwd handler', () => {
 
     it('rejects empty cwd with cwd-required error', async () => {
         const machine = makeMachine('machine-2')
-        const client = new ApiMachineClient('cli-token', machine, workspaceRoot)
+        const client = new ApiMachineClient({ kind: 'runner', credential: { credentialId: 'cred', secret: 'x'.repeat(32) }, machineId: 'machine' }, machine, workspaceRoot)
 
         try {
             const result = await callListOpencodeModels(client, machine.id, '')
@@ -116,7 +116,7 @@ describe('ApiMachineClient listOpencodeModelsForCwd handler', () => {
 
     it('forwards a workspace-internal cwd to listOpencodeModelsForCwd', async () => {
         const machine = makeMachine('machine-3')
-        const client = new ApiMachineClient('cli-token', machine, workspaceRoot)
+        const client = new ApiMachineClient({ kind: 'runner', credential: { credentialId: 'cred', secret: 'x'.repeat(32) }, machineId: 'machine' }, machine, workspaceRoot)
 
         const innerDir = join(workspaceRoot, 'inner-project')
         mkdirSync(innerDir)
@@ -178,7 +178,7 @@ describe('ApiMachineClient terminal legacy boundary', () => {
 
     it('keeps machine terminal events on the legacy single-terminal path', () => {
         const machine = makeMachine('machine-1')
-        const client = new ApiMachineClient('cli-token', machine, workspaceRoot)
+        const client = new ApiMachineClient({ kind: 'runner', credential: { credentialId: 'cred', secret: 'x'.repeat(32) }, machineId: 'machine' }, machine, workspaceRoot)
         client.connect()
 
         socket.trigger('terminal:open', { machineId: 'machine-1', terminalId: 'tm', cols: 120, rows: 40 })
@@ -201,7 +201,7 @@ describe('ApiMachineClient terminal legacy boundary', () => {
 
     it('ignores terminal events for another machine id', () => {
         const machine = makeMachine('machine-1')
-        const client = new ApiMachineClient('cli-token', machine, workspaceRoot)
+        const client = new ApiMachineClient({ kind: 'runner', credential: { credentialId: 'cred', secret: 'x'.repeat(32) }, machineId: 'machine' }, machine, workspaceRoot)
         client.connect()
 
         socket.trigger('terminal:open', { machineId: 'other-machine', terminalId: 'tm', cols: 120, rows: 40 })
@@ -221,7 +221,7 @@ describe('ApiMachineClient terminal legacy boundary', () => {
 
     it('closes all machine terminals on socket disconnect using legacy cleanup', () => {
         const machine = makeMachine('machine-1')
-        const client = new ApiMachineClient('cli-token', machine, workspaceRoot)
+        const client = new ApiMachineClient({ kind: 'runner', credential: { credentialId: 'cred', secret: 'x'.repeat(32) }, machineId: 'machine' }, machine, workspaceRoot)
         client.connect()
 
         socket.trigger('disconnect')

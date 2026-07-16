@@ -180,7 +180,7 @@ describe('ApiSessionClient.updateMetadata', () => {
         const fakeSocket = makeSocket()
         ioMock.mockReturnValue(fakeSocket)
         const current: Metadata = { path: '/tmp/project', host: 'test-host' }
-        const client = new ApiSessionClient({ kind: 'legacy' as const, token: 'cli-token' }, makeSession(current))
+        const client = new ApiSessionClient({ kind: 'runner' as const, credential: { credentialId: 'cred', secret: 'x'.repeat(32) }, machineId: 'machine' }, makeSession(current))
 
         await new Promise<void>((resolve) => {
             client.updateMetadata((metadata) => {
@@ -201,7 +201,6 @@ describe('ApiSessionClient.updateMetadata', () => {
         const fakeSocket = makeSocket()
         ioMock.mockReturnValue(fakeSocket)
         configuration._setApiUrl('http://hub.test')
-        configuration._setCliApiToken('cli-token')
         axiosPostMock.mockResolvedValue({
             data: {
                 request: {
@@ -221,7 +220,7 @@ describe('ApiSessionClient.updateMetadata', () => {
                 }
             }
         })
-        const client = new ApiSessionClient({ kind: 'legacy' as const, token: 'cli-token' }, makeSession({ path: '/tmp/project', host: 'test-host' }))
+        const client = new ApiSessionClient({ kind: 'runner' as const, credential: { credentialId: 'cred', secret: 'x'.repeat(32) }, machineId: 'machine' }, makeSession({ path: '/tmp/project', host: 'test-host' }))
 
         const result = await client.markTeamMentionNoAction({ requestId: 'req/1' })
 
@@ -230,7 +229,10 @@ describe('ApiSessionClient.updateMetadata', () => {
             'http://hub.test/cli/sessions/session-1/team-mentions/req%2F1/no-action',
             {},
             expect.objectContaining({
-                headers: expect.objectContaining({ Authorization: 'Bearer cli-token' }),
+                headers: expect.objectContaining({
+                    Authorization: `Runner cred.${'x'.repeat(32)}`,
+                    'X-Hapi-Machine-Id': 'machine'
+                }),
                 timeout: 15_000
             })
         )
@@ -244,7 +246,7 @@ describe('ApiSessionClient.updateMetadata', () => {
         const fakeSocket = makeSocket()
         ioMock.mockReturnValue(fakeSocket)
         const closeAllSpy = vi.spyOn(TerminalManager.prototype, 'closeAll')
-        new ApiSessionClient({ kind: 'legacy' as const, token: 'cli-token' }, makeSession({ path: '/tmp/project', host: 'test-host' }))
+        new ApiSessionClient({ kind: 'runner' as const, credential: { credentialId: 'cred', secret: 'x'.repeat(32) }, machineId: 'machine' }, makeSession({ path: '/tmp/project', host: 'test-host' }))
 
         fakeSocket.trigger('disconnect', 'transport close')
 
@@ -255,7 +257,7 @@ describe('ApiSessionClient.updateMetadata', () => {
     it('emits terminal list when hub requests session terminal list', () => {
         const fakeSocket = makeSocket()
         ioMock.mockReturnValue(fakeSocket)
-        new ApiSessionClient({ kind: 'legacy' as const, token: 'cli-token' }, makeSession({ path: '/tmp/project', host: 'test-host' }))
+        new ApiSessionClient({ kind: 'runner' as const, credential: { credentialId: 'cred', secret: 'x'.repeat(32) }, machineId: 'machine' }, makeSession({ path: '/tmp/project', host: 'test-host' }))
 
         fakeSocket.trigger('terminal:list', { scopeType: 'session', sessionId: 'session-1' })
 
@@ -269,7 +271,7 @@ describe('ApiSessionClient.updateMetadata', () => {
     it('handles terminal keepalive without shell input and re-emits updated list', () => {
         const fakeSocket = makeSocket()
         ioMock.mockReturnValue(fakeSocket)
-        new ApiSessionClient({ kind: 'legacy' as const, token: 'cli-token' }, makeSession({ path: '/tmp/project', host: 'test-host' }))
+        new ApiSessionClient({ kind: 'runner' as const, credential: { credentialId: 'cred', secret: 'x'.repeat(32) }, machineId: 'machine' }, makeSession({ path: '/tmp/project', host: 'test-host' }))
 
         fakeSocket.trigger('terminal:keepalive', { scopeType: 'session', sessionId: 'session-1', terminalId: 't1' })
 
@@ -303,7 +305,7 @@ describe('ApiSessionClient.updateMetadata', () => {
         const liveT3 = { ...closedTerminal, terminalId: 't3', label: 'Terminal 3', status: 'detached' as const, closeReason: null }
         const closeSpy = vi.spyOn(TerminalManager.prototype, 'close').mockImplementation(() => {})
         vi.spyOn(TerminalManager.prototype, 'list').mockReturnValue([closedTerminal, liveT2, liveT3])
-        new ApiSessionClient({ kind: 'legacy' as const, token: 'cli-token' }, makeSession({ path: '/tmp/project', host: 'test-host' }))
+        new ApiSessionClient({ kind: 'runner' as const, credential: { credentialId: 'cred', secret: 'x'.repeat(32) }, machineId: 'machine' }, makeSession({ path: '/tmp/project', host: 'test-host' }))
 
         fakeSocket.trigger('terminal:close', { sessionId: 'session-1', terminalId: 't1' })
 
@@ -337,7 +339,7 @@ describe('ApiSessionClient.updateMetadata', () => {
             hardExpiresAt: 3
         }
         vi.spyOn(TerminalManager.prototype, 'list').mockReturnValue([archivedTerminal])
-        new ApiSessionClient({ kind: 'legacy' as const, token: 'cli-token' }, makeSession({ path: '/tmp/project', host: 'test-host' }))
+        new ApiSessionClient({ kind: 'runner' as const, credential: { credentialId: 'cred', secret: 'x'.repeat(32) }, machineId: 'machine' }, makeSession({ path: '/tmp/project', host: 'test-host' }))
 
         fakeSocket.trigger('terminal:close-all', {
             scopeType: 'session',
@@ -357,7 +359,7 @@ describe('ApiSessionClient.updateMetadata', () => {
         const fakeSocket = makeSocket()
         ioMock.mockReturnValue(fakeSocket)
         const closeAllSpy = vi.spyOn(TerminalManager.prototype, 'closeAll').mockImplementation(() => {})
-        new ApiSessionClient({ kind: 'legacy' as const, token: 'cli-token' }, makeSession({ path: '/tmp/project', host: 'test-host' }))
+        new ApiSessionClient({ kind: 'runner' as const, credential: { credentialId: 'cred', secret: 'x'.repeat(32) }, machineId: 'machine' }, makeSession({ path: '/tmp/project', host: 'test-host' }))
 
         for (const payload of [
             { scopeType: 'session', sessionId: 'other-session', reason: 'archive' },
@@ -376,7 +378,7 @@ describe('ApiSessionClient.updateMetadata', () => {
     it('emits terminal:warning when TerminalManager reports a session warning', () => {
         const fakeSocket = makeSocket()
         ioMock.mockReturnValue(fakeSocket)
-        const client = new ApiSessionClient({ kind: 'legacy' as const, token: 'cli-token' }, makeSession({ path: '/tmp/project', host: 'test-host' }))
+        const client = new ApiSessionClient({ kind: 'runner' as const, credential: { credentialId: 'cred', secret: 'x'.repeat(32) }, machineId: 'machine' }, makeSession({ path: '/tmp/project', host: 'test-host' }))
         const payload = {
             scopeType: 'session' as const,
             sessionId: 'session-1',
@@ -397,7 +399,6 @@ describe('ApiSessionClient.updateMetadata', () => {
         const fakeSocket = makeSocket()
         ioMock.mockReturnValue(fakeSocket)
         configuration._setApiUrl('http://hub.test')
-        configuration._setCliApiToken('cli-token')
         axiosPostMock.mockResolvedValue({
             data: {
                 message: {
@@ -415,7 +416,7 @@ describe('ApiSessionClient.updateMetadata', () => {
                 }
             }
         })
-        const client = new ApiSessionClient({ kind: 'legacy' as const, token: 'cli-token' }, makeSession({ path: '/tmp/project', host: 'test-host' }))
+        const client = new ApiSessionClient({ kind: 'runner' as const, credential: { credentialId: 'cred', secret: 'x'.repeat(32) }, machineId: 'machine' }, makeSession({ path: '/tmp/project', host: 'test-host' }))
 
         const result = await client.reportToTeam({
             teamChatId: 'team/1',
@@ -428,7 +429,10 @@ describe('ApiSessionClient.updateMetadata', () => {
             'http://hub.test/cli/sessions/session-1/team-reports',
             { teamChatId: 'team/1', type: 'done', summary: 'Implemented tests' },
             expect.objectContaining({
-                headers: expect.objectContaining({ Authorization: 'Bearer cli-token' }),
+                headers: expect.objectContaining({
+                    Authorization: `Runner cred.${'x'.repeat(32)}`,
+                    'X-Hapi-Machine-Id': 'machine'
+                }),
                 timeout: 15_000
             })
         )

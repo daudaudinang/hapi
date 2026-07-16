@@ -153,10 +153,10 @@ describe('SSEManager namespace filtering', () => {
         expect(manager['connections'].has('unrelated')).toBe(true)
     })
 
-    it('projects all dynamically and fails closed for team events', () => {
+    it('projects all dynamically and rechecks Team Chat authorization', () => {
         const manager = new SSEManager(0, new VisibilityTracker())
         const received: SyncEvent[] = []
-        const allowed = new Set(['session:granted', 'machine:machine-granted'])
+        const allowed = new Set(['session:granted', 'machine:machine-granted', 'team-chat:team-1'])
 
         manager.subscribe({
             id: 'dynamic',
@@ -172,10 +172,12 @@ describe('SSEManager namespace filtering', () => {
         manager.broadcast({ type: 'session-updated', namespace: 'org-1', sessionId: 'denied' })
         manager.broadcast({ type: 'machine-updated', namespace: 'org-1', machineId: 'machine-granted' })
         manager.broadcast({ type: 'team-chat-updated', namespace: 'org-1', teamChatId: 'team-1' })
+        allowed.delete('team-chat:team-1')
+        manager.broadcast({ type: 'team-message-created', namespace: 'org-1', teamChatId: 'team-1', messageId: 'secret' })
         allowed.delete('session:granted')
         manager.broadcast({ type: 'messages-invalidated', namespace: 'org-1', sessionId: 'granted' })
 
-        expect(received.map((event) => event.type)).toEqual(['session-updated', 'machine-updated'])
+        expect(received.map((event) => event.type)).toEqual(['session-updated', 'machine-updated', 'team-chat-updated'])
     })
 
     it('authorizes nested toast session ids before visible delivery', async () => {
@@ -217,5 +219,31 @@ describe('SSEManager namespace filtering', () => {
         })
 
         expect(received).toEqual([])
+    })
+
+    it('delivers Shared Hub lifecycle invalidations only to all-scope admins in the organization', () => {
+        const manager = new SSEManager(0, new VisibilityTracker())
+        const received: string[] = []
+        for (const input of [
+            { id: 'admin', namespace: 'org-1', organizationRole: 'admin' as const, all: true },
+            { id: 'member', namespace: 'org-1', organizationRole: 'member' as const, all: true },
+            { id: 'scoped-admin', namespace: 'org-1', organizationRole: 'admin' as const, all: false },
+            { id: 'other-admin', namespace: 'org-2', organizationRole: 'admin' as const, all: true }
+        ]) {
+            manager.subscribe({
+                ...input,
+                membershipId: input.id,
+                authorize: () => true,
+                send: () => { received.push(input.id) },
+                sendHeartbeat: () => {}
+            })
+        }
+
+        manager.broadcast({
+            type: 'shared-hub-updated', namespace: 'org-1', eventId: 'event-1',
+            name: 'member.role_changed', resourceType: 'membership', resourceId: 'member-1'
+        })
+
+        expect(received).toEqual(['admin'])
     })
 })

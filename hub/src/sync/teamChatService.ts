@@ -23,7 +23,7 @@ export class TeamChatService {
         private readonly resolveSession?: (namespace: string, sessionId: string) => Pick<Session, 'active' | 'thinking' | 'agentState'> | undefined
     ) {}
 
-    createTeamChat(input: { namespace: string; name: string; projectPath?: string | null }) {
+    createTeamChat(input: { namespace: string; ownerMembershipId?: string | null; name: string; projectPath?: string | null }) {
         const chat = this.store.teamChats.createTeamChat(input)
         this.publisher.emit({ type: 'team-chat-updated', namespace: input.namespace, teamChatId: chat.id })
         return chat
@@ -143,7 +143,7 @@ export class TeamChatService {
                 hopDepth: 0
             })
             const session = this.resolveSession?.(input.namespace, mention.sessionId)
-            if (this.mentionDelivery && session) {
+            if (this.mentionDelivery && session?.active) {
                 this.mentionDelivery.deliver({
                     namespace: input.namespace,
                     request,
@@ -275,7 +275,7 @@ export class TeamChatService {
                 parentRequestId: input.replyToRequestId ?? null
             })
             const session = this.resolveSession?.(input.namespace, mention.sessionId)
-            if (this.mentionDelivery && session) {
+            if (this.mentionDelivery && session?.active) {
                 this.mentionDelivery.deliver({
                     namespace: input.namespace,
                     request,

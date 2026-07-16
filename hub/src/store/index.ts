@@ -28,7 +28,7 @@ export { SessionStore } from './sessionStore'
 export { TeamChatStore } from './teamChatStore'
 export { UserStore } from './userStore'
 
-const SCHEMA_VERSION: number = 10
+const SCHEMA_VERSION: number = 11
 const REQUIRED_TABLES = [
     'sessions',
     'machines',
@@ -111,6 +111,7 @@ export class Store {
             7: () => this.migrateFromV7ToV8(),
             8: () => this.migrateFromV8ToV9(),
             9: () => this.migrateFromV9ToV10(),
+            10: () => this.migrateFromV10ToV11(),
         })
 
         if (currentVersion === 0) {
@@ -244,6 +245,7 @@ export class Store {
             CREATE TABLE IF NOT EXISTS team_chats (
                 id TEXT PRIMARY KEY,
                 namespace TEXT NOT NULL,
+                owner_membership_id TEXT,
                 name TEXT NOT NULL,
                 project_path TEXT,
                 shared_context TEXT,
@@ -470,6 +472,13 @@ export class Store {
         this.createTeamChatSchema()
     }
 
+    private migrateFromV10ToV11(): void {
+        const columns = this.getTeamChatColumnNames()
+        if (columns.size > 0 && !columns.has('owner_membership_id')) {
+            this.db.exec('ALTER TABLE team_chats ADD COLUMN owner_membership_id TEXT')
+        }
+    }
+
     private migrateFromV7ToV8(): void {
         const columns = this.getMessageColumnNames()
         if (columns.size === 0) {
@@ -501,6 +510,11 @@ export class Store {
 
     private getMessageColumnNames(): Set<string> {
         const rows = this.db.prepare('PRAGMA table_info(messages)').all() as Array<{ name: string }>
+        return new Set(rows.map((row) => row.name))
+    }
+
+    private getTeamChatColumnNames(): Set<string> {
+        const rows = this.db.prepare('PRAGMA table_info(team_chats)').all() as Array<{ name: string }>
         return new Set(rows.map((row) => row.name))
     }
 

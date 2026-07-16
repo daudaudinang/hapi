@@ -234,7 +234,7 @@ export class SyncEngine {
         return this.messageService.getMessagesAfter(sessionId, options)
     }
 
-    createTeamChat(input: { namespace: string; name: string; projectPath?: string | null }) {
+    createTeamChat(input: { namespace: string; ownerMembershipId?: string | null; name: string; projectPath?: string | null }) {
         return this.teamChatService.createTeamChat(input)
     }
 

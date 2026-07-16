@@ -9,15 +9,18 @@ import { createCliRoutes } from './cli'
 
 function createApp(engine: Record<string, unknown>) {
     const app = new Hono()
-    app.route('/cli', createCliRoutes(() => engine as unknown as SyncEngine))
+    app.route('/cli', createCliRoutes(
+        () => engine as unknown as SyncEngine,
+        { authenticateAny: () => ({ id: 'r1', organizationId: 'o1', machineId: 'm1', status: 'active' }) } as never,
+        () => true
+    ))
     return app
 }
 
 describe('CLI Team Chat report routes', () => {
     beforeAll(async () => {
         process.env.HAPI_HOME = mkdtempSync(join(tmpdir(), 'hapi-cli-team-reports-'))
-        const configuration = await createConfiguration()
-        configuration._setCliApiToken('cli-test-token', 'env', false)
+        await createConfiguration()
     })
 
     it('posts ReportToTeam through the authenticated source session', async () => {
@@ -52,7 +55,8 @@ describe('CLI Team Chat report routes', () => {
         const response = await app.request('/cli/sessions/session-1/team-reports', {
             method: 'POST',
             headers: {
-                authorization: 'Bearer cli-test-token:ns-a',
+                authorization: `Runner cred.${'x'.repeat(32)}`,
+                'x-hapi-machine-id': 'm1',
                 'content-type': 'application/json'
             },
             body: JSON.stringify({
@@ -64,7 +68,7 @@ describe('CLI Team Chat report routes', () => {
 
         expect(response.status).toBe(201)
         expect(calls).toEqual([{
-            namespace: 'ns-a',
+            namespace: 'o1',
             sourceSessionId: 'session-1',
             teamChatId: 'team-1',
             type: 'done',
@@ -107,13 +111,14 @@ describe('CLI Team Chat report routes', () => {
         const response = await app.request('/cli/sessions/session-1/team-mentions/req-1/no-action', {
             method: 'POST',
             headers: {
-                authorization: 'Bearer cli-test-token:ns-a'
+                authorization: `Runner cred.${'x'.repeat(32)}`,
+                'x-hapi-machine-id': 'm1'
             }
         })
 
         expect(response.status).toBe(200)
         expect(calls).toEqual([{
-            namespace: 'ns-a',
+            namespace: 'o1',
             sessionId: 'session-1',
             requestId: 'req-1',
             status: 'no_action'

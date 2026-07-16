@@ -2,14 +2,17 @@ import { EventEmitter } from 'node:events'
 import { PassThrough } from 'node:stream'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SDKMessage } from '@/claude/sdk/types'
+import { claudeRemote } from './claudeRemote'
 
-const spawnMock = vi.fn()
-const killProcessMock = vi.fn(async (child: any) => {
-    child.killed = true
-    child.stdout.end()
-    child.emit('close', 0)
-    return true
-})
+const { spawnMock, killProcessMock } = vi.hoisted(() => ({
+    spawnMock: vi.fn(),
+    killProcessMock: vi.fn(async (child: any) => {
+        child.killed = true
+        child.stdout.end()
+        child.emit('close', 0)
+        return true
+    })
+}))
 
 vi.mock('node:child_process', () => ({
     ...require('node:child_process'),
@@ -60,7 +63,6 @@ describe('claudeRemote/query real seam', () => {
         const child = createFakeChild()
         spawnMock.mockReturnValueOnce(child)
         process.env.HAPI_CLAUDE_PATH = 'claude'
-        const { claudeRemote } = await import('./claudeRemote')
 
         const received: SDKMessage[] = []
         let nextCallCount = 0

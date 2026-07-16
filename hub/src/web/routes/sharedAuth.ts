@@ -8,7 +8,8 @@ import type { SharedWebAppEnv } from '../sharedAuthEnv'
 type OidcBoundary = Pick<OidcService, 'startLogin' | 'completeLogin'>
 type IdentityBoundary = Pick<IdentityService,
     'completeBrowserLogin' | 'validateSession' | 'revokeSession'
-    | 'listMembers' | 'getMember' | 'updateMemberRole' | 'disableMember' | 'enableMember'>
+    | 'listMembers' | 'getMember' | 'updateMemberRole' | 'disableMember' | 'enableMember'
+    | 'issueInvitation' | 'listInvitations' | 'cancelInvitation'>
 
 export type SharedAuthRouteOptions = {
     oidc: OidcBoundary

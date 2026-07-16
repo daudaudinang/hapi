@@ -128,6 +128,7 @@ export const runnerCommand: CommandDefinition = {
 
         if (runnerSubcommand === 'start') {
             const profile=option(mutableArgs,'--profile');if(!profile){console.error('--profile is required');process.exitCode=1;return}
+            const profileBaseHome=process.env.HAPI_PROFILE_BASE_HOME??configuration.happyHomeDir
             const foreground=mutableArgs.includes('--foreground')
             if (foreground) {
                 await startRunner({ workspaceRoot, profile })
@@ -141,13 +142,13 @@ export const runnerCommand: CommandDefinition = {
             const child = spawnHappyCLI(childArgs, {
                 detached: true,
                 stdio: 'ignore',
-                env: { ...process.env, HAPI_HOME: resolveRunnerProfilePaths(configuration.happyHomeDir,profile).root, HAPI_PROFILE_BASE_HOME: configuration.happyHomeDir }
+                env: { ...process.env, HAPI_HOME: resolveRunnerProfilePaths(profileBaseHome,profile).root, HAPI_PROFILE_BASE_HOME: profileBaseHome }
             })
             child.unref()
 
             let started = false
             for (let i = 0; i < 50; i++) {
-                const state=await readRunnerProfileState<RunnerLocallyPersistedState>(resolveRunnerProfilePaths(configuration.happyHomeDir,profile));if(state&&isProcessAlive(state.pid)) {
+                const state=await readRunnerProfileState<RunnerLocallyPersistedState>(resolveRunnerProfilePaths(profileBaseHome,profile));if(state&&isProcessAlive(state.pid)) {
                     started = true
                     break
                 }

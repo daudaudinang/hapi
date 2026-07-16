@@ -59,6 +59,22 @@ Verification:
 
 Goal: one effective-capability resolver controls every transport and feature.
 
+### Locked Team Chat authorization policy
+
+This policy is the implementation contract for Shared Hub:
+
+- Every Team Chat belongs to one organization and records the creating active membership as `ownerMembershipId`. Organization namespace is isolation metadata only; it grants no access.
+- An active organization Admin and the active Team Chat owner have `manage`. An active user participant has `interact`. Other organization members have no Team Chat capability. Participant roles such as `backend`, `frontend`, or `reviewer` are descriptive and never grant authority.
+- Capabilities are hierarchical: `manage` includes `operate`, `interact`, and `view`; `operate` includes `interact` and `view`; `interact` includes `view`.
+- `view` permits listing a discoverable chat, reading its messages and participants, and reading relevant reports. `interact` permits posting and acknowledging or responding to mentions. `operate` permits adding or updating participants. `manage` permits removing participants and archiving a chat.
+- Chat creation requires an active organization Admin; the creator becomes owner. An Admin may create a chat owned by another active membership. Ownership transfer, if exposed, requires `manage`, an active target membership, and last-owner protection.
+- Browser access is evaluated from the current opaque-session membership on every REST request and every SSE delivery. Prior room membership, a cached list response, or organization membership alone is not authority.
+- A session participant receives Team Chat messages or mentions only while the chat and participant are active, the session is active, and the session still belongs to an active authorized Runner projection. Access to a Runner or session alone never grants browser access to its Team Chats.
+- Posting a session report requires `interact` on the Team Chat and `interact` on the source session. The source session must be an active participant in that chat. Mention targets must be active session participants in the same chat.
+- Cross-organization, archived, or otherwise undiscoverable resources return `404`. A discoverable same-organization resource with insufficient capability returns `403`.
+- Authorization is checked before database mutation, message lookup, mention/report creation, publish, room join, RPC, CLI emit, or session delivery. Denial produces no side effect.
+- Disable, owner loss, participant removal, chat archive, Runner revoke, and session projection loss take effect for new requests and deliveries immediately and disconnect or detach affected realtime recipients within the access-loss SLO.
+
 1. Build an endpoint/event/action inventory for REST, SSE, browser Socket.IO, CLI Socket.IO, RPC, terminal, editor, files, Git, permissions, and Team Chat.
 2. Map every operation to `view`, `interact`, `spawn`, `operate`, or `manage`; reject unmapped operations by default.
 3. Replace organization-only Team Chat guards with explicit membership/resource/capability checks. Define Team Chat ownership and participant rules before enabling access.

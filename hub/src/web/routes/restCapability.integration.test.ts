@@ -127,7 +127,7 @@ describe('production-wired REST capability matrix', () => {
                 namespace: 'o1',
                 membershipId,
                 all: true,
-                authorize: ({ resourceType, resourceId }) => capabilitySatisfies(realtimeResolver({
+                authorize: ({ resourceType, resourceId }) => resourceType !== 'team-chat' && capabilitySatisfies(realtimeResolver({
                     organizationId: 'o1', membershipId, role, resourceType, resourceId
                 }), 'view'),
                 send: (event) => { realtimeEvents.push(event.type) },

@@ -6,7 +6,6 @@
  * they are automatically saved for future use
  *
  * Optional environment variables:
- * - CLI_API_TOKEN: Shared secret for hapi CLI authentication (auto-generated if not set)
  * - TELEGRAM_BOT_TOKEN: Telegram Bot API token from @BotFather
  * - TELEGRAM_NOTIFICATION: Enable/disable Telegram notifications (default: true)
  * - SERVERCHAN_SENDKEY: Server酱 SendKey/AppKey for push notifications
@@ -26,7 +25,6 @@
 import { existsSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { getOrCreateCliApiToken } from './config/cliApiToken'
 import { getSettingsFile } from './config/settings'
 import { loadServerSettings, type ServerSettings, type ServerSettingsResult } from './config/serverSettings'
 
@@ -41,7 +39,6 @@ export interface ConfigSources {
     listenPort: ConfigSource
     publicUrl: ConfigSource
     corsOrigins: ConfigSource
-    cliApiToken: 'env' | 'file' | 'generated'
 }
 
 class Configuration {
@@ -59,15 +56,6 @@ class Configuration {
 
     /** Server酱 notifications enabled */
     public readonly serverChanNotification: boolean
-
-    /** CLI auth token (shared secret) */
-    public cliApiToken: string
-
-    /** Source of CLI API token */
-    public cliApiTokenSource: 'env' | 'file' | 'generated' | ''
-
-    /** Whether CLI API token was newly generated (for first-run display) */
-    public cliApiTokenIsNew: boolean
 
     /** Path to settings.json file */
     public readonly settingsFile: string
@@ -115,12 +103,6 @@ class Configuration {
         this.publicUrl = serverSettings.publicUrl
         this.corsOrigins = serverSettings.corsOrigins
 
-        // CLI API token - will be set by _setCliApiToken() before create() returns
-        this.cliApiToken = ''
-        this.cliApiTokenSource = ''
-        this.cliApiTokenIsNew = false
-
-        // Store sources for logging (cliApiToken will be set by _setCliApiToken)
         this.sources = {
             ...sources,
         } as ConfigSources
@@ -163,19 +145,7 @@ class Configuration {
             settingsResult.sources
         )
 
-        // 5. Load CLI API token
-        const tokenResult = await getOrCreateCliApiToken(dataDir)
-        config._setCliApiToken(tokenResult.token, tokenResult.source, tokenResult.isNew)
-
         return config
-    }
-
-    /** Set CLI API token (called during async initialization) */
-    _setCliApiToken(token: string, source: 'env' | 'file' | 'generated', isNew: boolean): void {
-        this.cliApiToken = token
-        this.cliApiTokenSource = source
-        this.cliApiTokenIsNew = isNew
-        ;(this.sources as { cliApiToken: string }).cliApiToken = source
     }
 }
 

@@ -27,7 +27,7 @@ export function getEnvironmentInfo(): Record<string, any> {
         HAPI_HOME: process.env.HAPI_HOME,
         HAPI_API_URL: process.env.HAPI_API_URL,
         HAPI_PROJECT_ROOT: process.env.HAPI_PROJECT_ROOT,
-        CLI_API_TOKEN_SET: Boolean(process.env.CLI_API_TOKEN),
+        HAPI_RUNNER_PROFILE: process.env.HAPI_RUNNER_PROFILE,
         DANGEROUSLY_LOG_TO_SERVER_FOR_AI_AUTO_DEBUGGING: process.env.DANGEROUSLY_LOG_TO_SERVER_FOR_AI_AUTO_DEBUGGING,
         NODE_ENV: process.env.NODE_ENV,
         DEBUG: process.env.DEBUG,
@@ -116,7 +116,7 @@ export async function runDoctorCommand(filter?: 'all' | 'runner'): Promise<void>
         const env = getEnvironmentInfo();
         console.log(`HAPI_HOME: ${env.HAPI_HOME ? chalk.green(env.HAPI_HOME) : chalk.gray('not set')}`);
         console.log(`HAPI_API_URL: ${env.HAPI_API_URL ? chalk.green(env.HAPI_API_URL) : chalk.gray('not set')}`);
-        console.log(`CLI_API_TOKEN: ${env.CLI_API_TOKEN_SET ? chalk.green('set') : chalk.gray('not set')}`);
+        console.log(`HAPI_RUNNER_PROFILE: ${env.HAPI_RUNNER_PROFILE ? chalk.green(env.HAPI_RUNNER_PROFILE) : chalk.gray('not set')}`);
         console.log(`DANGEROUSLY_LOG_TO_SERVER: ${env.DANGEROUSLY_LOG_TO_SERVER_FOR_AI_AUTO_DEBUGGING ? chalk.yellow('ENABLED') : chalk.gray('not set')}`);
         console.log(`DEBUG: ${env.DEBUG ? chalk.green(env.DEBUG) : chalk.gray('not set')}`);
         console.log(`NODE_ENV: ${env.NODE_ENV ? chalk.green(env.NODE_ENV) : chalk.gray('not set')}`);
@@ -126,27 +126,17 @@ export async function runDoctorCommand(filter?: 'all' | 'runner'): Promise<void>
         try {
             settings = await readSettings();
             console.log(chalk.bold('\n📄 Settings (settings.json):'));
-            // Hide cliApiToken in output for security
-            const displaySettings = { ...settings, cliApiToken: settings.cliApiToken ? '***' : undefined };
-            console.log(chalk.gray(JSON.stringify(displaySettings, null, 2)));
+            console.log(chalk.gray(JSON.stringify(settings, null, 2)));
         } catch (error) {
             console.log(chalk.bold('\n📄 Settings:'));
             console.log(chalk.red('❌ Failed to read settings'));
             settings = {};
         }
 
-        // Authentication status (direct-connect)
-        console.log(chalk.bold('\n🔐 Direct Connect Auth'));
-        const envToken = process.env.CLI_API_TOKEN;
-        const settingsToken = settings.cliApiToken;
-        const hasToken = Boolean(envToken || settingsToken);
-        const tokenSource = envToken ? 'environment variable' : (settingsToken ? 'settings file' : 'none');
-        if (hasToken) {
-            console.log(chalk.green(`✓ CLI_API_TOKEN is set (from ${tokenSource})`));
-        } else {
-            console.log(chalk.red('❌ CLI_API_TOKEN is not set'));
-            console.log(chalk.gray('  Run `hapi auth login` to configure or set CLI_API_TOKEN env var'));
-        }
+        console.log(chalk.bold('\n🔐 Runner identity'));
+        console.log(env.HAPI_RUNNER_PROFILE
+            ? chalk.green(`✓ Runner profile '${env.HAPI_RUNNER_PROFILE}' selected`)
+            : chalk.red('❌ Set HAPI_RUNNER_PROFILE to an enrolled profile'));
 
     }
 

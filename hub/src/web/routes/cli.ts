@@ -2,13 +2,10 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { PROTOCOL_VERSION } from '@hapi/protocol'
 import { MarkTeamMentionNoActionInputSchema, ReportToTeamInputSchema } from '@hapi/protocol/schemas'
-import { configuration } from '../../configuration'
-import { constantTimeEquals } from '../../utils/crypto'
-import { parseAccessToken } from '../../utils/accessToken'
 import type { Machine, Session, SyncEngine } from '../../sync/syncEngine'
 import type { RunnerAuthenticator } from '../../auth/runnerAuthenticator'
 
-const bearerSchema = z.string().regex(/^(Bearer|Runner)\s+(.+)$/i)
+const runnerAuthorizationSchema = z.string().regex(/^Runner\s+[^.\s]+\.[^\s]+$/i)
 
 const createOrLoadSessionSchema = z.object({
     tag: z.string().min(1),
@@ -33,19 +30,23 @@ const getMessagesQuerySchema = z.object({
 type CliEnv = {
     Variables: {
         namespace: string
-        authenticatedMachineId?: string
+        authenticatedMachineId: string
+        authenticatedRunnerId: string
     }
 }
 
 function resolveSessionForNamespace(
     engine: SyncEngine,
     sessionId: string,
-    namespace: string
+    namespace: string,
+    runnerId: string,
+    authorizeRunnerSession: (organizationId: string, runnerId: string, sessionId: string) => boolean
 ): { ok: true; session: Session; sessionId: string } | { ok: false; status: 403 | 404; error: string } {
     const access = engine.resolveSessionAccess(sessionId, namespace)
-    if (access.ok) {
+    if (access.ok && authorizeRunnerSession(namespace, runnerId, access.sessionId)) {
         return { ok: true, session: access.session, sessionId: access.sessionId }
     }
+    if (access.ok) return { ok: false, status: 403, error: 'Session access denied' }
     return {
         ok: false,
         status: access.reason === 'access-denied' ? 403 : 404,
@@ -68,7 +69,11 @@ function resolveMachineForNamespace(
     return { ok: false, status: 404, error: 'Machine not found' }
 }
 
-export function createCliRoutes(getSyncEngine: () => SyncEngine | null, runnerAuthenticator?: RunnerAuthenticator): Hono<CliEnv> {
+export function createCliRoutes(
+    getSyncEngine: () => SyncEngine | null,
+    runnerAuthenticator: RunnerAuthenticator,
+    authorizeRunnerSession: (organizationId: string, runnerId: string, sessionId: string) => boolean
+): Hono<CliEnv> {
     const app = new Hono<CliEnv>()
 
     app.use('*', async (c, next) => {
@@ -79,22 +84,19 @@ export function createCliRoutes(getSyncEngine: () => SyncEngine | null, runnerAu
             return c.json({ error: 'Missing Authorization header' }, 401)
         }
 
-        const parsed = bearerSchema.safeParse(raw)
+        const parsed = runnerAuthorizationSchema.safeParse(raw)
         if (!parsed.success) {
             return c.json({ error: 'Invalid Authorization header' }, 401)
         }
 
-        const authorization=parsed.data
-        const runnerMatch=/^Runner\s+([^.\s]+)\.([^\s]+)$/i.exec(authorization)
-        const machineRoute=c.req.path==='/machines'||c.req.path.startsWith('/machines/')
-        if(machineRoute){const machineId=c.req.header('x-hapi-machine-id');const runner=runnerMatch&&runnerAuthenticator?runnerAuthenticator.authenticateAny({credentialId:runnerMatch[1],secret:runnerMatch[2]}):null;if(!runner)return c.json({error:'Invalid Runner credential'},401);if(!machineId||machineId!==runner.machineId)return c.json({error:'Machine binding mismatch'},403);c.set('namespace',runner.organizationId);c.set('authenticatedMachineId',runner.machineId);return await next()}
-        const token = authorization.replace(/^Bearer\s+/i, '')
-        const parsedToken = parseAccessToken(token)
-        if (!parsedToken || !constantTimeEquals(parsedToken.baseToken, configuration.cliApiToken)) {
-            return c.json({ error: 'Invalid token' }, 401)
-        }
-
-        c.set('namespace', parsedToken.namespace)
+        const match = /^Runner\s+([^.\s]+)\.([^\s]+)$/i.exec(parsed.data)
+        const runner = match ? runnerAuthenticator.authenticateAny({ credentialId: match[1], secret: match[2] }) : null
+        if (!runner) return c.json({ error: 'Invalid Runner credential' }, 401)
+        const machineId = c.req.header('x-hapi-machine-id')
+        if (!machineId || machineId !== runner.machineId) return c.json({ error: 'Machine binding mismatch' }, 403)
+        c.set('namespace', runner.organizationId)
+        c.set('authenticatedMachineId', runner.machineId)
+        c.set('authenticatedRunnerId', runner.id)
         return await next()
     })
 
@@ -107,6 +109,11 @@ export function createCliRoutes(getSyncEngine: () => SyncEngine | null, runnerAu
         const parsed = createOrLoadSessionSchema.safeParse(json)
         if (!parsed.success) {
             return c.json({ error: 'Invalid body' }, 400)
+        }
+        if (!parsed.data.metadata || typeof parsed.data.metadata !== 'object'
+            || !('machineId' in parsed.data.metadata)
+            || parsed.data.metadata.machineId !== c.get('authenticatedMachineId')) {
+            return c.json({ error: 'Session machine binding mismatch' }, 403)
         }
         const namespace = c.get('namespace')
         const session = engine.getOrCreateSession(
@@ -128,7 +135,7 @@ export function createCliRoutes(getSyncEngine: () => SyncEngine | null, runnerAu
         }
         const sessionId = c.req.param('id')
         const namespace = c.get('namespace')
-        const resolved = resolveSessionForNamespace(engine, sessionId, namespace)
+        const resolved = resolveSessionForNamespace(engine, sessionId, namespace, c.get('authenticatedRunnerId'), authorizeRunnerSession)
         if (!resolved.ok) {
             return c.json({ error: resolved.error }, resolved.status)
         }
@@ -142,7 +149,7 @@ export function createCliRoutes(getSyncEngine: () => SyncEngine | null, runnerAu
         }
         const sessionId = c.req.param('id')
         const namespace = c.get('namespace')
-        const resolved = resolveSessionForNamespace(engine, sessionId, namespace)
+        const resolved = resolveSessionForNamespace(engine, sessionId, namespace, c.get('authenticatedRunnerId'), authorizeRunnerSession)
         if (!resolved.ok) {
             return c.json({ error: resolved.error }, resolved.status)
         }
@@ -164,7 +171,7 @@ export function createCliRoutes(getSyncEngine: () => SyncEngine | null, runnerAu
         }
         const sessionId = c.req.param('id')
         const namespace = c.get('namespace')
-        const resolved = resolveSessionForNamespace(engine, sessionId, namespace)
+        const resolved = resolveSessionForNamespace(engine, sessionId, namespace, c.get('authenticatedRunnerId'), authorizeRunnerSession)
         if (!resolved.ok) {
             return c.json({ error: resolved.error }, resolved.status)
         }
@@ -198,7 +205,7 @@ export function createCliRoutes(getSyncEngine: () => SyncEngine | null, runnerAu
         }
         const sessionId = c.req.param('id')
         const namespace = c.get('namespace')
-        const resolved = resolveSessionForNamespace(engine, sessionId, namespace)
+        const resolved = resolveSessionForNamespace(engine, sessionId, namespace, c.get('authenticatedRunnerId'), authorizeRunnerSession)
         if (!resolved.ok) {
             return c.json({ error: resolved.error }, resolved.status)
         }

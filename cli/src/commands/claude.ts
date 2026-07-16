@@ -101,11 +101,11 @@ ${chalk.bold('Usage:')}
   hapi doctor            System diagnostics & troubleshooting
 
 ${chalk.bold('Examples:')}
-  hapi                    Start session (will prompt for token if not set)
-  hapi auth login         Configure CLI_API_TOKEN interactively
+  HAPI_RUNNER_PROFILE=work hapi
+                          Start with an enrolled Runner profile
   hapi --yolo             Start with bypassing permissions
                             hapi sugar for --dangerously-skip-permissions
-  hapi auth status        Show direct-connect status
+  hapi runner status      Show enrolled Runner status
   hapi doctor             Run diagnostics
 
 ${chalk.bold('hapi supports ALL Claude options!')}
@@ -170,12 +170,10 @@ ${chalk.bold.cyan('Claude Code Options (from `claude --help`):')}
                 console.error(chalk.gray('  Please check your network connection or hub status'))
             } else if (httpStatus === 403 && responseErrorText === 'Machine access denied') {
                 console.error(chalk.red('Machine access denied.'))
-                console.error(chalk.gray('  This machineId is already registered under a different namespace.'))
-                console.error(chalk.gray('  Fix: run `hapi auth logout`, or set a separate HAPI_HOME per namespace.'))
+                console.error(chalk.gray('  The selected Runner profile is bound to a different machine. Re-enroll it.'))
             } else if (httpStatus === 403 && responseErrorText === 'Session access denied') {
                 console.error(chalk.red('Session access denied.'))
-                console.error(chalk.gray('  This session belongs to a different namespace.'))
-                console.error(chalk.gray('  Use the matching CLI_API_TOKEN or switch namespaces.'))
+                console.error(chalk.gray('  This session is not bound to the selected Runner.'))
             } else if (
                 httpStatus === 401 ||
                 httpStatus === 403 ||

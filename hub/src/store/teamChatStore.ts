@@ -7,6 +7,7 @@ import type { StoredTeamChat, StoredTeamMessage, StoredTeamMentionRequest, Store
 type TeamChatRow = {
     id: string
     namespace: string
+    owner_membership_id: string | null
     name: string
     project_path: string | null
     shared_context: string | null
@@ -80,15 +81,16 @@ type TeamMentionRequestRow = {
 export class TeamChatStore {
     constructor(private readonly db: Database) {}
 
-    createTeamChat(input: { namespace: string; name: string; projectPath?: string | null }): StoredTeamChat {
+    createTeamChat(input: { namespace: string; ownerMembershipId?: string | null; name: string; projectPath?: string | null }): StoredTeamChat {
         const now = Date.now()
         const id = randomUUID()
         this.db.prepare(`
-            INSERT INTO team_chats (id, namespace, name, project_path, shared_context, archived_at, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, NULL, ?, ?)
+            INSERT INTO team_chats (id, namespace, owner_membership_id, name, project_path, shared_context, archived_at, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)
         `).run(
             id,
             input.namespace,
+            input.ownerMembershipId ?? null,
             input.name,
             input.projectPath ?? null,
             JSON.stringify({ decisions: [], openQuestions: [], relevantFiles: [] }),
@@ -481,6 +483,7 @@ function toTeamChat(row: TeamChatRow): StoredTeamChat {
     return {
         id: row.id,
         namespace: row.namespace,
+        ownerMembershipId: row.owner_membership_id,
         name: row.name,
         projectPath: row.project_path,
         sharedContext: safeJsonParse(row.shared_context),

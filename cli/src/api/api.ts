@@ -2,23 +2,42 @@ import axios from 'axios'
 import type { AgentState, CreateMachineResponse, CreateSessionResponse, RunnerState, Machine, MachineMetadata, Metadata, Session } from '@/api/types'
 import { AgentStateSchema, CreateMachineResponseSchema, CreateSessionResponseSchema, RunnerStateSchema, MachineMetadataSchema, MetadataSchema } from '@/api/types'
 import { configuration } from '@/configuration'
-import { getAuthToken } from '@/api/auth'
+import { readRunnerProfile } from '@/runner/profile'
 import { apiValidationError } from '@/utils/errorUtils'
 import { ApiMachineClient } from './apiMachine'
 import { ApiSessionClient } from './apiSession'
 import { buildHubRequestHeaders } from './hubExtraHeaders'
 import type { RunnerCredentialEnvelope } from '@hapi/protocol/runner-enrollment'
 
-export type ApiAuthentication={kind:'legacy';token:string}|{kind:'runner';credential:RunnerCredentialEnvelope;machineId:string}
+export type ApiAuthentication = { kind: 'runner'; credential: RunnerCredentialEnvelope; machineId: string }
 
 export class ApiClient {
     static async create(): Promise<ApiClient> {
-        return new ApiClient({kind:'legacy',token:getAuthToken()})
+        const profileName = process.env.HAPI_RUNNER_PROFILE?.trim()
+        if (!profileName) {
+            throw new Error('Runner enrollment required. Run `hapi runner enroll --hub <url> --code <code> --profile <name>`, then select it with HAPI_RUNNER_PROFILE=<name>.')
+        }
+        const enrolled = await readRunnerProfile(
+            process.env.HAPI_PROFILE_BASE_HOME ?? configuration.happyHomeDir,
+            profileName
+        ).catch(() => {
+            throw new Error(`Runner profile '${profileName}' is unavailable. Re-enroll with \`hapi runner enroll --profile ${profileName}\`.`)
+        })
+        configuration._setApiUrl(enrolled.profile.hubUrl)
+        return ApiClient.createForRunner(enrolled.credential.credential, enrolled.profile.machineId)
     }
-    static createForRunner(credential:RunnerCredentialEnvelope,machineId:string):ApiClient{return new ApiClient({kind:'runner',credential,machineId})}
+    static createForRunner(credential: RunnerCredentialEnvelope, machineId: string): ApiClient {
+        return new ApiClient({ kind: 'runner', credential, machineId })
+    }
 
     private constructor(private readonly authentication:ApiAuthentication) { }
-    private headers():Record<string,string>{return this.authentication.kind==='legacy'?{Authorization:`Bearer ${this.authentication.token}`}:{Authorization:`Runner ${this.authentication.credential.credentialId}.${this.authentication.credential.secret}`,'X-Hapi-Machine-Id':this.authentication.machineId}}
+    get machineId(): string { return this.authentication.machineId }
+    private headers(): Record<string, string> {
+        return {
+            Authorization: `Runner ${this.authentication.credential.credentialId}.${this.authentication.credential.secret}`,
+            'X-Hapi-Machine-Id': this.authentication.machineId
+        }
+    }
 
     async getOrCreateSession(opts: {
         tag: string

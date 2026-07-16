@@ -3,8 +3,11 @@ import type { Context } from 'hono'
 import { z } from 'zod'
 
 import type { SyncEngine } from '../../sync/syncEngine'
+import type { TeamAuthorizationService } from '../../application/teamAuthorizationService'
+import { capabilitySatisfies } from '../../auth/resourceCapability'
+import { canAccessTeamChat, resolveTeamChatCapability, type TeamChatActor } from '../../auth/teamChatAuthorization'
 import type { WebAppEnv } from '../middleware/auth'
-import { requireSession, requireSessionFromParam, requireSyncEngine } from './guards'
+import { requireSession, requireSessionFromParam, requireSyncEngine, type RestCapabilityResolver } from './guards'
 
 const createTeamChatSchema = z.object({
     name: z.string().min(1),
@@ -70,13 +73,54 @@ function teamChatErrorResponse(c: Context<WebAppEnv>, error: unknown): Response 
     throw error
 }
 
-export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): Hono<WebAppEnv> {
+export function createTeamChatsRoutes(
+    getSyncEngine: () => SyncEngine | null,
+    teamAuthorization: Pick<TeamAuthorizationService, 'resolveLiveSubject'>,
+    resourceCapabilityResolver: RestCapabilityResolver
+): Hono<WebAppEnv> {
     const app = new Hono<WebAppEnv>()
+
+    const actor = (c: Context<WebAppEnv>): TeamChatActor | null =>
+        teamAuthorization.resolveLiveSubject(c.get('organizationId'), c.get('membershipId'))
+
+    const requireChat = (c: Context<WebAppEnv>, engine: SyncEngine, teamChatId: string, required: 'view' | 'interact' | 'operate' | 'manage') => {
+        const liveActor = actor(c)
+        if (!liveActor) return c.json({ error: 'Resource access denied', code: 'forbidden' }, 403)
+        const chat = engine.getTeamChat(liveActor.organizationId, teamChatId)
+        if (!chat) return c.json({ error: 'Team Chat not found' }, 404)
+        if (!capabilitySatisfies(resolveTeamChatCapability(engine, liveActor, teamChatId), required)) {
+            return c.json({ error: 'Resource access denied', code: 'forbidden' }, 403)
+        }
+        return liveActor
+    }
+
+    const requireAuthor = (c: Context<WebAppEnv>, engine: SyncEngine, teamChatId: string, participantId: string) => {
+        const liveActor = requireChat(c, engine, teamChatId, 'interact')
+        if (liveActor instanceof Response) return liveActor
+        const participant = engine.listTeamParticipants(liveActor.organizationId, teamChatId)
+            .find((candidate) => candidate.id === participantId && candidate.type === 'user')
+        if (!participant || participant.userId !== liveActor.membershipId) {
+            return c.json({ error: 'Team Chat resource not found' }, 404)
+        }
+        return liveActor
+    }
+
+    const requireMention = (c: Context<WebAppEnv>, engine: SyncEngine, sessionId: string, requestId: string) => {
+        const request = engine.listSessionTeamMentions(c.get('organizationId'), sessionId)
+            .find((candidate) => candidate.id === requestId)
+        if (!request) return c.json({ error: 'Team Chat resource not found' }, 404)
+        const access = requireChat(c, engine, request.teamChatId, 'interact')
+        if (access instanceof Response) return access
+        return request
+    }
 
     app.get('/team-chats', (c) => {
         const engine = requireSyncEngine(c, getSyncEngine)
         if (engine instanceof Response) return engine
-        return c.json({ teamChats: engine.listTeamChats(c.get('organizationId')) })
+        const liveActor = actor(c)
+        if (!liveActor) return c.json({ teamChats: [] })
+        return c.json({ teamChats: engine.listTeamChats(liveActor.organizationId).filter((chat) =>
+            capabilitySatisfies(resolveTeamChatCapability(engine, liveActor, chat.id), 'view')) })
     })
 
     app.post('/team-chats', async (c) => {
@@ -85,8 +129,11 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
         const body = await c.req.json().catch(() => null)
         const parsed = createTeamChatSchema.safeParse(body)
         if (!parsed.success) return c.json({ error: 'Invalid body' }, 400)
+        const liveActor = actor(c)
+        if (!liveActor || liveActor.role !== 'admin') return c.json({ error: 'Resource access denied', code: 'forbidden' }, 403)
         const teamChat = engine.createTeamChat({
-            namespace: c.get('organizationId'),
+            namespace: liveActor.organizationId,
+            ownerMembershipId: liveActor.membershipId,
             name: parsed.data.name,
             projectPath: parsed.data.projectPath ?? null
         })
@@ -96,13 +143,16 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
     app.get('/team-chats/:id', (c) => {
         const engine = requireSyncEngine(c, getSyncEngine)
         if (engine instanceof Response) return engine
-        const teamChat = engine.getTeamChat(c.get('organizationId'), c.req.param('id'))
-        return teamChat ? c.json({ teamChat }) : c.json({ error: 'Team Chat not found' }, 404)
+        const access = requireChat(c, engine, c.req.param('id'), 'view')
+        if (access instanceof Response) return access
+        return c.json({ teamChat: engine.getTeamChat(access.organizationId, c.req.param('id'))! })
     })
 
     app.delete('/team-chats/:id', (c) => {
         const engine = requireSyncEngine(c, getSyncEngine)
         if (engine instanceof Response) return engine
+        const access = requireChat(c, engine, c.req.param('id'), 'manage')
+        if (access instanceof Response) return access
         try {
             engine.archiveTeamChat(c.get('organizationId'), c.req.param('id'))
             return c.json({ ok: true })
@@ -118,6 +168,8 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
         if (!parsed.success) return c.json({ error: 'Invalid query' }, 400)
         const limit = parsed.data.limit ?? 50
         const beforeSeq = parsed.data.beforeSeq ?? null
+        const access = requireChat(c, engine, c.req.param('id'), 'view')
+        if (access instanceof Response) return access
         try {
             return c.json(engine.getTeamMessages(c.get('organizationId'), c.req.param('id'), { limit, beforeSeq }))
         } catch (error) {
@@ -128,6 +180,8 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
     app.get('/team-chats/:id/messages/:messageId/context', (c) => {
         const engine = requireSyncEngine(c, getSyncEngine)
         if (engine instanceof Response) return engine
+        const access = requireChat(c, engine, c.req.param('id'), 'view')
+        if (access instanceof Response) return access
         try {
             return c.json(engine.getTeamMessagesAround(c.get('organizationId'), c.req.param('id'), c.req.param('messageId'), { before: 20, after: 20 }))
         } catch (error) {
@@ -141,6 +195,8 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
         const body = await c.req.json().catch(() => null)
         const parsed = postTeamChatMessageSchema.safeParse(body)
         if (!parsed.success) return c.json({ error: 'Invalid body' }, 400)
+        const access = requireAuthor(c, engine, c.req.param('id'), parsed.data.authorParticipantId)
+        if (access instanceof Response) return access
         try {
             return c.json(engine.postTeamMessage({
                 namespace: c.get('organizationId'),
@@ -158,8 +214,16 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
         const body = await c.req.json().catch(() => null)
         const parsed = reportToTeamRequestSchema.safeParse(body)
         if (!parsed.success) return c.json({ error: 'Invalid body' }, 400)
+        const chatAccess = parsed.data.authorParticipantId
+            ? requireAuthor(c, engine, c.req.param('id'), parsed.data.authorParticipantId)
+            : requireChat(c, engine, c.req.param('id'), 'interact')
+        if (chatAccess instanceof Response) return chatAccess
         if (parsed.data.sourceSessionId) {
-            const sessionResult = requireSession(c, engine, parsed.data.sourceSessionId)
+            const sessionResult = requireSession(c, engine, parsed.data.sourceSessionId, {
+                requireActive: true,
+                capabilityResolver: resourceCapabilityResolver,
+                requiredCapability: 'interact'
+            })
             if (sessionResult instanceof Response) return sessionResult
         }
         try {
@@ -176,6 +240,8 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
     app.get('/team-chats/:id/participants', (c) => {
         const engine = requireSyncEngine(c, getSyncEngine)
         if (engine instanceof Response) return engine
+        const access = requireChat(c, engine, c.req.param('id'), 'view')
+        if (access instanceof Response) return access
         try {
             return c.json({ participants: engine.listTeamParticipants(c.get('organizationId'), c.req.param('id')) })
         } catch (error) {
@@ -189,6 +255,11 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
         const body = await c.req.json().catch(() => null)
         const parsed = addParticipantSchema.safeParse(body)
         if (!parsed.success) return c.json({ error: 'Invalid body' }, 400)
+        const access = requireChat(c, engine, c.req.param('id'), 'operate')
+        if (access instanceof Response) return access
+        if (parsed.data.type === 'user' && (!parsed.data.userId || !teamAuthorization.resolveLiveSubject(access.organizationId, parsed.data.userId))) {
+            return c.json({ error: 'Team Chat participant not found' }, 404)
+        }
         try {
             return c.json({ participant: engine.addTeamParticipant({
                 namespace: c.get('organizationId'),
@@ -206,6 +277,8 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
         const body = await c.req.json().catch(() => null)
         const parsed = updateParticipantSchema.safeParse(body)
         if (!parsed.success) return c.json({ error: 'Invalid body' }, 400)
+        const access = requireChat(c, engine, c.req.param('id'), 'operate')
+        if (access instanceof Response) return access
         try {
             return c.json({ participant: engine.updateTeamParticipant({
                 namespace: c.get('organizationId'),
@@ -221,6 +294,8 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
     app.delete('/team-chats/:id/participants/:participantId', (c) => {
         const engine = requireSyncEngine(c, getSyncEngine)
         if (engine instanceof Response) return engine
+        const access = requireChat(c, engine, c.req.param('id'), 'manage')
+        if (access instanceof Response) return access
         try {
             engine.archiveTeamParticipant(c.get('organizationId'), c.req.param('id'), c.req.param('participantId'))
             return c.json({ ok: true })
@@ -232,10 +307,15 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
     app.get('/sessions/:id/team-mentions', (c) => {
         const engine = requireSyncEngine(c, getSyncEngine)
         if (engine instanceof Response) return engine
-        const sessionResult = requireSessionFromParam(c, engine)
+        const sessionResult = requireSessionFromParam(c, engine, { requireActive: true, capabilityResolver: resourceCapabilityResolver, requiredCapability: 'view' })
         if (sessionResult instanceof Response) return sessionResult
         try {
-            return c.json({ requests: engine.listSessionTeamMentions(c.get('organizationId'), sessionResult.sessionId) })
+            const liveActor = actor(c)
+            const requests = liveActor
+                ? engine.listSessionTeamMentions(c.get('organizationId'), sessionResult.sessionId)
+                    .filter((request) => canAccessTeamChat(engine, liveActor, request.teamChatId, 'view'))
+                : []
+            return c.json({ requests })
         } catch (error) {
             return teamChatErrorResponse(c, error)
         }
@@ -244,10 +324,15 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
     app.get('/sessions/:id/team-memberships', (c) => {
         const engine = requireSyncEngine(c, getSyncEngine)
         if (engine instanceof Response) return engine
-        const sessionResult = requireSessionFromParam(c, engine)
+        const sessionResult = requireSessionFromParam(c, engine, { requireActive: true, capabilityResolver: resourceCapabilityResolver, requiredCapability: 'view' })
         if (sessionResult instanceof Response) return sessionResult
         try {
-            return c.json({ memberships: engine.listSessionTeamMemberships(c.get('organizationId'), sessionResult.sessionId) })
+            const liveActor = actor(c)
+            const memberships = liveActor
+                ? engine.listSessionTeamMemberships(c.get('organizationId'), sessionResult.sessionId)
+                    .filter((membership) => canAccessTeamChat(engine, liveActor, membership.teamChat.id, 'view'))
+                : []
+            return c.json({ memberships })
         } catch (error) {
             return teamChatErrorResponse(c, error)
         }
@@ -256,8 +341,10 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
     app.post('/sessions/:id/team-mentions/:requestId/seen', (c) => {
         const engine = requireSyncEngine(c, getSyncEngine)
         if (engine instanceof Response) return engine
-        const sessionResult = requireSessionFromParam(c, engine)
+        const sessionResult = requireSessionFromParam(c, engine, { requireActive: true, capabilityResolver: resourceCapabilityResolver, requiredCapability: 'interact' })
         if (sessionResult instanceof Response) return sessionResult
+        const mention = requireMention(c, engine, sessionResult.sessionId, c.req.param('requestId'))
+        if (mention instanceof Response) return mention
         try {
             const request = engine.updateTeamMentionStatus({
                 namespace: c.get('organizationId'),
@@ -274,8 +361,10 @@ export function createTeamChatsRoutes(getSyncEngine: () => SyncEngine | null): H
     app.patch('/sessions/:id/team-mentions/:requestId', async (c) => {
         const engine = requireSyncEngine(c, getSyncEngine)
         if (engine instanceof Response) return engine
-        const sessionResult = requireSessionFromParam(c, engine)
+        const sessionResult = requireSessionFromParam(c, engine, { requireActive: true, capabilityResolver: resourceCapabilityResolver, requiredCapability: 'interact' })
         if (sessionResult instanceof Response) return sessionResult
+        const mention = requireMention(c, engine, sessionResult.sessionId, c.req.param('requestId'))
+        if (mention instanceof Response) return mention
         const body = await c.req.json().catch(() => null)
         const parsed = updateMentionStatusSchema.safeParse(body)
         if (!parsed.success) return c.json({ error: 'Invalid body' }, 400)

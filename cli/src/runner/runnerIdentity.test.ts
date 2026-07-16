@@ -1,90 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { hashRunnerCliApiToken, isRunnerStateCompatibleWithIdentity } from './runnerIdentity'
+import { isRunnerStateCompatibleWithIdentity } from './runnerIdentity'
 
-describe('runnerIdentity', () => {
-    it('matches when api url, machine id, token hash all same', () => {
-        const tokenHash = hashRunnerCliApiToken('secret-token')
+describe('runner identity', () => {
+    const state = { startedWithApiUrl: 'https://hub.test', startedWithMachineId: 'machine-1' }
 
-        expect(isRunnerStateCompatibleWithIdentity(
-            {
-                startedWithApiUrl: 'http://example.com',
-                startedWithMachineId: 'machine-123',
-                startedWithCliApiTokenHash: tokenHash
-            },
-            {
-                apiUrl: 'http://example.com',
-                machineId: 'machine-123',
-                cliApiTokenHash: tokenHash
-            }
-        )).toBe(true)
+    it('matches the selected Hub and machine', () => {
+        expect(isRunnerStateCompatibleWithIdentity(state, { apiUrl: 'https://hub.test', machineId: 'machine-1' })).toBe(true)
     })
 
-    it('rejects reused runner when api url changed', () => {
-        expect(isRunnerStateCompatibleWithIdentity(
-            {
-                startedWithApiUrl: 'http://old-hub',
-                startedWithMachineId: 'machine-123',
-                startedWithCliApiTokenHash: hashRunnerCliApiToken('secret-token')
-            },
-            {
-                apiUrl: 'http://new-hub',
-                machineId: 'machine-123',
-                cliApiTokenHash: hashRunnerCliApiToken('secret-token')
-            }
-        )).toBe(false)
-    })
-
-    it('rejects reused runner when token changed', () => {
-        expect(isRunnerStateCompatibleWithIdentity(
-            {
-                startedWithApiUrl: 'http://example.com',
-                startedWithMachineId: 'machine-123',
-                startedWithCliApiTokenHash: hashRunnerCliApiToken('old-token')
-            },
-            {
-                apiUrl: 'http://example.com',
-                machineId: 'machine-123',
-                cliApiTokenHash: hashRunnerCliApiToken('new-token')
-            }
-        )).toBe(false)
-    })
-
-    it('rejects reused runner when current machine id is missing', () => {
-        expect(isRunnerStateCompatibleWithIdentity(
-            {
-                startedWithApiUrl: 'http://example.com',
-                startedWithMachineId: 'machine-123',
-                startedWithCliApiTokenHash: hashRunnerCliApiToken('secret-token')
-            },
-            {
-                apiUrl: 'http://example.com',
-                cliApiTokenHash: hashRunnerCliApiToken('secret-token')
-            }
-        )).toBe(false)
-    })
-
-    it('rejects reused runner when current token hash is missing', () => {
-        expect(isRunnerStateCompatibleWithIdentity(
-            {
-                startedWithApiUrl: 'http://example.com',
-                startedWithMachineId: 'machine-123',
-                startedWithCliApiTokenHash: hashRunnerCliApiToken('secret-token')
-            },
-            {
-                apiUrl: 'http://example.com',
-                machineId: 'machine-123'
-            }
-        )).toBe(false)
-    })
-
-    it('rejects old runner state missing connection identity', () => {
-        expect(isRunnerStateCompatibleWithIdentity(
-            {},
-            {
-                apiUrl: 'http://example.com',
-                machineId: 'machine-123',
-                cliApiTokenHash: hashRunnerCliApiToken('secret-token')
-            }
-        )).toBe(false)
+    it('rejects missing or different Hub and machine identity', () => {
+        expect(isRunnerStateCompatibleWithIdentity(state, { apiUrl: 'https://other.test', machineId: 'machine-1' })).toBe(false)
+        expect(isRunnerStateCompatibleWithIdentity(state, { apiUrl: 'https://hub.test', machineId: 'machine-2' })).toBe(false)
+        expect(isRunnerStateCompatibleWithIdentity(state, { apiUrl: 'https://hub.test' })).toBe(false)
     })
 })

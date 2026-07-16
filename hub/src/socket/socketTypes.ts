@@ -4,7 +4,8 @@ import type { DefaultEventsMap, Server, Socket } from 'socket.io'
 export type SocketData = {
     namespace?: string
     userId?: number
-    principalKind?: 'legacy-session' | 'runner'
+    principalKind?: 'runner'
+    runnerClientType?: 'machine-scoped' | 'session-scoped'
     runnerId?: string
     machineId?: string
     organizationId?: string

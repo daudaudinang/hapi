@@ -5,14 +5,34 @@ import type { SyncEngine } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
 import { createTeamChatsRoutes } from './teamChats'
 
-function createApp(namespace: string, engine: Record<string, unknown>) {
+function createApp(namespace: string, engine: Record<string, unknown>, actor: { membershipId: string; role: 'admin' | 'member' | 'viewer' } = { membershipId: 'admin', role: 'admin' }) {
     const app = new Hono<WebAppEnv>()
     app.use('*', async (c, next) => {
         c.set('namespace', namespace)
         c.set('organizationId', namespace)
+        c.set('membershipId', actor.membershipId)
+        c.set('organizationRole', actor.role)
         await next()
     })
-    app.route('/api', createTeamChatsRoutes(() => engine as unknown as SyncEngine))
+    const augmentedEngine = {
+        getTeamChat: (_organizationId: string, teamChatId: string) => ({ id: teamChatId, namespace, ownerMembershipId: 'admin', name: 'Team', projectPath: null, sharedContext: null, archivedAt: null, createdAt: 1, updatedAt: 1 }),
+        listTeamParticipants: () => ['participant-1', 'p1'].map((id) => ({
+            id, namespace, teamChatId: 'team-1', type: 'user' as const, userId: actor.membershipId,
+            sessionId: null, displayName: id, role: 'general' as const, color: '#60a5fa',
+            archivedAt: null, joinedAt: 1
+        })),
+        listSessionTeamMentions: (_organizationId: string, sessionId: string) => [{
+            id: 'req-1', teamChatId: 'team-1', sourceMessageId: 'msg-1', targetSessionId: sessionId,
+            status: 'seen', contextSnapshot: null, hopDepth: 0, parentRequestId: null, error: null,
+            createdAt: 1, deliveredAt: null, seenAt: null, processingStartedAt: null, resolvedAt: null
+        }],
+        ...engine
+    }
+    app.route('/api', createTeamChatsRoutes(
+        () => augmentedEngine as unknown as SyncEngine,
+        { resolveLiveSubject: (organizationId: string, membershipId: string) => ({ organizationId, membershipId, role: actor.role, disabled: false }) },
+        () => 'manage'
+    ))
     return app
 }
 
@@ -126,7 +146,7 @@ describe('team chat routes', () => {
             resolveSessionAccess: (sessionId: string, namespace: string) => ({
                 ok: true as const,
                 sessionId,
-                session: { id: sessionId, namespace }
+                session: { id: sessionId, namespace, active: true }
             }),
             listSessionTeamMentions: (namespace: string, sessionId: string) => {
                 calls.push({ namespace, sessionId })
@@ -148,7 +168,7 @@ describe('team chat routes', () => {
             resolveSessionAccess: (sessionId: string, namespace: string) => ({
                 ok: true as const,
                 sessionId,
-                session: { id: sessionId, namespace }
+                session: { id: sessionId, namespace, active: true }
             }),
             listSessionTeamMemberships: (namespace: string, sessionId: string) => {
                 calls.push({ namespace, sessionId })
@@ -234,7 +254,7 @@ describe('team chat routes', () => {
             resolveSessionAccess: (sessionId: string, namespace: string) => ({
                 ok: true as const,
                 sessionId,
-                session: { id: sessionId, namespace }
+                session: { id: sessionId, namespace, active: true }
             }),
             updateTeamMentionStatus: (input: unknown) => {
                 calls.push(input)
@@ -256,7 +276,7 @@ describe('team chat routes', () => {
             resolveSessionAccess: (sessionId: string, namespace: string) => ({
                 ok: true as const,
                 sessionId,
-                session: { id: sessionId, namespace }
+                session: { id: sessionId, namespace, active: true }
             }),
             updateTeamMentionStatus: (input: unknown) => {
                 calls.push(input)
@@ -294,6 +314,72 @@ describe('team chat routes', () => {
 
         expect(response.status).toBe(201)
         expect(calls).toEqual([{ namespace: 'default', teamChatId: 'team-1', authorParticipantId: 'p1', type: 'blocked', summary: 'Blocked on schema', mentions: [], files: [] }])
+    })
+
+    it('denies a nonparticipant before reading messages or invoking a mutation', async () => {
+        let reads = 0
+        let writes = 0
+        const engine = {
+            getTeamMessages: () => { reads++; return { messages: [] } },
+            postTeamMessage: () => { writes++; return { message: {} } },
+            listTeamParticipants: () => []
+        }
+        const app = createApp('default', engine, { membershipId: 'outsider', role: 'member' })
+
+        expect((await app.request('/api/team-chats/team-1/messages')).status).toBe(403)
+        expect((await app.request('/api/team-chats/team-1/messages', {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ authorParticipantId: 'p-outsider', text: 'secret' })
+        })).status).toBe(403)
+        expect({ reads, writes }).toEqual({ reads: 0, writes: 0 })
+    })
+
+    it('allows a participant to interact but denies management and impersonation', async () => {
+        let posts = 0
+        let archives = 0
+        const participant = { id: 'p-member', namespace: 'default', teamChatId: 'team-1', type: 'user' as const, userId: 'member-1', sessionId: null, displayName: 'Member', role: 'general' as const, color: '#60a5fa', archivedAt: null, joinedAt: 1 }
+        const engine = {
+            listTeamParticipants: () => [participant, { ...participant, id: 'p-other', userId: 'other' }],
+            postTeamMessage: () => { posts++; return { message: { id: 'm1' } } },
+            archiveTeamChat: () => { archives++ }
+        }
+        const app = createApp('default', engine, { membershipId: 'member-1', role: 'member' })
+
+        expect((await app.request('/api/team-chats/team-1/messages', {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ authorParticipantId: 'p-member', text: 'hello' })
+        })).status).toBe(201)
+        expect((await app.request('/api/team-chats/team-1/messages', {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ authorParticipantId: 'p-other', text: 'spoof' })
+        })).status).toBe(404)
+        expect((await app.request('/api/team-chats/team-1', { method: 'DELETE' })).status).toBe(403)
+        expect({ posts, archives }).toEqual({ posts: 1, archives: 0 })
+    })
+
+    it('does not let session access reveal or mutate an unrelated Team Chat', async () => {
+        let updates = 0
+        const engine = {
+            listTeamParticipants: () => [],
+            resolveSessionAccess: (sessionId: string, namespace: string) => ({
+                ok: true as const, sessionId, session: { id: sessionId, namespace, active: true }
+            }),
+            listSessionTeamMemberships: () => [{
+                teamChat: { id: 'team-1', namespace: 'default', ownerMembershipId: 'admin', name: 'Secret', projectPath: null, sharedContext: null, archivedAt: null, createdAt: 1, updatedAt: 1 },
+                participant: { id: 'session-p', namespace: 'default', teamChatId: 'team-1', type: 'session', userId: null, sessionId: 'session-1', displayName: 'Agent', role: 'general', color: '#60a5fa', archivedAt: null, joinedAt: 1 }
+            }],
+            updateTeamMentionStatus: () => { updates++; return {} }
+        }
+        const app = createApp('default', engine, { membershipId: 'outsider', role: 'member' })
+
+        const memberships = await (await app.request('/api/sessions/session-1/team-memberships')).json()
+        const mentions = await (await app.request('/api/sessions/session-1/team-mentions')).json()
+        const update = await app.request('/api/sessions/session-1/team-mentions/req-1/seen', { method: 'POST' })
+
+        expect(memberships).toEqual({ memberships: [] })
+        expect(mentions).toEqual({ requests: [] })
+        expect(update.status).toBe(403)
+        expect(updates).toBe(0)
     })
 
 })

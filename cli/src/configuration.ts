@@ -41,7 +41,6 @@ export function parseExtraHeaders(raw: string | undefined, warn: (message: strin
 
 class Configuration {
     private _apiUrl: string
-    private _cliApiToken: string
     private _extraHeaders: Record<string, string>
     public readonly isRunnerProcess: boolean
 
@@ -59,7 +58,6 @@ class Configuration {
     constructor() {
         // Server configuration
         this._apiUrl = process.env.HAPI_API_URL || 'http://localhost:3006'
-        this._cliApiToken = process.env.CLI_API_TOKEN || ''
         this._extraHeaders = parseExtraHeaders(process.env.HAPI_EXTRA_HEADERS_JSON)
 
         // Check if we're running as runner based on process args
@@ -100,14 +98,6 @@ class Configuration {
 
     _setApiUrl(url: string): void {
         this._apiUrl = url
-    }
-
-    get cliApiToken(): string {
-        return this._cliApiToken
-    }
-
-    _setCliApiToken(token: string): void {
-        this._cliApiToken = token
     }
 
     get extraHeaders(): Record<string, string> {

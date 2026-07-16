@@ -3,8 +3,6 @@ import { Server, type DefaultEventsMap } from 'socket.io'
 import { z } from 'zod'
 import type { Store } from '../store'
 import { configuration } from '../configuration'
-import { constantTimeEquals } from '../utils/crypto'
-import { parseAccessToken } from '../utils/accessToken'
 import { registerCliHandlers } from './handlers/cli'
 import { registerTerminalHandlers } from './handlers/terminal'
 import { RpcRegistry } from './rpcRegistry'
@@ -72,6 +70,7 @@ export type SocketServerDeps = {
     store: Store
     jwtSecret: Uint8Array
     runnerAuthenticator: RunnerAuthenticator
+    authorizeRunnerSession: (organizationId: string, runnerId: string, sessionId: string) => boolean
     validateWebSession: (sessionToken: string) => { membershipId: string; organizationId: string; role: 'admin' | 'member' | 'viewer' } | null
     resolveCapability: ResourceCapabilityResolver
     corsOrigins?: string[]
@@ -135,15 +134,22 @@ export function createSocketServer(deps: SocketServerDeps): {
 
     cliNs.use((socket, next) => {
         const auth = socket.handshake.auth as Record<string, unknown> | undefined
-        const runnerAuth=RunnerSocketAuthSchema.safeParse(auth)
-        if(runnerAuth.success){const runner=deps.runnerAuthenticator.authenticateAny(runnerAuth.data.credential);if(!runner)return next(new Error('Invalid Runner credential'));if(runner.machineId!==runnerAuth.data.machineId)return next(new Error('Machine binding mismatch'));socket.data.namespace=runner.organizationId;socket.data.organizationId=runner.organizationId;socket.data.runnerId=runner.id;socket.data.machineId=runner.machineId;socket.data.principalKind='runner';return next()}
-        const token = typeof auth?.token === 'string' ? auth.token : null
-        const parsedToken = token ? parseAccessToken(token) : null
-        if (!parsedToken || !constantTimeEquals(parsedToken.baseToken, configuration.cliApiToken)) {
-            return next(new Error('Invalid token'))
+        const parsed = RunnerSocketAuthSchema.safeParse(auth)
+        if (!parsed.success) return next(new Error('Invalid Runner credential'))
+        const runner = deps.runnerAuthenticator.authenticateAny(parsed.data.credential)
+        if (!runner) return next(new Error('Invalid Runner credential'))
+        if (runner.machineId !== parsed.data.machineId) return next(new Error('Machine binding mismatch'))
+        if (parsed.data.clientType === 'session-scoped'
+            && (!parsed.data.sessionId
+                || !deps.authorizeRunnerSession(runner.organizationId, runner.id, parsed.data.sessionId))) {
+            return next(new Error('Session binding mismatch'))
         }
-        socket.data.namespace = parsedToken.namespace
-        socket.data.principalKind = 'legacy-session'
+        socket.data.namespace = runner.organizationId
+        socket.data.organizationId = runner.organizationId
+        socket.data.runnerId = runner.id
+        socket.data.machineId = runner.machineId
+        socket.data.principalKind = 'runner'
+        socket.data.runnerClientType = parsed.data.clientType
         next()
     })
     cliNs.on('connection', (socket) => registerCliHandlers(socket as CliSocketWithData, {

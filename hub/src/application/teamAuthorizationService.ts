@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { Capability } from '@hapi/protocol/auth'
+import { CAPABILITY_RANK, type Capability } from '@hapi/protocol/auth'
 import { AuthorizationService, type AuthorizationSubject } from '../auth/authorizationService'
 import {
     SharedHubStore,
@@ -237,6 +237,33 @@ export class TeamAuthorizationService {
             resourceType: grant.resourceType,
             resourceId: grant.resourceId
         })
+    }
+
+    expireDueGrants(organizationId: string, now = Date.now()): number {
+        let expired = 0
+        for (const due of this.store.listDueResourceGrants(organizationId, now)) {
+            const grant = this.store.transaction(() => {
+                const current = this.store.findResourceGrant(organizationId, due.id)
+                if (!current || current.expiresAt === null || current.expiresAt > now) return null
+                if (!this.store.deleteResourceGrant(organizationId, current.id)) return null
+                this.store.appendAuditEvent({ id: randomUUID(), organizationId, actorType: 'user', actorId: current.principalId, action: 'grant.expired', resourceType: current.resourceType, resourceId: current.resourceId, outcome: 'success', metadata: { grantId: current.id }, createdAt: now })
+                this.store.appendOutboxEvent({ id: randomUUID(), organizationId, name: 'grant.expired', resourceType: current.resourceType, resourceId: current.resourceId, createdAt: now })
+                return current
+            })
+            if (!grant) continue
+            expired++
+            const candidates = grant.principalType === 'user'
+                ? [grant.principalId]
+                : this.store.listTeamMemberships(organizationId, grant.principalId).map((member) => member.membershipId)
+            const membershipIds = candidates.filter((membershipId) => {
+                const subject = this.resolveLiveSubject(organizationId, membershipId)
+                if (!subject) return true
+                const capability = this.resolveEffectiveCapability(subject, grant.resourceType, grant.resourceId, now)
+                return capability === null || CAPABILITY_RANK[capability] < CAPABILITY_RANK[grant.capability]
+            })
+            if (membershipIds.length > 0) this.onAccessLoss?.({ organizationId, membershipIds, resourceType: grant.resourceType, resourceId: grant.resourceId })
+        }
+        return expired
     }
 
     private requireAdmin(subject: AuthorizationSubject): void {

@@ -25,7 +25,9 @@ export const StoredRunnerCredentialSchema = z.object({
 export const RunnerSocketAuthSchema = z.object({
     kind: z.literal('runner'),
     credential: RunnerCredentialEnvelopeSchema,
-    machineId: BoundedIdSchema
+    machineId: BoundedIdSchema,
+    clientType: z.enum(['machine-scoped', 'session-scoped']),
+    sessionId: BoundedIdSchema.optional()
 }).strict()
 
 export const RunnerEnrollmentIssueSchema = z.object({ ownerMembershipId: BoundedIdSchema }).strict()

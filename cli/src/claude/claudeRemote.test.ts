@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import * as claudeSdk from '@/claude/sdk';
 import type { SDKMessage } from '@/claude/sdk/types';
+import { claudeRemote } from './claudeRemote';
 
 vi.mock('@/claude/utils/claudeCheckSession', () => ({
     claudeCheckSession: () => true
@@ -71,7 +72,6 @@ async function waitFor(condition: () => boolean, timeoutMs = 300, intervalMs = 1
 describe('claudeRemote async message handling', () => {
     it('continues consuming assistant messages even when next user message is pending', async () => {
         const querySpy = vi.spyOn(claudeSdk, 'query').mockImplementation(queryMock as typeof claudeSdk.query);
-        const { claudeRemote } = await import('./claudeRemote');
         const pendingNext = deferred<{ message: string; mode: { permissionMode: 'default' } } | null>();
         const received: SDKMessage[] = [];
 
@@ -145,7 +145,6 @@ describe('claudeRemote async message handling', () => {
 
     it('handles rejected next user message fetch without unhandled rejection', async () => {
         const querySpy = vi.spyOn(claudeSdk, 'query').mockImplementation(queryMock as typeof claudeSdk.query);
-        const { claudeRemote } = await import('./claudeRemote');
         const received: SDKMessage[] = [];
         const unhandled: unknown[] = [];
         const onUnhandled = (reason: unknown) => {
@@ -216,7 +215,6 @@ describe('claudeRemote async message handling', () => {
 
     it('treats AbortError from scheduled next user message fetch as graceful shutdown', async () => {
         const querySpy = vi.spyOn(claudeSdk, 'query').mockImplementation(queryMock as typeof claudeSdk.query);
-        const { claudeRemote } = await import('./claudeRemote');
         const received: SDKMessage[] = [];
         const unhandled: unknown[] = [];
         const onUnhandled = (reason: unknown) => {
@@ -287,8 +285,6 @@ describe('claudeRemote async message handling', () => {
 
     it('does not restrict Claude tools to HAPI baseline tools by default', async () => {
         const querySpy = vi.spyOn(claudeSdk, 'query').mockImplementation(queryMock as typeof claudeSdk.query)
-        const { claudeRemote } = await import('./claudeRemote')
-
         const sdkMessages: SDKMessage[] = [
             {
                 type: 'result',
@@ -333,8 +329,6 @@ describe('claudeRemote async message handling', () => {
 
     it('preserves explicit user allowedTools restrictions and appends HAPI title tool', async () => {
         const querySpy = vi.spyOn(claudeSdk, 'query').mockImplementation(queryMock as typeof claudeSdk.query)
-        const { claudeRemote } = await import('./claudeRemote')
-
         const sdkMessages: SDKMessage[] = [
             {
                 type: 'result',

@@ -6,13 +6,14 @@ export type SSESubscription = {
     id: string
     namespace: string
     membershipId: string
+    organizationRole?: 'admin' | 'member' | 'viewer'
     all: boolean
     sessionId: string | null
     machineId: string | null
 }
 
 export type SSEEventResource = {
-    resourceType: 'session' | 'machine'
+    resourceType: 'session' | 'machine' | 'team-chat'
     resourceId: string
 }
 
@@ -37,6 +38,7 @@ export class SSEManager {
         id: string
         namespace: string
         membershipId: string
+        organizationRole?: 'admin' | 'member' | 'viewer'
         all?: boolean
         sessionId?: string | null
         machineId?: string | null
@@ -49,6 +51,7 @@ export class SSEManager {
             id: options.id,
             namespace: options.namespace,
             membershipId: options.membershipId,
+            organizationRole: options.organizationRole,
             all: Boolean(options.all),
             sessionId: options.sessionId ?? null,
             machineId: options.machineId ?? null,
@@ -198,6 +201,10 @@ export class SSEManager {
             return true
         }
 
+        if (event.type === 'shared-hub-updated') {
+            return connection.all && connection.organizationRole === 'admin'
+        }
+
         const resource = this.resourceForEvent(event)
         if (!resource || !connection.authorize(resource)) {
             return false
@@ -226,8 +233,8 @@ export class SSEManager {
         if (event.type === 'toast') {
             return { resourceType: 'session', resourceId: event.data.sessionId }
         }
-        if (event.type.startsWith('team-')) {
-            return null
+        if (event.type.startsWith('team-') && 'teamChatId' in event && typeof event.teamChatId === 'string') {
+            return { resourceType: 'team-chat', resourceId: event.teamChatId }
         }
         if ('sessionId' in event && typeof event.sessionId === 'string') {
             return { resourceType: 'session', resourceId: event.sessionId }

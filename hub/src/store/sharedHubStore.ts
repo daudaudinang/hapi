@@ -61,6 +61,17 @@ export type StoredWebSession = {
     csrfHash: string
 }
 
+export type StoredInvitation = {
+    id: string
+    organizationId: string
+    email: string
+    role: 'admin' | 'member' | 'viewer'
+    expiresAt: number
+    claimedAt: number | null
+    cancelledAt: number | null
+    createdAt: number
+}
+
 export type StoredTeam = {
     id: string
     organizationId: string
@@ -99,6 +110,14 @@ export type StoredAuditEvent = {
     outcome: 'success' | 'denied' | 'failure'
     metadata: Readonly<Record<string, string | number | boolean | null>>
     createdAt: number
+}
+
+export type StoredOutboxEvent = {
+    id: string
+    name: string
+    organizationId: string
+    resourceType: string
+    resourceId: string
 }
 
 export class SharedHubStore {
@@ -378,6 +397,19 @@ export class SharedHubStore {
             expiresAt: r.expires_at
         } : null
     }
+    listDueResourceGrants(org: string, now: number, limit = 100): StoredResourceGrant[] {
+        return (this.db.prepare(`SELECT id, organization_id, principal_type, principal_id, resource_type,
+            resource_id, capability, expires_at FROM resource_grants
+            WHERE organization_id = ? AND expires_at IS NOT NULL AND expires_at <= ?
+            ORDER BY expires_at, id LIMIT ?`
+        ).all(org, now, limit) as Array<{
+            id: string; organization_id: string; principal_type: StoredResourceGrant['principalType'];
+            principal_id: string; resource_type: StoredResourceGrant['resourceType']; resource_id: string;
+            capability: StoredResourceGrant['capability']; expires_at: number
+        }>).map((row) => ({ id: row.id, organizationId: row.organization_id, principalType: row.principal_type,
+            principalId: row.principal_id, resourceType: row.resource_type, resourceId: row.resource_id,
+            capability: row.capability, expiresAt: row.expires_at }))
+    }
     deleteResourceGrant(org:string,id:string):boolean { return this.db.prepare('DELETE FROM resource_grants WHERE organization_id=? AND id=?').run(org,id).changes===1 }
     listResourceGrants(org: string): StoredResourceGrantDetail[] {
         return (this.db.prepare(`SELECT id, organization_id, principal_type, principal_id, resource_type,
@@ -477,6 +509,25 @@ export class SharedHubStore {
         ).run(input.id, input.organizationId, email, input.tokenHash, input.role, input.expiresAt, input.createdAt)
     }
 
+    listInvitations(organizationId: string): StoredInvitation[] {
+        const rows = this.db.prepare(`SELECT id, organization_id, email, role, expires_at, claimed_at, cancelled_at, created_at
+            FROM invitations WHERE organization_id = ? ORDER BY created_at DESC, id DESC`
+        ).all(organizationId) as Array<{
+            id: string; organization_id: string; email: string; role: StoredInvitation['role']; expires_at: number;
+            claimed_at: number | null; cancelled_at: number | null; created_at: number
+        }>
+        return rows.map((row) => ({
+            id: row.id, organizationId: row.organization_id, email: row.email, role: row.role,
+            expiresAt: row.expires_at, claimedAt: row.claimed_at, cancelledAt: row.cancelled_at, createdAt: row.created_at
+        }))
+    }
+
+    cancelInvitation(organizationId: string, invitationId: string, now: number): boolean {
+        return this.db.prepare(`UPDATE invitations SET cancelled_at = ?
+            WHERE organization_id = ? AND id = ? AND claimed_at IS NULL AND cancelled_at IS NULL AND expires_at > ?`
+        ).run(now, organizationId, invitationId, now).changes === 1
+    }
+
     claimInvitation(input: {
         tokenHash: string
         verifiedEmail: string
@@ -485,7 +536,7 @@ export class SharedHubStore {
         subject: string
         membershipId: string
         now: number
-    }): { membershipId: string; organizationId: string; role: 'admin' | 'member' | 'viewer' } | null {
+    }): { invitationId: string; membershipId: string; organizationId: string; role: 'admin' | 'member' | 'viewer' } | null {
         return this.claimInvitationHash({ ...input, tokenHash: input.tokenHash })
     }
 
@@ -497,7 +548,7 @@ export class SharedHubStore {
         subject: string
         membershipId: string
         now: number
-    }): { membershipId: string; organizationId: string; role: 'admin' | 'member' | 'viewer' } | null {
+    }): { invitationId: string; membershipId: string; organizationId: string; role: 'admin' | 'member' | 'viewer' } | null {
         return this.transaction(() => {
             const invitation = this.db.prepare(`SELECT id, organization_id, email, role
                 FROM invitations WHERE token_hash = ? AND claimed_at IS NULL AND cancelled_at IS NULL AND expires_at > ?`
@@ -531,7 +582,7 @@ export class SharedHubStore {
             ).run(input.membershipId, invitation.organization_id, identityId, input.verifiedEmail, invitation.role, input.now)
             const membership = this.db.prepare(`SELECT id FROM memberships WHERE organization_id = ? AND invited_email = ?`)
                 .get(invitation.organization_id, input.verifiedEmail) as { id: string }
-            return { membershipId: membership.id, organizationId: invitation.organization_id, role: invitation.role }
+            return { invitationId: invitation.id, membershipId: membership.id, organizationId: invitation.organization_id, role: invitation.role }
         })
     }
 
@@ -681,6 +732,12 @@ export class SharedHubStore {
         return result.changes === 1 ? 'updated' : 'not_found'
     }
 
+    revokeMembershipSessions(membershipId: string, now: number): number {
+        return this.db.prepare(`UPDATE web_sessions SET revoked_at = ?
+            WHERE membership_id = ? AND revoked_at IS NULL`
+        ).run(now, membershipId).changes
+    }
+
     appendOutboxEvent(input: { id: string; organizationId: string; name: string; resourceType: string; resourceId: string; createdAt: number }): void {
         this.db.prepare(`INSERT INTO outbox_events(id, organization_id, name, resource_type, resource_id, created_at)
             VALUES (?, ?, ?, ?, ?, ?)`
@@ -691,13 +748,7 @@ export class SharedHubStore {
         this.db.prepare('UPDATE outbox_events SET published_at = ? WHERE id = ? AND published_at IS NULL').run(publishedAt, id)
     }
 
-    listPendingOutboxEvents(limit = 100): Array<{
-        id: string
-        name: string
-        organizationId: string
-        resourceType: string
-        resourceId: string
-    }> {
+    listPendingOutboxEvents(limit = 100): StoredOutboxEvent[] {
         const rows = this.db.prepare(`SELECT id, name, organization_id, resource_type, resource_id
             FROM outbox_events WHERE published_at IS NULL ORDER BY created_at, id LIMIT ?`).all(limit) as Array<{
                 id: string; name: string; organization_id: string; resource_type: string; resource_id: string

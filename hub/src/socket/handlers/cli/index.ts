@@ -137,7 +137,7 @@ export function registerCliHandlers(socket: CliSocketWithData, deps: CliHandlers
         socket.emit('error', { message, code: reason, scope, id })
     }
 
-    if (socket.data.principalKind === 'runner') {
+    if (socket.data.runnerClientType === 'machine-scoped') {
         registerMachineHandlers(socket, {
             store,
             resolveMachineAccess: (id) => id === socket.data.machineId

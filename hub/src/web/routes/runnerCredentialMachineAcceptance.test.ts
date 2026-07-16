@@ -19,7 +19,7 @@ it('rejects rotated and revoked credentials before machine REST mutation', async
     let mutations = 0
     const machine = { id: 'm1', namespace: 'o1' }
     const engine = { getMachine: () => null, getOrCreateMachine: () => { mutations++; return machine }, getMachineByNamespace: () => machine } as never
-    const app = createCliRoutes(() => engine, authenticator)
+    const app = createCliRoutes(() => engine, authenticator, () => true)
     const request = (credential: { credentialId: string; secret: string }) => app.request('/machines', {
         method: 'POST',
         headers: { authorization: `Runner ${credential.credentialId}.${credential.secret}`, 'content-type': 'application/json', 'x-hapi-machine-id': 'm1' },

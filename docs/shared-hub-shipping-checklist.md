@@ -6,75 +6,93 @@ Current verdict: `not-ready`
 
 Evidence must identify the release commit and exact verification command or manual record. Marking implementation complete without verification does not complete an item.
 
+## Current implementation run — 2026-07-16
+
+Candidate base SHA: `868d856` with Codex-owned dirty implementation changes; therefore no item below is promoted to `completed` yet.
+
+- `bun typecheck`: passed.
+- `bun run test`: passed in one combined run: CLI 637/637 plus TerminalManager 50/50, Hub 397/397, and Web 562/562. All 12 Runner integration tests passed; no skipped tests. Claude Remote timing regressions also passed 10/10 focused repetitions before the combined run.
+- `bun run test:e2e`: passed, 2 mocked-browser authentication flows; not a production-like Keycloak fixture.
+- `bun run build:single-exe`: passed for host `bun-linux-x64-baseline`.
+- `bun run checksums:release`: generated and verified one host artifact checksum during the dirty run; regenerate from the release commit.
+- `git diff --check`: passed.
+- GitNexus change detection: CRITICAL scope, 51 files; expected authentication/startup/CLI Socket.IO processes plus lifecycle/Admin UI. Requires release review.
+- Production TypeScript search: no `CLI_API_TOKEN`, `parseAccessToken`, `legacy-session`, or legacy token getter remains.
+- Coverage reconciliation: [`shared-hub-authorization-coverage.md`](./shared-hub-authorization-coverage.md). Team Chat policy enforcement now passes dirty-tree Hub tests; production-like multi-user evidence remains a blocker.
+- Lifecycle audit matrix: Team membership/ownership, grants, invitations, and Runner enrollment/credential/ownership/cleanup mutations now write atomic sanitized audit and outbox records. Failure injection verifies invitation issue and Runner cleanup roll back with their audit write.
+- Runner integration fixture: self-contained Shared Hub/database/enrollment process; all 12 tests execute. Enabling it fixed stale profile-lock recovery, profile-bound duplicate-start identity, and profile-aware heartbeat replacement.
+- Durable outbox dispatcher: production startup recovery, ordered at-least-once delivery, bounded exponential retry, post-publish marking, shutdown cancellation, admin-only SSE invalidation, and Admin UI refresh are implemented. Focused dispatcher/security tests and full Hub/Web suites pass.
+- Manual Keycloak, Linux, macOS, backup/restore, proxy, rollback, and owner sign-offs: not executed.
+
 ## 0 — Baseline and scope
 
 - [ ] `pending` Record candidate release SHA, dirty-tree owner, artifact version, and target environment.
-- [ ] `pending` Reconcile the earlier Phase 5 authorization contradiction with a route/event/action coverage inventory.
-- [ ] `pending` Confirm exclusions: multi-org, HA, PostgreSQL, Windows service, directory sync, automatic upgrades.
-- [ ] `pending` Fix or root-cause the timeout-prone CLI and Web tests; obtain one clean baseline run.
+- [ ] `in-progress` Reconcile the earlier Phase 5 authorization contradiction with a route/event/action coverage inventory. Inventory committed; release-commit evidence pending.
+- [ ] `in-progress` Confirm exclusions: multi-org, HA, PostgreSQL, Windows service, directory sync, automatic upgrades. Scope documented; owner acceptance pending.
+- [ ] `in-progress` Fix or root-cause the timeout-prone CLI and Web tests; obtain one clean baseline run. Timed test paths no longer perform dynamic module loading; 10/10 focused repetitions and one complete dirty-tree baseline passed. Release-commit rerun pending.
 
 ## 1 — Authentication closure
 
-- [ ] `pending` Require Runner credentials for every `/cli` REST route.
-- [ ] `pending` Require Runner credentials for every `/cli` Socket.IO connection.
-- [ ] `pending` Bind machine-scoped clients to the credential's Runner and machine.
-- [ ] `pending` Bind session-scoped clients to an authorized active session projection.
-- [ ] `pending` Remove shared Bearer-token and namespace-token authentication.
-- [ ] `pending` Remove `legacy-session` principals and namespace JWT authentication.
-- [ ] `pending` Remove production `CLI_API_TOKEN` generation, configuration, logs, CLI login UX, and documentation.
-- [ ] `pending` Make unenrolled local sessions fail with actionable enrollment guidance.
-- [ ] `pending` Pass valid, missing, malformed, wrong, rotated, revoked, machine-mismatch, session-mismatch, and cross-org credential tests.
-- [ ] `pending` Confirm production search contains no legacy authentication path.
+- [ ] `in-progress` Require Runner credentials for every `/cli` REST route. Implemented and tested; release-commit evidence pending.
+- [ ] `in-progress` Require Runner credentials for every `/cli` Socket.IO connection. Implemented and tested; release-commit evidence pending.
+- [ ] `in-progress` Bind machine-scoped clients to the credential's Runner and machine. Implemented and tested.
+- [ ] `in-progress` Bind session-scoped clients to an authorized active session projection. Implemented and tested.
+- [ ] `in-progress` Remove shared Bearer-token and namespace-token authentication. Production TypeScript paths removed.
+- [ ] `in-progress` Remove `legacy-session` principals and namespace JWT authentication. Production TypeScript paths removed.
+- [ ] `in-progress` Remove production `CLI_API_TOKEN` generation, configuration, logs, CLI login UX, and documentation. Code removed; primary documentation cleanup still pending.
+- [ ] `in-progress` Make unenrolled local sessions fail with actionable enrollment guidance. Implemented and tested through startup paths.
+- [ ] `in-progress` Pass valid, missing, malformed, wrong, rotated, revoked, machine-mismatch, session-mismatch, and cross-org credential tests. Focused matrix passes; production-like fixture pending.
+- [ ] `in-progress` Confirm production search contains no legacy authentication path. TypeScript search clean; documentation search pending.
 
 ## 2 — Authorization parity
 
-- [ ] `pending` Inventory every REST endpoint, SSE selector/event, Socket.IO event, RPC, and terminal operation.
-- [ ] `pending` Assign each inventory row a capability and fail closed when unmapped.
-- [ ] `pending` Enforce effective capability before editor and file reads/mutations.
-- [ ] `pending` Enforce effective capability before Git reads/mutations.
-- [ ] `pending` Enforce effective capability before permission and session-control RPCs.
-- [ ] `pending` Define Team Chat ownership, membership, participant, read, post, manage, and archive policy.
-- [ ] `pending` Enforce Team Chat policy on REST, SSE, mentions, reports, and session delivery.
-- [ ] `pending` Verify denial occurs before database, engine, RPC, CLI, room, terminal, or publish side effects.
+- [ ] `in-progress` Inventory every REST endpoint, SSE selector/event, Socket.IO event, RPC, and terminal operation. Coverage document added; Team Chat gap recorded.
+- [ ] `in-progress` Assign each inventory row a capability and fail closed when unmapped. Team Chat policy mapped and dirty-tree enforcement passes; release evidence pending.
+- [ ] `in-progress` Enforce effective capability before editor and file reads/mutations. Implemented and tested.
+- [ ] `in-progress` Enforce effective capability before Git reads/mutations. Implemented and tested.
+- [ ] `in-progress` Enforce effective capability before permission and session-control RPCs. Implemented and tested.
+- [ ] `in-progress` Define Team Chat ownership, membership, participant, read, post, manage, and archive policy. Policy locked in the shipping plan; release review evidence pending.
+- [ ] `in-progress` Enforce Team Chat policy on REST, SSE, mentions, reports, and session delivery. Ownership schema v11 and per-use checks implemented; focused and full Hub tests pass; release/production-like evidence pending.
+- [ ] `in-progress` Verify denial occurs before database, engine, RPC, CLI, room, terminal, or publish side effects. Team Chat REST/SSE denial cases now pass; production-like every-transport matrix pending.
 - [ ] `pending` Pass every-transport cross-user, cross-Team, cross-Runner, cross-org, expiry, disable, archive, and session-ID-reuse tests.
 
 ## 3 — Security lifecycle, audit, and teardown
 
-- [ ] `pending` Route member role changes through authorize -> mutate -> audit/outbox -> publish.
-- [ ] `pending` Route member disable/enable through the same transaction boundary.
-- [ ] `pending` Audit Team membership/ownership, grant, invitation, and Runner lifecycle mutations with sanitized payloads.
-- [ ] `pending` Invalidate browser sessions after disable and other identity-invalidating changes.
-- [ ] `pending` Disconnect affected SSE and Socket.IO streams after committed access loss.
-- [ ] `pending` Detach affected terminal and CLI session streams without killing local agents.
-- [ ] `pending` Treat role downgrade as immediate effective-capability loss.
-- [ ] `pending` Add proactive grant-expiry scheduling with restart recovery and race-safe recheck.
+- [ ] `in-progress` Route member role changes through authorize -> mutate -> audit/outbox -> publish. Production dispatcher and admin-only SSE invalidation implemented and tested; release-commit evidence pending.
+- [ ] `in-progress` Route member disable/enable through the same transaction boundary. Implemented and tested.
+- [ ] `in-progress` Audit Team membership/ownership, grant, invitation, and Runner lifecycle mutations with sanitized payloads. Atomic audit/outbox coverage and sensitive-value regression tests pass; release-commit evidence pending.
+- [ ] `in-progress` Invalidate browser sessions after disable and other identity-invalidating changes. Disable implemented; full identity-invalidating matrix pending.
+- [ ] `in-progress` Disconnect affected SSE and Socket.IO streams after committed access loss. Implemented for member, Team, grant, and Runner paths.
+- [ ] `in-progress` Detach affected terminal and CLI session streams without killing local agents. Existing terminal teardown behavior tested; full lifecycle matrix pending.
+- [ ] `in-progress` Treat role downgrade as immediate effective-capability loss. Post-commit disconnect implemented.
+- [ ] `in-progress` Add proactive grant-expiry scheduling with restart recovery and race-safe recheck. One-second scheduler and replacement recheck implemented; restart fixture pending.
 - [ ] `pending` Meet and record the access-loss SLO of no more than five seconds.
-- [ ] `pending` Pass commit-order, rollback, idempotency, unrelated-user, multiple-membership, fake-clock, extension-race, and restart tests.
-- [ ] `pending` Review audit/outbox/log payloads; confirm no credentials, tokens, commands, or private paths.
+- [ ] `in-progress` Pass commit-order, rollback, idempotency, unrelated-user, multiple-membership, fake-clock, extension-race, and restart tests. Lifecycle rollback plus outbox ordering/retry/restart recovery pass; remaining combined matrix pending.
+- [ ] `in-progress` Review audit/outbox/log payloads; confirm no credentials, tokens, commands, or private paths. Automated audit/outbox serialization check passes for lifecycle secrets; production log/manual review pending.
 
 ## 4 — Administration UI
 
-- [ ] `pending` Add Team member add/remove controls.
-- [ ] `pending` Add Team ownership transfer and archive controls.
+- [ ] `in-progress` Add Team member add/remove controls. Implemented; component/browser coverage pending.
+- [ ] `in-progress` Add Team ownership transfer and archive controls. Implemented; component/browser coverage pending.
 - [ ] `pending` Show Runner and session ownership, grant source, expiry, and effective capability.
 - [ ] `pending` Gate controls using server-provided effective capability.
 - [ ] `pending` Complete invitation and member lifecycle workflows.
-- [ ] `pending` Complete Runner transfer, revoke, cleanup, and re-enroll workflows.
-- [ ] `pending` Complete grant create/list/revoke and chronological audit workflows.
-- [ ] `pending` Add whole-Runner grant and destructive-action confirmations.
+- [ ] `in-progress` Complete Runner transfer, revoke, cleanup, and re-enroll workflows. Transfer/revoke/cleanup/enrollment UI exists; browser coverage pending.
+- [ ] `in-progress` Complete grant create/list/revoke and chronological audit workflows. Implemented; browser coverage pending.
+- [ ] `in-progress` Add whole-Runner grant and destructive-action confirmations. Implemented; component coverage pending.
 - [ ] `pending` Pass Admin, delegated manager, Member, Viewer, expired, disabled, and revoked browser flows.
 
 ## 5 — Automated release gates
 
-- [ ] `pending` `bun typecheck` passes from the release commit.
-- [ ] `pending` `bun run test` passes in one clean run.
-- [ ] `pending` `bun run test:e2e` passes with production-like Keycloak fixtures.
-- [ ] `pending` `bun run build:single-exe` passes for release targets.
-- [ ] `pending` Release artifacts and SHA-256 checksums are generated and verified.
-- [ ] `pending` `git diff --check` passes.
-- [ ] `pending` No unexpected skipped or flaky tests remain.
-- [ ] `pending` GitNexus upstream impact reviewed before central-symbol edits; all d=1 dependents updated/tested.
-- [ ] `pending` GitNexus change detection matches intended symbols and execution flows.
+- [ ] `in-progress` `bun typecheck` passes from the release commit. Passed on dirty tree; release commit pending.
+- [ ] `in-progress` `bun run test` passes in one clean run. Passed on dirty tree; release commit pending.
+- [ ] `in-progress` `bun run test:e2e` passes with production-like Keycloak fixtures. Mocked E2E passes; production-like Keycloak fixture pending.
+- [ ] `in-progress` `bun run build:single-exe` passes for release targets. Host Linux x64 passed; full release targets pending.
+- [ ] `in-progress` Release artifacts and SHA-256 checksums are generated and verified. Automation added and host artifact verified; release artifacts pending.
+- [ ] `in-progress` `git diff --check` passes. Passed on dirty tree; release commit pending.
+- [ ] `in-progress` No unexpected skipped or flaky tests remain. Zero skips; both Claude Remote suites passed 10/10 focused repetitions and the full parallel run after moving module loading outside timed test bodies. Release-commit rerun pending.
+- [ ] `in-progress` GitNexus upstream impact reviewed before central-symbol edits; all d=1 dependents updated/tested. Critical surfaces reviewed and package tests pass; release review pending.
+- [ ] `in-progress` GitNexus change detection matches intended symbols and execution flows. Detection run; CRITICAL expected scope requires reviewer acceptance.
 - [ ] `pending` No unresolved Critical or High security finding remains.
 
 ## 6 — Keycloak and multi-user qualification

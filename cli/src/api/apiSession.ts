@@ -122,9 +122,7 @@ export class ApiSessionClient extends EventEmitter {
             registerCommonHandlers(this.rpcHandlerManager, this.metadata.path)
         }
 
-        const socketAuth = auth.kind === 'runner'
-            ? { kind: 'runner' as const, credential: auth.credential, machineId: auth.machineId, clientType: 'session-scoped' as const, sessionId: this.sessionId }
-            : { token: auth.token, clientType: 'session-scoped' as const, sessionId: this.sessionId }
+        const socketAuth = { kind: 'runner' as const, credential: auth.credential, machineId: auth.machineId, clientType: 'session-scoped' as const, sessionId: this.sessionId }
         this.socket = io(`${configuration.apiUrl}/cli`, {
             auth: socketAuth,
             path: '/socket.io/',
@@ -306,9 +304,10 @@ export class ApiSessionClient extends EventEmitter {
     }
 
     private authHeaders(): Record<string, string> {
-        return this.auth.kind === 'legacy'
-            ? { Authorization: `Bearer ${this.auth.token}` }
-            : { Authorization: `Runner ${this.auth.credential.credentialId}.${this.auth.credential.secret}`, 'X-Hapi-Machine-Id': this.auth.machineId }
+        return {
+            Authorization: `Runner ${this.auth.credential.credentialId}.${this.auth.credential.secret}`,
+            'X-Hapi-Machine-Id': this.auth.machineId
+        }
     }
 
     onUserMessage(callback: (data: UserMessage, localId?: string) => void): void {

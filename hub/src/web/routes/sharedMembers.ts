@@ -6,11 +6,16 @@ import { MemberServiceError } from '../../auth/identityService'
 import type { SharedWebAppEnv } from '../sharedAuthEnv'
 
 type MemberBoundary = Pick<IdentityService,
-    'listMembers' | 'getMember' | 'updateMemberRole' | 'disableMember' | 'enableMember'>
+    'listMembers' | 'getMember' | 'updateMemberRole' | 'disableMember' | 'enableMember' |
+    'issueInvitation' | 'listInvitations' | 'cancelInvitation'>
 
 const id = z.string().trim().min(1)
 const roleInput = z.object({ role: z.enum(['admin', 'member', 'viewer']) }).strict()
 const statusInput = z.object({ status: z.enum(['active', 'disabled']) }).strict()
+const invitationInput = z.object({
+    email: z.string().trim().email().max(320),
+    role: z.enum(['admin', 'member', 'viewer'])
+}).strict()
 
 export function createSharedMembersRoutes(
     identity: MemberBoundary,
@@ -32,6 +37,25 @@ export function createSharedMembersRoutes(
         return c.json(member)
     }))
 
+    app.get('/invitations', (c) => handle(c, () => {
+        const actor = subject(c)
+        return c.json({ invitations: identity.listInvitations(actor) })
+    }))
+
+    app.post('/invitations', async (c) => {
+        const body = await parse(c.req.raw, invitationInput)
+        if (!body.ok) return invalid(c)
+        return handle(c, () => {
+            c.header('Cache-Control', 'no-store')
+            return c.json(identity.issueInvitation(subject(c), body.value), 201)
+        })
+    })
+
+    app.delete('/invitations/:invitationId', (c) => handle(c, () => {
+        identity.cancelInvitation(subject(c), c.req.param('invitationId'))
+        return c.body(null, 204)
+    }))
+
     app.patch('/members/:membershipId/role', async (c) => {
         const body = await parse(c.req.raw, roleInput)
         if (!body.ok) return invalid(c)
@@ -39,6 +63,7 @@ export function createSharedMembersRoutes(
             const actor = subject(c)
             requireAdmin(actor)
             identity.updateMemberRole(actor.organizationId, c.req.param('membershipId'), body.value.role, actor.membershipId)
+            onMemberDisabled?.(actor.organizationId, c.req.param('membershipId'))
             return c.body(null, 204)
         })
     })
@@ -54,7 +79,7 @@ export function createSharedMembersRoutes(
                 identity.disableMember(actor.organizationId, membershipId, actor.membershipId)
                 onMemberDisabled?.(actor.organizationId, membershipId)
             } else {
-                identity.enableMember(actor.organizationId, c.req.param('membershipId'))
+                identity.enableMember(actor.organizationId, c.req.param('membershipId'), actor.membershipId)
             }
             return c.body(null, 204)
         })

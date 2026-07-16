@@ -123,4 +123,21 @@ describe('TeamAuthorizationService', () => {
             { organizationId: 'o1', membershipIds: ['member'], resourceType: 'runner', resourceId: 'r1' }
         ])
     })
+
+    it('expires grants proactively and rechecks replacement access before teardown', () => {
+        const losses: Array<{ organizationId: string; membershipIds: readonly string[]; resourceType: 'runner' | 'session' | 'team'; resourceId: string }> = []
+        const { store, service, admin } = setup((input) => losses.push(input))
+        const expiring = service.createGrant(admin, { principalType: 'user', principalId: 'member', resourceType: 'runner', resourceId: 'r1', capability: 'operate', expiresAt: 20 }, 10)
+        service.createGrant(admin, { principalType: 'user', principalId: 'member', resourceType: 'runner', resourceId: 'r1', capability: 'operate', expiresAt: null }, 11)
+
+        expect(service.expireDueGrants('o1', 19)).toBe(0)
+        expect(service.expireDueGrants('o1', 20)).toBe(1)
+        expect(store.findResourceGrant('o1', expiring.id)).toBeNull()
+        expect(losses).toEqual([])
+
+        service.createGrant(admin, { principalType: 'user', principalId: 'member', resourceType: 'runner', resourceId: 'r1', capability: 'manage', expiresAt: 30 }, 21)
+        expect(service.expireDueGrants('o1', 30)).toBe(1)
+        expect(losses).toEqual([{ organizationId: 'o1', membershipIds: ['member'], resourceType: 'runner', resourceId: 'r1' }])
+        expect(service.expireDueGrants('o1', 31)).toBe(0)
+    })
 })

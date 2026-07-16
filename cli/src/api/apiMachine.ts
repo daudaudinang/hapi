@@ -118,7 +118,7 @@ export class ApiMachineClient {
     private readonly normalizedWorkspaceRoot: string | undefined
 
     constructor(
-        private readonly authentication: ApiAuthentication | string,
+        private readonly authentication: ApiAuthentication,
         private readonly machine: Machine,
         private readonly workspaceRoot?: string
     ) {
@@ -433,7 +433,12 @@ export class ApiMachineClient {
     connect(): void {
         this.socket = io(`${configuration.apiUrl}/cli`, {
             transports: ['websocket'],
-            auth: typeof this.authentication==='string'?{token:this.authentication,clientType:'machine-scoped' as const,machineId:this.machine.id}:this.authentication.kind==='runner'?{kind:'runner' as const,credential:this.authentication.credential,machineId:this.authentication.machineId}:{token:this.authentication.token,clientType:'machine-scoped' as const,machineId:this.machine.id},
+            auth: {
+                kind: 'runner' as const,
+                credential: this.authentication.credential,
+                machineId: this.authentication.machineId,
+                clientType: 'machine-scoped' as const
+            },
             path: '/socket.io/',
             reconnection: true,
             reconnectionDelay: 1000,

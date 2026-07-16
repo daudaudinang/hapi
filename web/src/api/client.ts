@@ -919,6 +919,30 @@ export class ApiClient {
         })
     }
 
+    async listTeamMembers(teamId: string): Promise<{ members: Array<{ membershipId: string; role: 'owner' | 'member' }> }> {
+        return await this.request(`/api/teams/${encodeURIComponent(teamId)}/members`)
+    }
+
+    async addTeamMember(teamId: string, membershipId: string, role: 'owner' | 'member' = 'member'): Promise<void> {
+        await this.request(`/api/teams/${encodeURIComponent(teamId)}/members`, { method: 'POST', body: JSON.stringify({ membershipId, role }) })
+    }
+
+    async removeTeamMember(teamId: string, membershipId: string): Promise<void> {
+        await this.request(`/api/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(membershipId)}`, { method: 'DELETE' })
+    }
+
+    async transferTeamOwnership(teamId: string, sourceMembershipId: string, targetMembershipId: string): Promise<void> {
+        await this.request(`/api/teams/${encodeURIComponent(teamId)}/ownership-transfer`, { method: 'POST', body: JSON.stringify({ sourceMembershipId, targetMembershipId }) })
+    }
+
+    async archiveTeam(teamId: string): Promise<void> {
+        await this.request(`/api/teams/${encodeURIComponent(teamId)}`, { method: 'DELETE' })
+    }
+
+    async transferRunner(runnerId: string, targetMembershipId: string): Promise<void> {
+        await this.request(`/api/runners/${encodeURIComponent(runnerId)}/transfer`, { method: 'POST', body: JSON.stringify({ targetMembershipId }) })
+    }
+
     async createGrant(input: {
         principalType: 'user' | 'team'
         principalId: string

@@ -35,6 +35,8 @@ describe('createWebApp Shared Hub auth assembly', () => {
                 } : null } as never
             },
             teamAuthorization: { listTeams: () => [] } as never,
+            runnerAuthenticator: { authenticateAny: () => null } as never,
+            authorizeRunnerSession: () => false,
             runnerEnrollment: {
                 exchange: () => ({ organizationId: 'o1', runnerId: 'r1', credential: { credentialId: 'c1', secret: 'x'.repeat(32) }, generation: 1, hubUrl: 'https://hub.example.com' }),
                 list: () => ({ enrollments: [] })

@@ -1,6 +1,7 @@
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '@/api/client'
+import { createAppRouter } from '@/router'
 import EditorPage from './editor'
 
 const editorLayoutMock = vi.fn()
@@ -80,10 +81,9 @@ describe('EditorPage', () => {
         })
     })
 
-    it('is registered in the router', async () => {
-        const { createAppRouter } = await import('@/router')
+    it('is registered in the router', () => {
         const router = createAppRouter() as unknown as { routesByPath: Record<string, unknown> }
 
         expect(router.routesByPath['/editor']).toBeTruthy()
-    }, 10_000)
+    })
 })

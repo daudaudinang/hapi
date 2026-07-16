@@ -15,7 +15,7 @@ export class RunnerEnrollmentService {
     issue(subject:AuthorizationSubject, ownerMembershipId:string) {
         if(subject.disabled||subject.role!=='admin'||!this.store.membershipExists(subject.organizationId,ownerMembershipId)) throw new RunnerEnrollmentError('forbidden')
         const code=randomOpaqueToken(32), createdAt=this.now(), enrollmentId=randomUUID()
-        this.store.transaction(()=>{this.store.createEnrollment({id:enrollmentId,organizationId:subject.organizationId,ownerMembershipId,codeHash:keyedHash(code,this.pepper),expiresAt:createdAt+RunnerEnrollmentService.TTL_MS,createdAt});this.store.appendAuditEvent({id:randomUUID(),organizationId:subject.organizationId,actorType:'user',actorId:subject.membershipId,action:'runner.enrollment.issue',resourceType:'runner_enrollment',resourceId:enrollmentId,outcome:'success',createdAt});this.store.appendOutboxEvent({id:randomUUID(),organizationId:subject.organizationId,name:'runner.enrollment.issued',resourceType:'runner_enrollment',resourceId:enrollmentId,createdAt})})
+        this.store.transaction(()=>{this.store.createEnrollment({id:enrollmentId,organizationId:subject.organizationId,ownerMembershipId,codeHash:keyedHash(code,this.pepper),expiresAt:createdAt+RunnerEnrollmentService.TTL_MS,createdAt});this.store.appendAuditEvent({id:randomUUID(),organizationId:subject.organizationId,actorType:'user',actorId:subject.membershipId,action:'runner.enrollment.issue',resourceType:'runner_enrollment',resourceId:enrollmentId,outcome:'success',metadata:{ownerMembershipId,expiresAt:createdAt+RunnerEnrollmentService.TTL_MS},createdAt});this.store.appendOutboxEvent({id:randomUUID(),organizationId:subject.organizationId,name:'runner.enrollment.issued',resourceType:'runner_enrollment',resourceId:enrollmentId,createdAt})})
         return {enrollmentId,code,expiresAt:createdAt+RunnerEnrollmentService.TTL_MS}
     }
 
@@ -39,7 +39,7 @@ export class RunnerEnrollmentService {
                 this.store.createRunnerProjection({runnerId,organizationId:enrollment.organizationId,ownerMembershipId:enrollment.ownerMembershipId,machineId:input.machine.id,profile:input.profile,name:input.machine.name,metadata:{platform:input.machine.platform,arch:input.machine.arch,profile:input.profile},runnerState:{},createdAt:now})
                 this.store.createRunnerCredential({id:credentialId,runnerId,organizationId:enrollment.organizationId,secretHash:keyedHash(secret,this.pepper),generation:1,createdAt:now})
                 this.afterCredentialInsert?.()
-                this.store.appendAuditEvent({id:randomUUID(),organizationId:enrollment.organizationId,actorType:'runner',actorId:runnerId,action:'runner.enroll',resourceType:'runner',resourceId:runnerId,outcome:'success',createdAt:now})
+                this.store.appendAuditEvent({id:randomUUID(),organizationId:enrollment.organizationId,actorType:'runner',actorId:runnerId,action:'runner.enroll',resourceType:'runner',resourceId:runnerId,outcome:'success',metadata:{generation:1},createdAt:now})
                 this.store.appendOutboxEvent({id:randomUUID(),organizationId:enrollment.organizationId,name:'runner.enrolled',resourceType:'runner',resourceId:runnerId,createdAt:now})
                 return {organizationId:enrollment.organizationId,runnerId,credential:{credentialId,secret},generation:1,hubUrl:this.hubUrl}
             })

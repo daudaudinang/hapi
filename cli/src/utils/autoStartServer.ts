@@ -4,7 +4,7 @@
  * Automatically starts the HAPI hub when CLI is launched
  * if specific conditions are met:
  * 1. HAPI_API_URL is not set (using default localhost:3006)
- * 2. cliApiToken exists in settings.json (hub was previously started)
+ * 2. Shared Hub organization settings are present
  * 3. Port 3006 is not currently listening
  */
 
@@ -105,9 +105,9 @@ async function shouldAutoStartServer(): Promise<boolean> {
         return false
     }
 
-    // 2b: cliApiToken exists in settings.json (hub was previously started)
-    if (!settings.cliApiToken) {
-        logger.debug('[AUTO-START] No cliApiToken in settings, skipping auto-start')
+    // 2b: Shared Hub startup is explicit and requires organization identity configuration.
+    if (!process.env.HAPI_ORGANIZATION_ID) {
+        logger.debug('[AUTO-START] No Shared Hub organization configuration, skipping auto-start')
         return false
     }
 
