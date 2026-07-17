@@ -131,11 +131,12 @@ export function ToolRunGroup({
     startIndex: number
     endIndex: number
 }>) {
-    const parts = useAssistantState(({ message }) => message.content
+    const content = useAssistantState(({ message }) => message.content)
+    const parts = content
         .slice(startIndex, endIndex + 1)
         .map((part) => ({
             artifact: part.type === 'tool-call' ? part.artifact : undefined
-        })))
+        }))
     const childArray = Children.toArray(children)
     const segments = partitionToolRunParts(parts)
 
