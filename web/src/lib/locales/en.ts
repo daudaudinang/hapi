@@ -237,6 +237,7 @@ export default {
   'tool.patch': 'Patch',
   'tool.details': 'Details',
   'tool.backgroundActions': '{count} background actions',
+  'tool.patchDetailsUnavailable': 'Patch details unavailable',
   'tool.openPlan': 'Open plan',
   'tool.reviewDiff': 'Review diff',
   'tool.permissionRequired': 'Permission required',

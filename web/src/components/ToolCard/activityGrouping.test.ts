@@ -108,4 +108,16 @@ describe('routine activity grouping', () => {
     it('keeps CodexReasoning as routine tool activity', () => {
         expect(isRoutineActivityBlock(makeTool('reasoning', 'CodexReasoning'))).toBe(true)
     })
+
+    it('groups Apply changes with adjacent neutral activity', () => {
+        const patch = makeTool('patch', 'CodexPatch', {
+            input: { changes: [{ path: '/workspace/docs/plan.md' }] }
+        })
+        const read = makeTool('read', 'Read')
+
+        expect(groupRoutineActivities([patch, read])).toMatchObject([{
+            kind: 'routine-activity-group',
+            blocks: [patch, read]
+        }])
+    })
 })

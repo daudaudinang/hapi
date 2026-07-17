@@ -31,6 +31,14 @@ const oneFileDiff = [
     '+new'
 ].join('\n')
 
+const arrayPatchPayload = {
+    changes: [{
+        path: '/workspace/docs/plan.md',
+        kind: { type: 'update', move_path: null },
+        diff: '@@ -1 +1 @@\n-old\n+new'
+    }]
+}
+
 const pendingPermission = {
     id: 'permission-1',
     status: 'pending'
@@ -110,7 +118,7 @@ describe('ToolCard presentation hierarchy', () => {
         ['ExitPlanMode', 'plan'],
         ['exit_plan_mode', 'plan'],
         ['CodexDiff', 'diff'],
-        ['CodexPatch', 'diff'],
+        ['CodexPatch', 'neutral'],
         ['Edit', 'diff'],
         ['MultiEdit', 'diff'],
         ['Write', 'diff'],
@@ -199,6 +207,35 @@ describe('ToolCard presentation hierarchy', () => {
         expect(screen.getByText('Review diff')).toBeInTheDocument()
     })
 
+    it('treats Apply changes as neutral without Review diff or subtitle 0', () => {
+        const { container } = renderTool(makeToolBlock(
+            'CodexPatch',
+            arrayPatchPayload,
+            undefined,
+            { description: '0' }
+        ))
+
+        expect(container.querySelector('[data-tool-surface="neutral"]')).not.toBeNull()
+        expect(screen.queryByText('Review diff')).not.toBeInTheDocument()
+        expect(screen.queryByText('0')).not.toBeInTheDocument()
+        expect(screen.getByText('plan.md')).toBeInTheDocument()
+    })
+
+    it('opens affected files and result from an Apply changes row', () => {
+        renderTool(makeToolBlock(
+            'CodexPatch',
+            arrayPatchPayload,
+            undefined,
+            { result: { success: true } }
+        ), { displayMode: 'activity-row' })
+
+        fireEvent.click(screen.getByRole('button', { name: /apply changes/i }))
+
+        const dialog = screen.getByRole('dialog')
+        expect(dialog).toHaveTextContent('plan.md')
+        expect(dialog).toHaveTextContent('Result')
+    })
+
     it('uses a permission heading and lock icon for pending approval', () => {
         renderTool(makeToolBlock('Write', {}, pendingPermission))
 
@@ -220,7 +257,9 @@ describe('ToolCard presentation hierarchy', () => {
             'tool.details',
             'tool.openPlan',
             'tool.reviewDiff',
-            'tool.permissionRequired'
+            'tool.permissionRequired',
+            'tool.backgroundActions',
+            'tool.patchDetailsUnavailable'
         ]
 
         for (const dictionary of dictionaries) {

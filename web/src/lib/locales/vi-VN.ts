@@ -231,6 +231,7 @@ export default {
   'tool.patch': 'Bản vá',
   'tool.details': 'Chi tiết',
   'tool.backgroundActions': '{count} tác vụ nền',
+  'tool.patchDetailsUnavailable': 'Không có chi tiết thay đổi',
   'tool.openPlan': 'Mở kế hoạch',
   'tool.reviewDiff': 'Xem thay đổi',
   'tool.permissionRequired': 'Cần cấp quyền',

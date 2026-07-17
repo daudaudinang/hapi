@@ -6,6 +6,7 @@ import type { ChecklistItem } from '@/components/ToolCard/checklist'
 import { extractTodoChecklist, extractUpdatePlanChecklist } from '@/components/ToolCard/checklist'
 import { basename, resolveDisplayPath } from '@/utils/path'
 import { getInputStringAny, truncate } from '@/lib/toolInputUtils'
+import { extractCodexPatchFiles } from '@/components/ToolCard/codexPatch'
 
 const DEFAULT_ICON_CLASS = 'h-3.5 w-3.5'
 // Tool presentation registry for `hapi/web` (aligned with `hapi-app`).
@@ -21,7 +22,7 @@ export type ToolPresentation = {
 export type ToolSurfaceTone = 'neutral' | 'plan' | 'diff'
 
 const PLAN_TOOLS = new Set(['update_plan', 'TodoWrite', 'ExitPlanMode', 'exit_plan_mode'])
-const DIFF_TOOLS = new Set(['CodexDiff', 'CodexPatch', 'Edit', 'MultiEdit', 'Write', 'NotebookEdit'])
+const DIFF_TOOLS = new Set(['CodexDiff', 'Edit', 'MultiEdit', 'Write', 'NotebookEdit'])
 
 export function getToolSurfaceTone(toolName: string): ToolSurfaceTone {
     if (PLAN_TOOLS.has(toolName)) return 'plan'
@@ -323,15 +324,11 @@ export const knownTools: Record<string, {
         icon: () => <FileDiffIcon className={DEFAULT_ICON_CLASS} />,
         title: () => 'Apply changes',
         subtitle: (opts) => {
-            if (isObject(opts.input) && isObject(opts.input.changes)) {
-                const files = Object.keys(opts.input.changes)
-                if (files.length === 0) return null
-                const first = files[0]
-                const display = resolveDisplayPath(first, opts.metadata)
-                const name = basename(display)
-                return files.length > 1 ? `${name} (+${files.length - 1})` : name
-            }
-            return null
+            const files = extractCodexPatchFiles(opts.input)
+            if (files.length === 0) return ''
+            const display = resolveDisplayPath(files[0].path, opts.metadata)
+            const name = basename(display)
+            return files.length > 1 ? `${name} (+${files.length - 1})` : name
         },
         minimal: true
     },
