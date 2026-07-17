@@ -5,6 +5,10 @@ type Member = {
     membershipId: string; invitedEmail: string; role: string; status: string
     identityId: string | null; identityIssuer: string | null; identitySubject: string | null; createdAt: number
 }
+type Invitation = {
+    id: string; email: string; role: 'admin' | 'member' | 'viewer'; expiresAt: number
+    status: 'active' | 'claimed' | 'cancelled' | 'expired'; createdAt: number
+}
 type Runner = {
     id: string; ownerMembershipId: string; machineId: string; profile: string; name: string; status: string; createdAt: number
 }
@@ -22,6 +26,7 @@ export function AdminPage() {
     const isViewer = role === 'viewer'
     const [tab, setTab] = useState<Tab>('members')
     const [members, setMembers] = useState<Member[]>([])
+    const [invitations, setInvitations] = useState<Invitation[]>([])
     const [runners, setRunners] = useState<Runner[]>([])
     const [teams, setTeams] = useState<Team[]>([])
     const [teamMembers, setTeamMembers] = useState<Record<string, TeamMember[]>>({})
@@ -31,6 +36,10 @@ export function AdminPage() {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [newTeamName, setNewTeamName] = useState('')
+    const [invitationEmail, setInvitationEmail] = useState('')
+    const [invitationRole, setInvitationRole] = useState<'admin' | 'member' | 'viewer'>('member')
+    const [issuedInvitation, setIssuedInvitation] = useState<{ token: string; expiresAt: number } | null>(null)
+    const [issuingInvitation, setIssuingInvitation] = useState(false)
     const [newTeamOwner, setNewTeamOwner] = useState('')
     const [showGrantForm, setShowGrantForm] = useState<string | null>(null)
     const [grantForm, setGrantForm] = useState<{ principalType: 'user' | 'team'; principalId: string; capability: 'view' | 'interact' | 'spawn' | 'operate' | 'manage'; expiresAt: string }>({ principalType: 'user', principalId: '', capability: 'view', expiresAt: '' })
@@ -39,10 +48,11 @@ export function AdminPage() {
         if (!api) return
         setLoading(true)
         try {
-            const [memberRes, runnerRes, teamRes, grantRes, auditRes] = await Promise.all([
-                api.listMembers(), api.listRunners(), api.listTeams(), api.listGrants(), api.listAuditEvents()
+            const [memberRes, invitationRes, runnerRes, teamRes, grantRes, auditRes] = await Promise.all([
+                api.listMembers(), api.listInvitations(), api.listRunners(), api.listTeams(), api.listGrants(), api.listAuditEvents()
             ])
             setMembers(memberRes.members)
+            setInvitations(invitationRes.invitations)
             setRunners(runnerRes.runners)
             setTeams(teamRes.teams)
             const memberEntries = await Promise.all(teamRes.teams.filter((team) => !team.archivedAt).map(async (team) =>
@@ -65,6 +75,29 @@ export function AdminPage() {
 
     const handleRoleChange = async (id: string, role: string) => { if (!api) return; try { await api.updateMemberRole(id, role); refresh() } catch (e) { setError((e as Error).message) } }
     const handleStatusChange = async (id: string, status: string) => { if (!api) return; try { await api.updateMemberStatus(id, status); refresh() } catch (e) { setError((e as Error).message) } }
+    const handleCreateInvitation = async () => {
+        if (!api || !invitationEmail.trim()) return
+        setIssuingInvitation(true)
+        try {
+            const invitation = await api.createInvitation(invitationEmail.trim(), invitationRole)
+            setIssuedInvitation({ token: invitation.token, expiresAt: invitation.expiresAt })
+            setInvitationEmail('')
+            setError(null)
+            await refresh()
+        } catch (e) {
+            setError((e as Error).message)
+        } finally {
+            setIssuingInvitation(false)
+        }
+    }
+    const handleCancelInvitation = async (id: string) => {
+        if (!api || !window.confirm('Cancel this invitation? Its code will stop working immediately.')) return
+        try { await api.cancelInvitation(id); await refresh() } catch (e) { setError((e as Error).message) }
+    }
+    const handleCopyInvitation = async () => {
+        if (!issuedInvitation) return
+        try { await navigator.clipboard.writeText(issuedInvitation.token) } catch { setError('Could not copy the invitation code.') }
+    }
     const handleRevoke = async (id: string) => { if (!api || !window.confirm('Revoke this Runner? Active remote access will disconnect immediately.')) return; try { await api.revokeRunner(id); refresh() } catch (e) { setError((e as Error).message) } }
     const handleCreateTeam = async () => { if (!api || !newTeamName || !newTeamOwner) return; try { await api.createTeam(newTeamName, newTeamOwner); setNewTeamName(''); setNewTeamOwner(''); refresh() } catch (e) { setError((e as Error).message) } }
     const handleCreateGrant = async (runnerId: string) => {
@@ -110,7 +143,41 @@ export function AdminPage() {
             </div>
 
             {tab === 'members' && (
-                <div className="space-y-2">
+                <div className="space-y-6">
+                    {isAdmin && (
+                        <section className="space-y-3 rounded-lg border border-border p-4">
+                            <div>
+                                <h2 className="text-sm font-semibold">Invite a member</h2>
+                                <p className="text-xs text-muted-foreground">The Keycloak account must use this exact verified email. Invitation codes expire after seven days.</p>
+                            </div>
+                            <div className="flex flex-wrap items-end gap-3">
+                                <div className="min-w-64 flex-1 space-y-1">
+                                    <label htmlFor="invitation-email" className="text-xs text-muted-foreground">Verified email</label>
+                                    <input id="invitation-email" type="email" value={invitationEmail} onChange={(e) => setInvitationEmail(e.target.value)} placeholder="member@example.com" className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring" />
+                                </div>
+                                <div className="space-y-1">
+                                    <label htmlFor="invitation-role" className="text-xs text-muted-foreground">Role</label>
+                                    <select id="invitation-role" value={invitationRole} onChange={(e) => setInvitationRole(e.target.value as typeof invitationRole)} className="rounded-lg border border-input bg-background px-3 py-2 text-sm">
+                                        <option value="member">Member</option><option value="viewer">Viewer</option><option value="admin">Admin</option>
+                                    </select>
+                                </div>
+                                <button type="button" onClick={handleCreateInvitation} disabled={!invitationEmail.trim() || issuingInvitation} className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">{issuingInvitation ? 'Creating...' : 'Create invitation'}</button>
+                            </div>
+                            {issuedInvitation && (
+                                <div className="rounded-lg border border-green-500/40 bg-green-500/10 p-3">
+                                    <p className="text-sm font-medium">Invitation created — copy this one-time code now</p>
+                                    <div className="mt-2 flex gap-2">
+                                        <code className="min-w-0 flex-1 overflow-x-auto rounded bg-background px-3 py-2 text-xs">{issuedInvitation.token}</code>
+                                        <button type="button" onClick={handleCopyInvitation} className="rounded border border-input px-3 py-2 text-xs hover:bg-accent">Copy</button>
+                                        <button type="button" onClick={() => setIssuedInvitation(null)} className="px-2 text-xs text-muted-foreground hover:text-foreground">Dismiss</button>
+                                    </div>
+                                    <p className="mt-2 text-xs text-muted-foreground">Expires {new Date(issuedInvitation.expiresAt).toLocaleString()}</p>
+                                </div>
+                            )}
+                        </section>
+                    )}
+                    <section className="space-y-2">
+                    <h2 className="text-sm font-semibold">Members</h2>
                     {members.map((m) => (
                         <div key={m.membershipId} className="flex items-center justify-between rounded-lg border border-border px-4 py-3">
                             <div className="space-y-0.5">
@@ -138,6 +205,21 @@ export function AdminPage() {
                         </div>
                     ))}
                     {members.length === 0 && <p className="text-sm text-muted-foreground">No members found.</p>}
+                    </section>
+                    {isAdmin && invitations.length > 0 && (
+                        <section className="space-y-2">
+                            <h2 className="text-sm font-semibold">Invitations</h2>
+                            {invitations.map((invitation) => (
+                                <div key={invitation.id} className="flex items-center justify-between rounded-lg border border-border px-4 py-3">
+                                    <div>
+                                        <div className="flex items-center gap-2"><span className="text-sm font-medium">{invitation.email}</span><span className="rounded bg-accent px-1.5 py-0.5 text-xs">{invitation.role}</span><span className="text-xs text-muted-foreground">{invitation.status}</span></div>
+                                        <p className="text-xs text-muted-foreground">Expires {new Date(invitation.expiresAt).toLocaleString()}</p>
+                                    </div>
+                                    {invitation.status === 'active' && <button type="button" onClick={() => handleCancelInvitation(invitation.id)} className="text-xs text-destructive hover:underline">Cancel</button>}
+                                </div>
+                            ))}
+                        </section>
+                    )}
                 </div>
             )}
 

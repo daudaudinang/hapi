@@ -894,6 +894,21 @@ export class ApiClient {
         return await this.request('/api/members')
     }
 
+    async listInvitations(): Promise<{ invitations: Array<{ id: string; email: string; role: 'admin' | 'member' | 'viewer'; expiresAt: number; status: 'active' | 'claimed' | 'cancelled' | 'expired'; createdAt: number }> }> {
+        return await this.request('/api/invitations')
+    }
+
+    async createInvitation(email: string, role: 'admin' | 'member' | 'viewer'): Promise<{ invitationId: string; token: string; expiresAt: number }> {
+        return await this.request('/api/invitations', {
+            method: 'POST',
+            body: JSON.stringify({ email, role })
+        })
+    }
+
+    async cancelInvitation(invitationId: string): Promise<void> {
+        await this.request(`/api/invitations/${encodeURIComponent(invitationId)}`, { method: 'DELETE' })
+    }
+
     async updateMemberRole(membershipId: string, role: string): Promise<void> {
         await this.request(`/api/members/${encodeURIComponent(membershipId)}/role`, {
             method: 'PATCH',
