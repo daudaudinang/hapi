@@ -3,6 +3,7 @@ import { MarkdownText } from '@/components/assistant-ui/markdown-text'
 import { Reasoning, ReasoningGroup } from '@/components/assistant-ui/reasoning'
 import { CliOutputMessagePart } from '@/components/AssistantChat/messages/CliOutputMessagePart'
 import { HappyToolMessage } from '@/components/AssistantChat/messages/ToolMessage'
+import { ToolRunGroup } from '@/components/ToolCard/ToolRunGroup'
 import { CopyIcon, CheckIcon } from '@/components/icons'
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
 import { CLI_OUTPUT_TOOL_NAME } from '@/lib/cliOutputPart'
@@ -18,6 +19,7 @@ const MESSAGE_PART_COMPONENTS = {
     Text: MarkdownText,
     Reasoning: Reasoning,
     ReasoningGroup: ReasoningGroup,
+    ToolGroup: ToolRunGroup,
     tools: TOOL_COMPONENTS
 } as const
 

@@ -273,6 +273,7 @@ type ToolCardProps = {
     disabled: boolean
     onDone: () => void
     block: ToolCallBlock
+    displayMode?: 'card' | 'group-row'
 }
 
 function ToolCardInner(props: ToolCardProps) {

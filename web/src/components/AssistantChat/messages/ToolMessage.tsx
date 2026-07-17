@@ -11,6 +11,7 @@ import { ToolCard } from '@/components/ToolCard/ToolCard'
 import { useHappyChatContext } from '@/components/AssistantChat/context'
 import { CliOutputBlock } from '@/components/CliOutputBlock'
 import { isToolCallBlock } from '@/components/ToolCard/toolRunModel'
+import { useToolRunLayout } from '@/components/ToolCard/toolRunContext'
 
 function isPendingPermissionBlock(block: ChatBlock): boolean {
     return block.kind === 'tool-call' && block.tool.permission?.status === 'pending'
@@ -145,6 +146,7 @@ function HappyNestedBlockList(props: {
 
 export function HappyToolMessage(props: ToolCallMessagePartProps) {
     const ctx = useHappyChatContext()
+    const grouped = useToolRunLayout()
     const artifact = props.artifact
 
     if (!isToolCallBlock(artifact)) {
@@ -197,6 +199,7 @@ export function HappyToolMessage(props: ToolCallMessagePartProps) {
                 disabled={ctx.disabled}
                 onDone={ctx.onRefresh}
                 block={block}
+                displayMode={grouped ? 'group-row' : 'card'}
             />
             {block.children.length > 0 ? (
                 isTask ? (
