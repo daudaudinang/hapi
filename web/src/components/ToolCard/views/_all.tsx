@@ -76,7 +76,8 @@ export const toolFullViewRegistry: Record<string, ToolViewComponent> = {
     ExitPlanMode: ExitPlanModeView,
     ask_user_question: AskUserQuestionView,
     exit_plan_mode: ExitPlanModeView,
-    request_user_input: RequestUserInputView
+    request_user_input: RequestUserInputView,
+    update_plan: UpdatePlanView
 }
 
 export function getToolViewComponent(toolName: string): ToolViewComponent | null {

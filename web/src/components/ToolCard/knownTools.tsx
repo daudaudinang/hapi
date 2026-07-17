@@ -352,8 +352,7 @@ export const knownTools: Record<string, {
         },
         minimal: (opts) => {
             const unified = getInputStringAny(opts.input, ['unified_diff'])
-            if (!unified) return true
-            return unified.length >= 2000 || countLines(unified) >= 50
+            return !unified
         }
     },
     ExitPlanMode: {
