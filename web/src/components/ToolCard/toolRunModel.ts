@@ -121,6 +121,11 @@ function hasRenderableUnifiedDiff(value: unknown): boolean {
     }
 }
 
+function hasMeaningfulStructuredReadResult(result: unknown): boolean {
+    if (!isObject(result) || !isObject(result.file)) return false
+    return typeof result.file.content === 'string' && result.file.content.trim().length > 0
+}
+
 export function getToolExpansionKind(block: ToolCallBlock): 'input' | 'result' | null {
     if (block.tool.name === 'CodexDiff') {
         const input = block.tool.input
@@ -134,6 +139,10 @@ export function getToolExpansionKind(block: ToolCallBlock): 'input' | 'result' |
         if (display && (hasMeaningfulText(display.stdout) || hasMeaningfulText(display.stderr))) {
             return 'result'
         }
+    }
+
+    if (block.tool.name === 'Read' && hasMeaningfulStructuredReadResult(block.tool.result)) {
+        return 'result'
     }
 
     return hasMeaningfulText(extractTextFromResult(block.tool.result)) ? 'result' : null

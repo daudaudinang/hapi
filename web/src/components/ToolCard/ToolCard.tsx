@@ -441,21 +441,23 @@ function ToolCardInner(props: ToolCardProps) {
                         data-tool-inline-output
                         className="w-full min-w-0 max-h-[300px] overflow-auto overscroll-contain"
                     >
-                        {expansionKind === 'input' && FullToolView ? (
-                            <FullToolView
-                                block={props.block}
-                                metadata={props.metadata}
-                                surface="group-output"
-                                t={t}
-                            />
-                        ) : (
-                            <ResultToolView
-                                block={props.block}
-                                metadata={props.metadata}
-                                surface="group-output"
-                                t={t}
-                            />
-                        )}
+                        {outputOpen ? (
+                            expansionKind === 'input' && FullToolView ? (
+                                <FullToolView
+                                    block={props.block}
+                                    metadata={props.metadata}
+                                    surface="group-output"
+                                    t={t}
+                                />
+                            ) : (
+                                <ResultToolView
+                                    block={props.block}
+                                    metadata={props.metadata}
+                                    surface="group-output"
+                                    t={t}
+                                />
+                            )
+                        ) : null}
                     </div>
                 ) : null}
             </div>

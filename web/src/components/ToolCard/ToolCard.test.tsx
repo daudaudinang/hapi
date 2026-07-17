@@ -351,6 +351,52 @@ describe('ToolCard presentation hierarchy', () => {
         expect(output?.querySelector('pre')).toHaveAttribute('data-collapse-long-content', 'false')
     })
 
+    it.each([
+        {
+            label: 'result view',
+            block: makeToolBlock('Bash', { command: 'printf ready' }, undefined, {
+                result: { stdout: 'lazy-result-marker\n', stderr: '', exitCode: 0 }
+            }),
+            marker: 'lazy-result-marker'
+        },
+        {
+            label: 'full input view',
+            block: makeToolBlock('CodexDiff', {
+                unified_diff: [
+                    'diff --git a/lazy.ts b/lazy.ts',
+                    '--- a/lazy.ts',
+                    '+++ b/lazy.ts',
+                    '@@ -1 +1 @@',
+                    '-old',
+                    '+lazy-diff-marker'
+                ].join('\n')
+            }),
+            marker: 'lazy-diff-marker'
+        }
+    ])('mounts the heavy $label only while group output is expanded', ({ block, marker }) => {
+        const { container } = renderTool(block, { displayMode: 'group-row' })
+        const trigger = screen.getByRole('button', { name: /show output/i })
+        const output = container.querySelector<HTMLElement>('[data-tool-inline-output]')
+        const controlledId = trigger.getAttribute('aria-controls')
+
+        expect(output).not.toBeNull()
+        expect(output).toHaveAttribute('id', controlledId)
+        expect(output).toHaveAttribute('hidden')
+        expect(output).not.toHaveTextContent(marker)
+
+        fireEvent.click(trigger)
+        expect(output).not.toHaveAttribute('hidden')
+        expect(output).toHaveTextContent(marker)
+
+        fireEvent.click(trigger)
+        expect(output).toHaveAttribute('hidden')
+        expect(output).not.toHaveTextContent(marker)
+
+        fireEvent.click(trigger)
+        expect(output).not.toHaveAttribute('hidden')
+        expect(output).toHaveTextContent(marker)
+    })
+
     it('shows at most three Apply Changes files inline and every file in its dialog without an empty accordion', () => {
         renderTool(makeToolBlock('CodexPatch', fourFilePatchPayload), { displayMode: 'group-row' })
 

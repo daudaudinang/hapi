@@ -133,6 +133,21 @@ describe('tool run partitioning', () => {
 })
 
 describe('tool expansion', () => {
+    it('opens structured Read output when file content is meaningful', () => {
+        expect(getToolExpansionKind(block('Read', {
+            result: { file: { content: 'const ready = true\n', filePath: '/workspace/ready.ts' } }
+        }))).toBe('result')
+    })
+
+    it.each([
+        { file: { content: '', filePath: '/workspace/empty.ts' } },
+        { file: { content: '   \n', filePath: '/workspace/blank.ts' } },
+        { file: { filePath: '/workspace/missing.ts' } },
+        { file: null }
+    ])('keeps empty structured Read output collapsed for %#', (result) => {
+        expect(getToolExpansionKind(block('Read', { result }))).toBeNull()
+    })
+
     it('opens patch results only when their text is meaningful', () => {
         expect(getToolExpansionKind(block('CodexPatch', { result: null }))).toBeNull()
         expect(getToolExpansionKind(block('CodexPatch', { result: 'patched' }))).toBe('result')

@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { AssistantRuntimeProvider, ThreadPrimitive } from '@assistant-ui/react'
 import type { ApiClient } from '@/api/client'
 import type { ChatBlock, ToolCallBlock } from '@/chat/types'
@@ -168,6 +168,35 @@ function markerOffsets(container: HTMLElement): number[] {
 afterEach(cleanup)
 
 describe('Happy assistant actual-runtime tool grouping', () => {
+    it('renders a provider HapiCliOutput collision exactly once in stream order', () => {
+        const collision = toolBlock('HapiCliOutput', { query: 'collision-args-marker' }, {
+            result: 'collision-result-marker',
+            state: 'error'
+        })
+        const { container } = render(<RuntimeHarness blocks={[
+            { kind: 'agent-text', id: 'before-collision', localId: null, createdAt: 1, text: 'before-collision-marker' },
+            collision,
+            { kind: 'agent-text', id: 'after-collision', localId: null, createdAt: 3, text: 'after-collision-marker' }
+        ]} />)
+        const text = container.textContent ?? ''
+        const markers = ['before-collision-marker', 'HapiCliOutput', 'after-collision-marker']
+
+        for (const marker of markers) {
+            expect(text.split(marker)).toHaveLength(2)
+        }
+        expect(markers.map((marker) => text.indexOf(marker))).toEqual(
+            [...markers.map((marker) => text.indexOf(marker))].sort((a, b) => a - b)
+        )
+        expect(container.querySelectorAll('[data-cli-output-part]')).toHaveLength(0)
+        const collisionNode = container.querySelector('[data-tool-block-id="block-HapiCliOutput"]')
+        expect(collisionNode).not.toBeNull()
+        expect(collisionNode?.querySelector('.text-red-600')).not.toBeNull()
+
+        fireEvent.click(screen.getByRole('button', { name: /HapiCliOutput/i }))
+        expect(screen.getByRole('dialog')).toHaveTextContent('collision-args-marker')
+        expect(screen.getByRole('dialog')).toHaveTextContent('collision-result-marker')
+    })
+
     it('preserves every mixed stream marker and creates only eligible groups', () => {
         const { container } = render(<RuntimeHarness blocks={mixedBlocks} />)
         const markers = [
