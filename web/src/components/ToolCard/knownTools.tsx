@@ -15,6 +15,18 @@ export type ToolPresentation = {
     title: string
     subtitle: string | null
     minimal: boolean
+    tone: ToolSurfaceTone
+}
+
+export type ToolSurfaceTone = 'neutral' | 'plan' | 'diff'
+
+const PLAN_TOOLS = new Set(['update_plan', 'TodoWrite', 'ExitPlanMode', 'exit_plan_mode'])
+const DIFF_TOOLS = new Set(['CodexDiff', 'CodexPatch', 'Edit', 'MultiEdit', 'Write', 'NotebookEdit'])
+
+function getToolSurfaceTone(toolName: string): ToolSurfaceTone {
+    if (PLAN_TOOLS.has(toolName)) return 'plan'
+    if (DIFF_TOOLS.has(toolName)) return 'diff'
+    return 'neutral'
 }
 
 function countLines(text: string): number {
@@ -452,7 +464,8 @@ export function getToolPresentation(opts: Omit<ToolOpts, 'metadata'> & { metadat
             icon: <PuzzleIcon className={DEFAULT_ICON_CLASS} />,
             title: formatMCPTitle(opts.toolName),
             subtitle: null,
-            minimal: true
+            minimal: true,
+            tone: getToolSurfaceTone(opts.toolName)
         }
     }
 
@@ -463,7 +476,8 @@ export function getToolPresentation(opts: Omit<ToolOpts, 'metadata'> & { metadat
             icon: known.icon(opts),
             title: known.title(opts),
             subtitle: known.subtitle ? known.subtitle(opts) : null,
-            minimal
+            minimal,
+            tone: getToolSurfaceTone(opts.toolName)
         }
     }
 
@@ -479,6 +493,7 @@ export function getToolPresentation(opts: Omit<ToolOpts, 'metadata'> & { metadat
         icon: <WrenchIcon className={DEFAULT_ICON_CLASS} />,
         title: opts.toolName,
         subtitle: subtitle ? truncate(subtitle, 80) : null,
-        minimal: true
+        minimal: true,
+        tone: getToolSurfaceTone(opts.toolName)
     }
 }

@@ -22,8 +22,23 @@ import { getInputString, getInputStringAny, truncate } from '@/lib/toolInputUtil
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/lib/use-translation'
 import { TraceSection } from '@/components/ToolCard/trace'
+import { LockIcon } from '@/components/ToolCard/icons'
 
 const ELAPSED_INTERVAL_MS = 1000
+
+const SURFACE_CLASS = {
+    neutral: 'border-transparent bg-transparent shadow-none',
+    plan: 'border-[var(--app-tool-plan-border)] bg-[var(--app-secondary-bg)]',
+    diff: 'border-[var(--app-tool-diff-border)] bg-[var(--app-secondary-bg)]',
+    permission: 'border-[var(--app-tool-attention-border)] bg-[var(--app-tool-attention-bg)]'
+} as const
+
+const ICON_CLASS = {
+    neutral: 'h-3.5 w-3.5 text-[var(--app-hint)]',
+    plan: 'h-7 w-7 rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-tool-plan-accent)]',
+    diff: 'h-7 w-7 rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-tool-diff-accent)]',
+    permission: 'h-7 w-7 rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-tool-attention-accent)]'
+} as const
 
 function ElapsedView(props: { from: number; active: boolean }) {
     const [now, setNow] = useState(() => Date.now())
@@ -287,6 +302,13 @@ function ToolCardInner(props: ToolCardProps) {
     const isAskUserQuestion = isAskUserQuestionToolName(toolName)
     const isRequestUserInput = isRequestUserInputToolName(toolName)
     const isQuestionTool = isAskUserQuestion || isRequestUserInput
+    const hasPendingApproval = permission?.status === 'pending' && !isQuestionTool
+    const surfaceTone = hasPendingApproval ? 'permission' : presentation.tone
+    const actionLabel = surfaceTone === 'plan'
+        ? t('tool.openPlan')
+        : surfaceTone === 'diff'
+            ? t('tool.reviewDiff')
+            : t('tool.details')
     const showsPermissionFooter = Boolean(permission && (
         permission.status === 'pending'
         || ((permission.status === 'denied' || permission.status === 'canceled') && Boolean(permission.reason))
@@ -299,12 +321,26 @@ function ToolCardInner(props: ToolCardProps) {
         <div className="flex flex-col gap-1">
             <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0 flex items-center gap-2">
-                    <div className="shrink-0 flex h-3.5 w-3.5 items-center justify-center text-[var(--app-hint)] leading-none">
-                        {presentation.icon}
+                    <div className={cn(
+                        'shrink-0 flex items-center justify-center leading-none',
+                        ICON_CLASS[surfaceTone]
+                    )}>
+                        {hasPendingApproval ? (
+                            <span aria-hidden="true">
+                                <LockIcon className="h-3.5 w-3.5" />
+                            </span>
+                        ) : presentation.icon}
                     </div>
-                    <CardTitle className="min-w-0 text-sm font-medium leading-tight break-words">
-                        {toolTitle}
-                    </CardTitle>
+                    <div className="min-w-0">
+                        {hasPendingApproval ? (
+                            <div className="text-xs font-semibold text-[var(--app-tool-attention-accent)]">
+                                {t('tool.permissionRequired')}
+                            </div>
+                        ) : null}
+                        <CardTitle className="min-w-0 text-sm font-medium leading-tight break-words">
+                            {toolTitle}
+                        </CardTitle>
+                    </div>
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
@@ -312,7 +348,15 @@ function ToolCardInner(props: ToolCardProps) {
                     <span className={stateColor}>
                         <StatusIcon state={props.block.tool.state} />
                     </span>
-                    <span className="text-[var(--app-hint)]">
+                    <span className={cn(
+                        'text-xs font-medium',
+                        surfaceTone === 'plan' && 'text-[var(--app-tool-plan-accent)]',
+                        surfaceTone === 'diff' && 'text-[var(--app-tool-diff-accent)]',
+                        (surfaceTone === 'neutral' || surfaceTone === 'permission') && 'sr-only'
+                    )}>
+                        {actionLabel}
+                    </span>
+                    <span aria-hidden="true" className="text-[var(--app-hint)]">
                         <DetailsIcon />
                     </span>
                 </div>
@@ -327,14 +371,17 @@ function ToolCardInner(props: ToolCardProps) {
     )
 
     return (
-        <Card className="overflow-hidden shadow-sm">
+        <Card
+            data-tool-surface={surfaceTone}
+            className={cn('overflow-hidden border', SURFACE_CLASS[surfaceTone])}
+        >
             <CardHeader className="p-3 space-y-0">
                 <Dialog>
                     <DialogTrigger asChild>
                         <button
                             type="button"
                             className={cn(
-                                'w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]',
+                                'w-full rounded-md px-1.5 py-1 text-left transition-colors hover:bg-[var(--app-subtle-bg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]',
                                 suppressFocusRing && 'focus-visible:ring-0'
                             )}
                             onPointerDown={onTriggerPointerDown}
