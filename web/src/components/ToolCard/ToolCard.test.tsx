@@ -456,9 +456,15 @@ describe('ToolCard presentation hierarchy', () => {
             'tool.detail.unknownSkill',
             'tool.detail.agentType',
             'tool.detail.background',
+            'tool.group.actionsCompleted',
+            'tool.group.actionsRunning',
+            'tool.group.toggle',
+            'tool.group.duration',
             'tool.group.showOutput',
             'tool.group.hideOutput',
-            'tool.group.outputRegion'
+            'tool.group.outputRegion',
+            'reasoning.toggle',
+            'reasoning.streaming'
         ]
 
         for (const dictionary of dictionaries) {

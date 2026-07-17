@@ -1,7 +1,8 @@
-import { useState, useEffect, type FC, type PropsWithChildren } from 'react'
+import { useEffect, useId, useState, type FC, type PropsWithChildren } from 'react'
 import { useMessage } from '@assistant-ui/react'
 import { MarkdownTextPrimitive } from '@assistant-ui/react-markdown'
 import { cn } from '@/lib/utils'
+import { useTranslation } from '@/lib/use-translation'
 import { defaultComponents, MARKDOWN_PLUGINS, MARKDOWN_REHYPE_PLUGINS } from '@/components/assistant-ui/markdown-text'
 
 function ChevronIcon(props: { className?: string; open?: boolean }) {
@@ -16,6 +17,8 @@ function ChevronIcon(props: { className?: string; open?: boolean }) {
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
+            aria-hidden="true"
+            focusable="false"
             className={cn(
                 'transition-transform duration-200 motion-reduce:transition-none',
                 props.open ? 'rotate-90' : '',
@@ -29,7 +32,10 @@ function ChevronIcon(props: { className?: string; open?: boolean }) {
 
 function ShimmerDot() {
     return (
-        <span className="inline-block w-1.5 h-1.5 bg-current rounded-full animate-pulse" />
+        <span
+            aria-hidden="true"
+            className="inline-block h-1.5 w-1.5 rounded-full bg-current animate-pulse motion-reduce:animate-none"
+        />
     )
 }
 
@@ -52,7 +58,9 @@ export const Reasoning: FC = () => {
  * Shows shimmer effect while reasoning is streaming.
  */
 export const ReasoningGroup: FC<PropsWithChildren> = ({ children }) => {
+    const { t } = useTranslation()
     const [isOpen, setIsOpen] = useState(false)
+    const contentId = useId()
 
     // Check if reasoning is still streaming
     const message = useMessage()
@@ -68,37 +76,30 @@ export const ReasoningGroup: FC<PropsWithChildren> = ({ children }) => {
     }, [isStreaming])
 
     return (
-        <div className="aui-reasoning-group my-2">
+        <div className="aui-reasoning-group my-1">
             <button
                 type="button"
                 aria-expanded={isOpen}
-                onClick={() => setIsOpen(!isOpen)}
-                className={cn(
-                    'flex min-h-10 w-full items-center gap-2 rounded-md border border-[var(--app-border)]',
-                    'bg-[var(--app-bg)] px-2.5 py-2 text-left text-xs font-medium',
-                    'text-[var(--app-hint)] hover:bg-[var(--app-subtle-bg)] hover:text-[var(--app-fg)]',
-                    'cursor-pointer select-none transition-colors motion-reduce:transition-none',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]'
-                )}
+                aria-controls={contentId}
+                aria-label={isStreaming ? t('reasoning.streaming') : t('reasoning.toggle')}
+                onClick={() => setIsOpen((value) => !value)}
+                className="inline-flex min-h-8 cursor-pointer select-none items-center gap-1.5 rounded-md px-1 text-xs font-medium text-[var(--app-hint)] transition-colors hover:bg-[var(--app-subtle-bg)] hover:text-[var(--app-fg)] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]"
             >
                 <ChevronIcon open={isOpen} />
-                <span>Reasoning</span>
-                {isStreaming && (
-                    <span className="flex items-center gap-1 ml-1 text-[var(--app-hint)]">
-                        <ShimmerDot />
-                    </span>
-                )}
+                <span>{t('tool.title.reasoning')}</span>
+                {isStreaming ? <ShimmerDot /> : null}
             </button>
 
             <div
+                id={contentId}
+                hidden={!isOpen}
+                data-reasoning-body
                 className={cn(
-                    'overflow-hidden transition-all duration-200 ease-in-out motion-reduce:transition-none',
+                    'overflow-hidden transition-all duration-200 motion-reduce:transition-none',
                     isOpen ? 'max-h-[5000px] opacity-100' : 'max-h-0 opacity-0'
                 )}
             >
-                <div className="pl-4 pt-2 border-l-2 border-[var(--app-border)] ml-0.5">
-                    {children}
-                </div>
+                <div className="pl-4 pt-1">{children}</div>
             </div>
         </div>
     )
