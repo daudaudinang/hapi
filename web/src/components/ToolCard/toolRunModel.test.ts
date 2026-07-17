@@ -139,6 +139,12 @@ describe('tool expansion', () => {
         }))).toBe('result')
     })
 
+    it('does not bypass an authoritative blank Read file with fallback text', () => {
+        expect(getToolExpansionKind(block('Read', {
+            result: { file: { content: ' ' }, text: 'fallback text' }
+        }))).toBeNull()
+    })
+
     it.each([
         { file: { content: '', filePath: '/workspace/empty.ts' } },
         { file: { content: '   \n', filePath: '/workspace/blank.ts' } },
@@ -212,6 +218,12 @@ describe('tool expansion', () => {
         }))).toBe('result')
         expect(getToolExpansionKind(block('Bash', { result: 'Done' }))).toBe('result')
         expect(getToolExpansionKind(block('Bash', { result: '(no output)' }))).toBe('result')
+    })
+
+    it('does not bypass authoritative blank Bash stdio with a fallback message', () => {
+        expect(getToolExpansionKind(block('Bash', {
+            result: { stdout: '', stderr: '', message: 'Done' }
+        }))).toBeNull()
     })
 })
 

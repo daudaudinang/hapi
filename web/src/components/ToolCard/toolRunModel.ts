@@ -130,9 +130,10 @@ function hasRenderableUnifiedDiff(value: unknown): boolean {
     }
 }
 
-function hasMeaningfulStructuredReadResult(result: unknown): boolean {
-    if (!isObject(result) || !isObject(result.file)) return false
-    return typeof result.file.content === 'string' && result.file.content.trim().length > 0
+function getStructuredReadExpansionKind(result: unknown): 'result' | null | undefined {
+    if (!isObject(result) || !isObject(result.file)) return undefined
+    if (typeof result.file.content !== 'string') return undefined
+    return hasNonWhitespaceText(result.file.content) ? 'result' : null
 }
 
 export function getToolExpansionKind(block: ToolCallBlock): 'input' | 'result' | null {
@@ -148,8 +149,10 @@ export function getToolExpansionKind(block: ToolCallBlock): 'input' | 'result' |
 
     if (block.tool.name === 'Bash') {
         const stdio = extractStdoutStderr(block.tool.result)
-        if (stdio && (hasNonWhitespaceText(stdio.stdout) || hasNonWhitespaceText(stdio.stderr))) {
-            return 'result'
+        if (stdio) {
+            return hasNonWhitespaceText(stdio.stdout) || hasNonWhitespaceText(stdio.stderr)
+                ? 'result'
+                : null
         }
         return hasNonWhitespaceText(extractTextFromResult(block.tool.result)) ? 'result' : null
     }
@@ -162,8 +165,9 @@ export function getToolExpansionKind(block: ToolCallBlock): 'input' | 'result' |
         return hasNonWhitespaceText(extractTextFromResult(block.tool.result)) ? 'result' : null
     }
 
-    if (block.tool.name === 'Read' && hasMeaningfulStructuredReadResult(block.tool.result)) {
-        return 'result'
+    if (block.tool.name === 'Read') {
+        const structuredRead = getStructuredReadExpansionKind(block.tool.result)
+        if (structuredRead !== undefined) return structuredRead
     }
 
     const text = extractTextFromResult(block.tool.result)

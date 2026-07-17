@@ -364,6 +364,17 @@ describe('ToolCard presentation hierarchy', () => {
     })
 
     it.each([
+        ['Bash', { stdout: '', stderr: '', message: 'Done' }],
+        ['Read', { file: { content: ' ' }, text: 'fallback text' }]
+    ])('keeps authoritative blank %s output compact despite fallback fields', (toolName, result) => {
+        renderTool(makeToolBlock(toolName, {}, undefined, { result }), {
+            displayMode: 'group-row'
+        })
+
+        expect(screen.queryByRole('button', { name: /show output/i })).not.toBeInTheDocument()
+    })
+
+    it.each([
         {
             label: 'result view',
             block: makeToolBlock('Bash', { command: 'printf ready' }, undefined, {
