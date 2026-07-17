@@ -2,8 +2,8 @@ import type { ReactNode } from 'react'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ToolCallMessagePartProps } from '@assistant-ui/react'
-import type { ChatBlock, ToolCallBlock } from '@/chat/types'
-import type { ToolRunPart } from '@/components/ToolCard/toolRunModel'
+import type { AgentReasoningBlock, ChatBlock, ToolCallBlock } from '@/chat/types'
+import type { ActivityPart } from '@/components/ToolCard/toolRunModel'
 import { ToolRunGroup } from '@/components/ToolCard/ToolRunGroup'
 import {
     ToolRunLayoutProvider,
@@ -11,16 +11,27 @@ import {
 } from '@/components/ToolCard/toolRunContext'
 import { HappyToolMessage } from '@/components/AssistantChat/messages/ToolMessage'
 
-const assistantState = vi.hoisted(() => ({ parts: [] as ToolRunPart[] }))
+const assistantState = vi.hoisted(() => ({
+    parts: [] as ActivityPart[],
+    status: { type: 'complete' }
+}))
 
 vi.mock('@assistant-ui/react', async (importOriginal) => {
     const actual = await importOriginal<typeof import('@assistant-ui/react')>()
     return {
         ...actual,
         useAssistantState: (selector: (state: {
-            message: { content: ToolRunPart[]; parts: ToolRunPart[] }
+            message: {
+                content: ActivityPart[]
+                parts: ActivityPart[]
+                status: { type: string }
+            }
         }) => unknown) => selector({
-            message: { content: assistantState.parts, parts: assistantState.parts }
+            message: {
+                content: assistantState.parts,
+                parts: assistantState.parts,
+                status: assistantState.status
+            }
         })
     }
 })
@@ -76,12 +87,30 @@ function block(name: string, options: BlockOptions = {}): ToolCallBlock {
     }
 }
 
-function part(artifact: unknown): ToolRunPart {
-    return { type: 'tool-call', artifact }
+function reasoning(id: string): AgentReasoningBlock {
+    return {
+        kind: 'agent-reasoning',
+        id,
+        localId: null,
+        createdAt: 1000,
+        text: `${id} body`
+    }
 }
 
-function setMessageParts(parts: ToolRunPart[]) {
+function part(artifact: unknown): ActivityPart {
+    return {
+        type: 'tool-call',
+        toolCallId: artifact && typeof artifact === 'object' && 'kind' in artifact
+            && artifact.kind === 'agent-reasoning' && 'id' in artifact
+            ? `reasoning:${String(artifact.id)}`
+            : undefined,
+        artifact
+    }
+}
+
+function setMessageParts(parts: ActivityPart[], status: 'running' | 'complete' = 'complete') {
     assistantState.parts = parts
+    assistantState.status = { type: status }
 }
 
 function toolMessageProps(artifact: ToolCallBlock): ToolCallMessagePartProps {
@@ -101,8 +130,9 @@ function toolMessageProps(artifact: ToolCallBlock): ToolCallMessagePartProps {
 }
 
 function LayoutProbe(props: { name: string; children: ReactNode }) {
+    const layout = useToolRunLayout()
     return (
-        <span data-testid={props.name} data-grouped={useToolRunLayout()}>
+        <span data-testid={props.name} data-grouped={layout.grouped} data-now={layout.now}>
             {props.children}
         </span>
     )
@@ -111,52 +141,87 @@ function LayoutProbe(props: { name: string; children: ReactNode }) {
 afterEach(cleanup)
 
 describe('ToolRunGroup', () => {
-    it('wraps two allowlisted children and preserves a boundary child exactly once', () => {
-        setMessageParts([part(block('Read')), part(block('Bash')), part(block('Agent'))])
+    it('groups five reasoning and tool activities in original order with the approved header', () => {
+        const first = block('CodexReasoning')
+        const terminal = block('Bash')
+        const diff = block('CodexDiff')
+        const thought = reasoning('reason-middle')
+        const patch = block('CodexPatch', { completedAt: 5000 })
+        setMessageParts([
+            part(first),
+            part(terminal),
+            part(diff),
+            part(thought),
+            part(patch)
+        ])
 
-        render(
-            <ToolRunGroup startIndex={0} endIndex={2}>
-                <LayoutProbe name="read">read-child</LayoutProbe>
-                <LayoutProbe name="bash">bash-child</LayoutProbe>
-                <LayoutProbe name="agent">agent-child</LayoutProbe>
+        const { container } = render(
+            <ToolRunGroup startIndex={0} endIndex={4}>
+                <span>reasoning-title</span>
+                <span>terminal-child</span>
+                <span>diff-child</span>
+                <span>reasoning-generic</span>
+                <span>patch-child</span>
             </ToolRunGroup>
         )
 
-        expect(screen.getAllByText('read-child')).toHaveLength(1)
-        expect(screen.getAllByText('bash-child')).toHaveLength(1)
-        expect(screen.getAllByText('agent-child')).toHaveLength(1)
-        expect(screen.getAllByTestId('tool-run-group')).toHaveLength(1)
-        expect(screen.getByTestId('read')).toHaveAttribute('data-grouped', 'true')
-        expect(screen.getByTestId('bash')).toHaveAttribute('data-grouped', 'true')
-        expect(screen.getByTestId('agent')).toHaveAttribute('data-grouped', 'false')
+        const group = screen.getByTestId('tool-run-group')
+        const trigger = screen.getByRole('button')
+        expect(group).toHaveClass('w-full', 'max-w-[600px]')
+        expect(trigger).toHaveAttribute('aria-expanded', 'false')
+        expect(trigger).toHaveAccessibleName(/tool\.group\.toggleActivities/)
+        expect(trigger).toHaveTextContent('tool.group.activitiesCompleted:{"count":5}')
+        expect(trigger).toHaveTextContent('4.0s')
+        expect(trigger).not.toHaveTextContent('Terminal')
+        expect(trigger).not.toHaveTextContent('Diff')
+        expect(trigger.querySelector('.rounded-full')).toBeNull()
+        expect(trigger.querySelector('.h-2.w-2')).toBeNull()
+        expect(trigger.querySelector('time')).toBeNull()
+
+        const orderedText = container.textContent ?? ''
+        const labels = [
+            'reasoning-title',
+            'terminal-child',
+            'diff-child',
+            'reasoning-generic',
+            'patch-child'
+        ]
+        for (const label of labels) {
+            expect(screen.getAllByText(label)).toHaveLength(1)
+        }
+        expect(labels.map((label) => orderedText.indexOf(label))).toEqual(
+            [...labels].map((label) => orderedText.indexOf(label)).sort((a, b) => a - b)
+        )
     })
 
-    it('maps a non-zero inclusive range to children without duplication', () => {
+    it('renders an internal boundary exactly once between two valid activity groups', () => {
+        const before = reasoning('reason-before')
         setMessageParts([
             { type: 'text' },
-            part(block('Read')),
-            part({ kind: 'cli-output' }),
-            part(block('Grep')),
-            part(block('Glob')),
+            part(before),
+            part(block('Bash')),
+            part(block('Agent')),
+            part(block('CodexDiff')),
+            part(block('CodexPatch')),
             { type: 'text' }
         ])
 
-        render(
-            <ToolRunGroup startIndex={1} endIndex={4}>
-                <span>read</span>
-                <span>cli</span>
-                <span>grep</span>
-                <span>glob</span>
+        const { container } = render(
+            <ToolRunGroup startIndex={1} endIndex={5}>
+                <span>reason-before</span>
+                <span>terminal-before</span>
+                <span>boundary</span>
+                <span>diff-after</span>
+                <span>patch-after</span>
             </ToolRunGroup>
         )
 
-        for (const text of ['read', 'cli', 'grep', 'glob']) {
+        for (const text of ['reason-before', 'terminal-before', 'boundary', 'diff-after', 'patch-after']) {
             expect(screen.getAllByText(text)).toHaveLength(1)
         }
-        expect(screen.getAllByTestId('tool-run-group')).toHaveLength(1)
-        expect(screen.getByTestId('tool-run-group')).toHaveAttribute(
-            'data-tool-run-id',
-            'tool-run:block-Grep'
+        expect(screen.getAllByTestId('tool-run-group')).toHaveLength(2)
+        expect(container.textContent).toMatch(
+            /reason-before.*terminal-before.*boundary.*diff-after.*patch-after/
         )
     })
 
@@ -211,6 +276,33 @@ describe('ToolRunGroup', () => {
         expect(screen.getByRole('button')).toHaveAttribute('aria-expanded', 'true')
     })
 
+    it('opens when the final generic reasoning is the running message part and stays open on completion', () => {
+        const finalReasoning = reasoning('reason-final')
+        setMessageParts([
+            part(block('Bash')),
+            part(finalReasoning)
+        ], 'running')
+        const view = render(
+            <ToolRunGroup startIndex={0} endIndex={1}>
+                <span>terminal</span>
+                <span>reasoning</span>
+            </ToolRunGroup>
+        )
+        const trigger = screen.getByRole('button')
+        expect(trigger).toHaveAttribute('aria-expanded', 'true')
+        expect(trigger).toHaveTextContent('tool.group.activitiesRunning:{"count":2}')
+
+        setMessageParts([part(block('Bash')), part(finalReasoning)], 'complete')
+        view.rerender(
+            <ToolRunGroup startIndex={0} endIndex={1}>
+                <span>terminal</span>
+                <span>reasoning</span>
+            </ToolRunGroup>
+        )
+        expect(trigger).toHaveAttribute('aria-expanded', 'true')
+        expect(trigger).toHaveTextContent('tool.group.activitiesCompleted:{"count":2}')
+    })
+
     it('renders a singleton without a group wrapper', () => {
         setMessageParts([part(block('Read'))])
         const { container } = render(
@@ -253,7 +345,7 @@ describe('HappyToolMessage group layout', () => {
         standalone.unmount()
 
         render(
-            <ToolRunLayoutProvider>
+            <ToolRunLayoutProvider now={1000}>
                 <HappyToolMessage {...props} />
             </ToolRunLayoutProvider>
         )
@@ -262,5 +354,18 @@ describe('HappyToolMessage group layout', () => {
         cleanup()
         render(<HappyToolMessage {...toolMessageProps(block('Agent'))} />)
         expect(screen.getByTestId('tool-card')).toHaveAttribute('data-display-mode', 'card')
+    })
+
+    it('shows an exact grouped Codex reasoning duration from the shared clock', () => {
+        const artifact = block('CodexReasoning', { completedAt: 5600 })
+        render(
+            <ToolRunLayoutProvider now={5600}>
+                <HappyToolMessage {...toolMessageProps(artifact)} />
+            </ToolRunLayoutProvider>
+        )
+
+        expect(screen.getByText('4.6s')).toHaveAccessibleName(
+            'tool.group.activityDuration:{"duration":"4.6s"}'
+        )
     })
 })

@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/lib/i18n-context'
-import { ReasoningGroup } from './reasoning'
+import { ReasoningDisclosure, ReasoningGroup } from './reasoning'
 
 const { useMessageMock } = vi.hoisted(() => ({
     useMessageMock: vi.fn()
@@ -112,5 +112,39 @@ describe('ReasoningGroup', () => {
         const { container } = renderReasoning()
 
         expect(container.querySelector('.animate-pulse')).toHaveClass('motion-reduce:animate-none')
+    })
+})
+
+describe('ReasoningDisclosure group row', () => {
+    afterEach(() => {
+        cleanup()
+        localStorage.removeItem('hapi-lang')
+    })
+
+    it('renders full-width borderless metadata in duration then status order without nested buttons', () => {
+        const groupRowProps = {
+            label: 'Inspect current structure',
+            ariaLabel: 'Toggle reasoning',
+            isStreaming: false,
+            presentation: 'group-row' as const,
+            duration: '4.6s',
+            durationAriaLabel: 'Activity duration: 4.6s',
+            statusLabel: 'Completed'
+        }
+        const { container } = render(
+            <ReasoningDisclosure {...groupRowProps}>
+                <span>Body</span>
+            </ReasoningDisclosure>
+        )
+
+        const trigger = screen.getByRole('button', { name: 'Toggle reasoning' })
+        const duration = screen.getByText('4.6s')
+        const status = screen.getByRole('status', { name: 'Completed' })
+        expect(trigger).toHaveClass('w-full')
+        expect(container.querySelector('[data-reasoning-layout="group-row"]')).not.toHaveClass('border')
+        expect(duration).toHaveAccessibleName('Activity duration: 4.6s')
+        expect(duration.compareDocumentPosition(status) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        expect(screen.getByText('Completed')).toHaveClass('sr-only')
+        expect(container.querySelector('button button')).toBeNull()
     })
 })

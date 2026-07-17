@@ -4,6 +4,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { AgentReasoningBlock, ToolCallBlock } from '@/chat/types'
 import type { ApiClient } from '@/api/client'
 import { HappyChatProvider } from '@/components/AssistantChat/context'
+import { ToolRunLayoutProvider } from '@/components/ToolCard/toolRunContext'
 import { I18nProvider } from '@/lib/i18n-context'
 import { REASONING_TOOL_NAME, reasoningToolCallId } from '@/lib/reasoningPart'
 import { ReasoningMessagePart } from './ReasoningMessagePart'
@@ -104,6 +105,23 @@ describe('ReasoningMessagePart', () => {
         fireEvent.click(toggle)
         expect(toggle).toHaveAttribute('aria-expanded', 'true')
         expect(screen.getByText('full reasoning text')).toBeVisible()
+    })
+
+    it('renders generic grouped reasoning as a full-width status row without a duration placeholder', () => {
+        const artifact = reasoning()
+        const { container } = render(harness(
+            <ToolRunLayoutProvider now={5600}>
+                <ReasoningMessagePart {...props(artifact, reasoningToolCallId(artifact.id))} />
+            </ToolRunLayoutProvider>
+        ))
+
+        const toggle = screen.getByRole('button', { name: 'Toggle reasoning' })
+        expect(toggle).toHaveClass('w-full')
+        expect(container.querySelector('[data-reasoning-layout="group-row"]')).not.toHaveClass('border')
+        expect(screen.getByRole('status', { name: 'Completed' })).toBeInTheDocument()
+        expect(screen.getByText('Completed')).toHaveClass('sr-only')
+        expect(screen.queryByLabelText(/activity duration/i)).not.toBeInTheDocument()
+        expect(container.querySelector('button button')).toBeNull()
     })
 
     it('falls back exactly once for a provider tool named HapiReasoning', () => {

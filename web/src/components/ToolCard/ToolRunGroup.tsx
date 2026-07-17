@@ -7,12 +7,12 @@ import {
     type PropsWithChildren
 } from 'react'
 import { useAssistantState } from '@assistant-ui/react'
-import type { ToolCallBlock } from '@/chat/types'
-import { useHappyChatContext } from '@/components/AssistantChat/context'
-import { getToolPresentation } from '@/components/ToolCard/knownTools'
+import type { ActivityEntry } from '@/components/ToolCard/toolRunModel'
 import {
-    getToolRunDurationMs,
-    partitionToolRunParts
+    formatActivityDuration,
+    getActivityGroupDurationMs,
+    isActivityRunning,
+    partitionActivityParts
 } from '@/components/ToolCard/toolRunModel'
 import { ToolRunLayoutProvider } from '@/components/ToolCard/toolRunContext'
 import { cn } from '@/lib/utils'
@@ -44,42 +44,27 @@ function useRunClock(active: boolean): number {
     return now
 }
 
-function RoutineToolRun(props: PropsWithChildren<{
+function ActivityRun(props: PropsWithChildren<{
     id: string
-    blocks: ToolCallBlock[]
+    entries: ActivityEntry[]
 }>) {
     const { t } = useTranslation()
-    const { metadata } = useHappyChatContext()
-    const running = props.blocks.some((block) =>
-        block.tool.state === 'running' || block.tool.state === 'pending'
-    )
+    const running = props.entries.some(isActivityRunning)
     const [open, setOpen] = useState(() => running)
     const regionId = useId()
     const now = useRunClock(running)
-    const durationMs = getToolRunDurationMs(props.blocks, now)
-    const duration = durationMs === null
-        ? null
-        : durationMs < 1000
-            ? '<1s'
-            : `${Math.round(durationMs / 1000)}s`
-    const titles = props.blocks.map((block) => getToolPresentation({
-        toolName: block.tool.name,
-        input: block.tool.input,
-        result: block.tool.result,
-        childrenCount: block.children.length,
-        description: block.tool.description,
-        metadata,
-        t
-    }).title)
+    const durationMs = getActivityGroupDurationMs(props.entries)
+    const duration = durationMs === null ? null : formatActivityDuration(durationMs)
     const statusLabel = t(
-        running ? 'tool.group.actionsRunning' : 'tool.group.actionsCompleted',
-        { count: props.blocks.length }
+        running ? 'tool.group.activitiesRunning' : 'tool.group.activitiesCompleted',
+        { count: props.entries.length }
     )
 
     return (
         <div
             data-testid="tool-run-group"
             data-tool-run-group
+            data-activity-group
             data-tool-run-id={props.id}
             className="my-2 w-full max-w-[600px] min-w-0 overflow-hidden rounded-lg border border-[var(--app-border)] bg-[var(--app-secondary-bg)]"
         >
@@ -87,37 +72,27 @@ function RoutineToolRun(props: PropsWithChildren<{
                 type="button"
                 aria-expanded={open}
                 aria-controls={regionId}
-                aria-label={t('tool.group.toggle', { status: statusLabel })}
+                aria-label={t('tool.group.toggleActivities', { status: statusLabel })}
                 onClick={() => setOpen((value) => !value)}
                 className="flex min-h-11 w-full min-w-0 items-center gap-2 px-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]"
             >
                 <ChevronIcon open={open} />
-                <span className="shrink-0 text-xs font-semibold">{statusLabel}</span>
+                <span className="min-w-0 flex-1 text-xs font-semibold">{statusLabel}</span>
                 {duration ? (
                     <span
-                        aria-label={t('tool.group.duration', { duration })}
-                        className="shrink-0 rounded-full bg-[var(--app-subtle-bg)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--app-hint)]"
+                        aria-label={t('tool.group.totalDuration', { duration })}
+                        className="shrink-0 font-mono text-[11px] font-semibold text-[var(--app-hint)]"
                     >
                         {duration}
                     </span>
                 ) : null}
-                <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-[var(--app-hint)]">
-                    {titles.join(' · ')}
-                </span>
-                <span
-                    aria-hidden="true"
-                    className={cn(
-                        'h-2 w-2 shrink-0 rounded-full',
-                        running ? 'bg-amber-500' : 'bg-emerald-500'
-                    )}
-                />
             </button>
             <div
                 id={regionId}
                 hidden={!open}
                 className="min-w-0 border-t border-[var(--app-border)] p-2"
             >
-                <ToolRunLayoutProvider>{props.children}</ToolRunLayoutProvider>
+                <ToolRunLayoutProvider now={now}>{props.children}</ToolRunLayoutProvider>
             </div>
         </div>
     )
@@ -132,13 +107,18 @@ export function ToolRunGroup({
     endIndex: number
 }>) {
     const content = useAssistantState(({ message }) => message.content)
+    const status = useAssistantState(({ message }) => message.status)
     const parts = content
         .slice(startIndex, endIndex + 1)
-        .map((part) => ({
-            artifact: part.type === 'tool-call' ? part.artifact : undefined
+        .map((part, offset) => ({
+            type: part.type,
+            toolCallId: part.type === 'tool-call' ? part.toolCallId : undefined,
+            artifact: part.type === 'tool-call' ? part.artifact : undefined,
+            isFinalRunningPart: status?.type === 'running'
+                && startIndex + offset === content.length - 1
         }))
     const childArray = Children.toArray(children)
-    const segments = partitionToolRunParts(parts)
+    const segments = partitionActivityParts(parts)
 
     return segments.map((segment) => {
         if (segment.kind === 'single') {
@@ -150,9 +130,9 @@ export function ToolRunGroup({
         }
 
         return (
-            <RoutineToolRun key={segment.id} id={segment.id} blocks={segment.blocks}>
+            <ActivityRun key={segment.id} id={segment.id} entries={segment.entries}>
                 {childArray.slice(segment.startOffset, segment.endOffset + 1)}
-            </RoutineToolRun>
+            </ActivityRun>
         )
     })
 }

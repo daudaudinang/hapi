@@ -57,12 +57,17 @@ type ReasoningDisclosureProps = {
     label: string
     ariaLabel: string
     isStreaming: boolean
+    presentation?: 'standalone' | 'group-row'
+    duration?: string
+    durationAriaLabel?: string
+    statusLabel?: string
     children: ReactNode
 }
 
 export function ReasoningDisclosure(props: ReasoningDisclosureProps) {
     const [isOpen, setIsOpen] = useState(false)
     const contentId = useId()
+    const groupRow = props.presentation === 'group-row'
 
     useEffect(() => {
         if (props.isStreaming) {
@@ -71,18 +76,44 @@ export function ReasoningDisclosure(props: ReasoningDisclosureProps) {
     }, [props.isStreaming])
 
     return (
-        <div className="aui-reasoning-group my-1">
+        <div
+            data-reasoning-layout={groupRow ? 'group-row' : 'standalone'}
+            className={cn('aui-reasoning-group my-1', groupRow && 'w-full')}
+        >
             <button
                 type="button"
                 aria-expanded={isOpen}
                 aria-controls={contentId}
                 aria-label={props.ariaLabel}
                 onClick={() => setIsOpen((value) => !value)}
-                className="inline-flex min-h-8 cursor-pointer select-none items-center gap-1.5 rounded-md px-1 text-xs font-medium text-[var(--app-hint)] transition-colors hover:bg-[var(--app-subtle-bg)] hover:text-[var(--app-fg)] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]"
+                className={cn(
+                    'cursor-pointer select-none items-center gap-1.5 rounded-md px-1 text-xs font-medium text-[var(--app-hint)] transition-colors hover:bg-[var(--app-subtle-bg)] hover:text-[var(--app-fg)] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]',
+                    groupRow ? 'flex min-h-10 w-full text-left' : 'inline-flex min-h-8'
+                )}
             >
                 <ChevronIcon open={isOpen} />
-                <span>{props.label}</span>
-                {props.isStreaming ? <ShimmerDot /> : null}
+                <span className={cn(groupRow && 'min-w-0 flex-1 truncate')}>{props.label}</span>
+                {groupRow && props.duration ? (
+                    <span
+                        aria-label={props.durationAriaLabel}
+                        className="shrink-0 font-mono text-[10px] text-[var(--app-hint)]"
+                    >
+                        {props.duration}
+                    </span>
+                ) : null}
+                {groupRow && props.statusLabel ? (
+                    <span
+                        role="status"
+                        aria-label={props.statusLabel}
+                        className={cn(
+                            'shrink-0',
+                            props.isStreaming ? 'text-[var(--app-hint)]' : 'text-emerald-600'
+                        )}
+                    >
+                        {props.isStreaming ? <ShimmerDot /> : <span aria-hidden="true">✓</span>}
+                        <span className="sr-only">{props.statusLabel}</span>
+                    </span>
+                ) : props.isStreaming ? <ShimmerDot /> : null}
             </button>
 
             <div
@@ -94,7 +125,9 @@ export function ReasoningDisclosure(props: ReasoningDisclosureProps) {
                     isOpen ? 'max-h-[5000px] opacity-100' : 'max-h-0 opacity-0'
                 )}
             >
-                <div className="pl-4 pt-1">{props.children}</div>
+                <div className={cn(groupRow ? 'px-6 pb-2 pt-1' : 'pl-4 pt-1')}>
+                    {props.children}
+                </div>
             </div>
         </div>
     )

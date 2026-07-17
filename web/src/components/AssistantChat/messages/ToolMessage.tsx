@@ -10,7 +10,12 @@ import { MessageStatusIndicator } from '@/components/AssistantChat/messages/Mess
 import { ToolCard } from '@/components/ToolCard/ToolCard'
 import { useHappyChatContext } from '@/components/AssistantChat/context'
 import { CliOutputBlock } from '@/components/CliOutputBlock'
-import { isGroupableToolBlock, isToolCallBlock } from '@/components/ToolCard/toolRunModel'
+import {
+    formatActivityDuration,
+    getActivityDurationMs,
+    isGroupableToolBlock,
+    isToolCallBlock
+} from '@/components/ToolCard/toolRunModel'
 import { useToolRunLayout } from '@/components/ToolCard/toolRunContext'
 import { getToolPresentation } from '@/components/ToolCard/knownTools'
 import { getToolResultViewComponent } from '@/components/ToolCard/views/_results'
@@ -152,7 +157,8 @@ function HappyNestedBlockList(props: {
 export function HappyToolMessage(props: ToolCallMessagePartProps) {
     const ctx = useHappyChatContext()
     const { t } = useTranslation()
-    const grouped = useToolRunLayout()
+    const layout = useToolRunLayout()
+    const grouped = layout.grouped
     const artifact = props.artifact
 
     if (!isToolCallBlock(artifact)) {
@@ -210,6 +216,10 @@ export function HappyToolMessage(props: ToolCallMessagePartProps) {
         })
         const ResultView = getToolResultViewComponent(block.tool.name)
         const isStreaming = block.tool.state === 'pending' || block.tool.state === 'running'
+        const durationMs = grouped
+            ? getActivityDurationMs({ kind: 'tool', block }, layout.now)
+            : null
+        const duration = durationMs === null ? undefined : formatActivityDuration(durationMs)
 
         return (
             <div
@@ -221,6 +231,14 @@ export function HappyToolMessage(props: ToolCallMessagePartProps) {
                     label={presentation.title}
                     ariaLabel={presentation.title}
                     isStreaming={isStreaming}
+                    presentation={grouped ? 'group-row' : 'standalone'}
+                    duration={duration}
+                    durationAriaLabel={duration
+                        ? t('tool.group.activityDuration', { duration })
+                        : undefined}
+                    statusLabel={grouped
+                        ? t(isStreaming ? 'tool.status.running' : 'tool.status.completed')
+                        : undefined}
                 >
                     <ResultView
                         block={block}

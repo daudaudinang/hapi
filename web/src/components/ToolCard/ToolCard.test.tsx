@@ -8,6 +8,7 @@ import viVN from '@/lib/locales/vi-VN'
 import zhCN from '@/lib/locales/zh-CN'
 import { getToolPresentation } from './knownTools'
 import { ToolCard } from './ToolCard'
+import { ToolRunLayoutProvider } from './toolRunContext'
 
 vi.mock('@/components/ToolCard/PermissionFooter', () => ({
     PermissionFooter: () => null
@@ -84,18 +85,28 @@ function makeToolBlock(
     }
 }
 
-function toolCardElement(block: ToolCallBlock, displayMode: 'card' | 'group-row' = 'card') {
+function toolCardElement(
+    block: ToolCallBlock,
+    displayMode: 'card' | 'group-row' = 'card',
+    groupedNow?: number
+) {
+    const card = (
+        <ToolCard
+            api={api}
+            sessionId="session-1"
+            metadata={null}
+            disabled={false}
+            onDone={vi.fn()}
+            block={block}
+            displayMode={displayMode}
+        />
+    )
+
     return (
         <I18nProvider>
-            <ToolCard
-                api={api}
-                sessionId="session-1"
-                metadata={null}
-                disabled={false}
-                onDone={vi.fn()}
-                block={block}
-                displayMode={displayMode}
-            />
+            {groupedNow === undefined
+                ? card
+                : <ToolRunLayoutProvider now={groupedNow}>{card}</ToolRunLayoutProvider>}
         </I18nProvider>
     )
 }
@@ -105,10 +116,11 @@ function renderTool(
     options: {
         locale?: 'en' | 'vi-VN' | 'zh-CN'
         displayMode?: 'card' | 'group-row'
+        groupedNow?: number
     } = {}
 ) {
     localStorage.setItem('hapi-lang', options.locale ?? 'en')
-    return render(toolCardElement(block, options.displayMode))
+    return render(toolCardElement(block, options.displayMode, options.groupedNow))
 }
 
 describe('ToolCard presentation hierarchy', () => {
@@ -340,6 +352,59 @@ describe('ToolCard presentation hierarchy', () => {
         expect(screen.getByRole('dialog')).toHaveTextContent('/tmp/example.ts')
     })
 
+    it.each([
+        ['completed', { state: 'completed', startedAt: 1000, completedAt: 5600 }],
+        ['running', { state: 'running', startedAt: 1000, completedAt: null }]
+    ] as const)('shows an exact %s duration from the shared group clock', (_label, timing) => {
+        renderTool(makeToolBlock('Bash', { command: 'printf ready' }, undefined, {
+            ...timing,
+            result: { stdout: 'ready\n', stderr: '', exitCode: 0 }
+        }), {
+            displayMode: 'group-row',
+            groupedNow: 5600
+        })
+
+        expect(screen.getByText('4.6s')).toHaveAccessibleName('Activity duration: 4.6s')
+    })
+
+    it('does not reserve a duration placeholder when exact timing is unavailable', () => {
+        renderTool(makeToolBlock('Read', { file_path: '/tmp/example.ts' }, undefined, {
+            startedAt: null,
+            completedAt: 5600
+        }), {
+            displayMode: 'group-row',
+            groupedNow: 5600
+        })
+
+        expect(screen.queryByLabelText(/activity duration/i)).not.toBeInTheDocument()
+        expect(screen.queryByText(/^(—|0\.0s)$/)).not.toBeInTheDocument()
+    })
+
+    it('orders row metadata as title, subtitle, duration, status, then output control', () => {
+        const { container } = renderTool(makeToolBlock('Bash', { command: 'printf ready' }, undefined, {
+            startedAt: 1000,
+            completedAt: 5600,
+            result: { stdout: 'ready\n', stderr: '', exitCode: 0 }
+        }), {
+            displayMode: 'group-row',
+            groupedNow: 5600
+        })
+
+        const row = container.querySelector('[data-tool-display="group-row"]')
+        const title = screen.getByText('Terminal')
+        const subtitle = screen.getByText('printf ready')
+        const duration = screen.getByText('4.6s')
+        const status = screen.getByLabelText('Completed')
+        const output = screen.getByRole('button', { name: 'Show output' })
+        const ordered = [title, subtitle, duration, status, output]
+
+        expect(row?.querySelector('button button')).toBeNull()
+        for (let index = 0; index < ordered.length - 1; index += 1) {
+            expect(ordered[index]?.compareDocumentPosition(ordered[index + 1]!)
+                & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        }
+    })
+
     it('opens terminal output at full width with a 300px cap without internal truncation', () => {
         const { container } = renderTool(makeToolBlock('Bash', { command: 'printf ready' }, undefined, {
             result: { stdout: 'ready\n', stderr: '', exitCode: 0 }
@@ -550,10 +615,11 @@ describe('ToolCard presentation hierarchy', () => {
             'tool.detail.unknownSkill',
             'tool.detail.agentType',
             'tool.detail.background',
-            'tool.group.actionsCompleted',
-            'tool.group.actionsRunning',
-            'tool.group.toggle',
-            'tool.group.duration',
+            'tool.group.activitiesCompleted',
+            'tool.group.activitiesRunning',
+            'tool.group.toggleActivities',
+            'tool.group.activityDuration',
+            'tool.group.totalDuration',
             'tool.group.showOutput',
             'tool.group.hideOutput',
             'tool.group.outputRegion',

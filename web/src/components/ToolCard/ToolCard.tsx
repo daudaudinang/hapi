@@ -23,7 +23,12 @@ import { cn } from '@/lib/utils'
 import { useTranslation } from '@/lib/use-translation'
 import { TraceSection } from '@/components/ToolCard/trace'
 import { LockIcon } from '@/components/ToolCard/icons'
-import { getToolExpansionKind } from '@/components/ToolCard/toolRunModel'
+import {
+    formatActivityDuration,
+    getActivityDurationMs,
+    getToolExpansionKind
+} from '@/components/ToolCard/toolRunModel'
+import { useToolRunLayout } from '@/components/ToolCard/toolRunContext'
 
 const ELAPSED_INTERVAL_MS = 1000
 
@@ -279,6 +284,7 @@ type ToolCardProps = {
 
 function ToolCardInner(props: ToolCardProps) {
     const { t } = useTranslation()
+    const layout = useToolRunLayout()
     const displayMode = props.displayMode ?? 'card'
     const expansionKind = displayMode === 'group-row'
         ? getToolExpansionKind(props.block)
@@ -329,6 +335,13 @@ function ToolCardInner(props: ToolCardProps) {
     ))
     const hasBody = showInline || taskSummary !== null || showsPermissionFooter
     const stateColor = statusColorClass(props.block.tool.state)
+    const activityDurationMs = displayMode === 'group-row' && layout.grouped
+        ? getActivityDurationMs({ kind: 'tool', block: props.block }, layout.now)
+        : null
+    const activityDuration = activityDurationMs === null
+        ? null
+        : formatActivityDuration(activityDurationMs)
+    const stateLabel = t(`tool.status.${props.block.tool.state}`)
     const { suppressFocusRing, onTriggerPointerDown, onTriggerKeyDown, onTriggerBlur } = usePointerFocusRing()
     const isQuestionToolWithAnswers = Boolean(
         isQuestionTool
@@ -404,7 +417,15 @@ function ToolCardInner(props: ToolCardProps) {
                                 <span className="min-w-0 flex-1 truncate font-mono text-xs text-[var(--app-hint)]">
                                     {subtitle}
                                 </span>
-                                <span className={stateColor}>
+                                {activityDuration ? (
+                                    <span
+                                        aria-label={t('tool.group.activityDuration', { duration: activityDuration })}
+                                        className="shrink-0 font-mono text-[10px] text-[var(--app-hint)]"
+                                    >
+                                        {activityDuration}
+                                    </span>
+                                ) : null}
+                                <span role="status" aria-label={stateLabel} className={stateColor}>
                                     <StatusIcon state={props.block.tool.state} />
                                 </span>
                             </button>
