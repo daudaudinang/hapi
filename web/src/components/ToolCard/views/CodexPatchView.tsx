@@ -9,7 +9,7 @@ export function CodexPatchView(props: ToolViewProps) {
 
     if (files.length === 0) {
         return (
-            <div className="text-sm text-[var(--app-muted)]">
+            <div className="text-sm text-[var(--app-hint)]">
                 {t('tool.patchDetailsUnavailable')}
             </div>
         )

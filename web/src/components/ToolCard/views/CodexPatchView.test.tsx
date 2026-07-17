@@ -62,6 +62,8 @@ describe('CodexPatchView', () => {
     it('renders an explicit fallback instead of blank details', () => {
         renderPatch({ changes: [] })
 
-        expect(screen.getByText('Patch details unavailable')).toBeVisible()
+        expect(screen.getByText('Patch details unavailable')).toHaveClass(
+            'text-[var(--app-hint)]'
+        )
     })
 })
