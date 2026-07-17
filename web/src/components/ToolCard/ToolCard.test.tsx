@@ -473,5 +473,9 @@ describe('ToolCard presentation hierarchy', () => {
                 expect(dictionary[key].trim().length).toBeGreaterThan(0)
             }
         }
+
+        expect(viVN['tool.group.showOutput']).toBe('Hiện kết quả')
+        expect(viVN['tool.group.hideOutput']).toBe('Ẩn kết quả')
+        expect(viVN['tool.group.outputRegion']).toBe('Kết quả của {tool}')
     })
 })
