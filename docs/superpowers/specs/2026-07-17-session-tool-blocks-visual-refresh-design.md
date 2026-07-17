@@ -19,6 +19,8 @@ Keep the existing message normalization, tool registry, permission mutations, di
 - diff/edit tools use a green artifact surface with change summary;
 - the existing detail dialog remains the full-content destination.
 
+Visual tones stay in the existing tool presentation registry. Pending permission overrides the registry tone directly in `ToolCard`; no parallel surface-policy module or generic artifact design system is introduced.
+
 This is preferred over:
 
 1. **A new parallel renderer:** closer isolation, but duplicates tool routing and risks behavior drift.
@@ -35,6 +37,7 @@ This is preferred over:
 - planning checklist/view files under `web/src/components/ToolCard/`
 - Codex diff compact/full views under `web/src/components/ToolCard/views/`
 - narrowly-scoped theme tokens in `web/src/index.css`
+- only the new user-facing strings in the existing English, Vietnamese, and Chinese locale files
 - focused component and pure presentation tests
 
 ### Out of scope
@@ -44,6 +47,7 @@ This is preferred over:
 - approval/deny semantics, available permission options, haptics, loading guards, and error handling;
 - Mermaid parsing, rendering, pan/zoom/fullscreen, and markdown behavior;
 - generic `Card`, `Button`, or `Dialog` primitives used outside tool messages;
+- Storybook, a new demo route, or a new visual-regression framework;
 - backend, CLI, hub, shared types, and database code.
 
 ## 4. Component behavior
@@ -59,11 +63,13 @@ This is preferred over:
 - Keep one `ToolCard` per existing tool block; do not regroup or reorder timeline data.
 - Render neutral tools with lower visual weight than review artifacts.
 - Preserve title, subtitle, state, elapsed time, dialog trigger, child-task summary, and trace access.
+- Keep a clear hover/focus surface so the compact row still reads as interactive.
 
 ### Permission attention state
 
-- Pending permission overrides the tool's normal visual tone.
+- A pending approval permission overrides the tool's normal visual tone. `AskUserQuestion` and `request_user_input` answer forms keep their existing question treatment; their shared permission-shaped transport is not presented as a security approval.
 - Use amber border/background/icon treatment to signal attention, not success.
+- Show the approved permission-required heading and lock icon without changing the underlying tool identity or permission payload.
 - The immediate approve action uses a dedicated blue background and explicit white foreground in both themes.
 - Deny remains a neutral outlined action with destructive text treatment; additional session/edit approval options remain present.
 - On narrow screens, actions wrap/stack without horizontal overflow and keep at least 36px control height.
@@ -72,6 +78,7 @@ This is preferred over:
 
 - `update_plan`, `TodoWrite`, `ExitPlanMode`, and `exit_plan_mode` use the planning tone.
 - Inline `update_plan` shows completed/total count, percentage, progress bar, and a short step preview.
+- Artifact headers expose a localized, explicit open/review action rather than a chevron alone.
 - Dialog view shows the complete checklist.
 - Existing parsing and status normalization remain unchanged.
 
@@ -81,14 +88,15 @@ This is preferred over:
 - Inline `CodexDiff` shows additions, removals, and a bounded file summary rather than a large code body.
 - Dialog view retains the full existing diff rendering.
 - Empty or malformed diff input falls back safely to the existing generic display path.
+- Reuse `parsePatch()` from the already-installed `diff` package for the new summary; do not add another hand-written summary parser. Keep the existing full-view conversion path unchanged so this visual task does not alter dialog behavior.
 
 ## 5. Data flow
 
 ```text
 Existing normalized ToolCallBlock
 → existing getToolPresentation registry
-→ new visual tone/detail metadata
-→ ToolCard shell chooses neutral / plan / diff / permission appearance
+→ visual tone metadata
+→ ToolCard directly lets pending permission override neutral / plan / diff appearance
 → existing view registry renders compact or dialog content
 → existing PermissionFooter invokes the same API callbacks
 ```
@@ -98,10 +106,12 @@ No data is added to or removed from messages, tool calls, permissions, or API re
 ## 6. Theme and accessibility rules
 
 - Use existing `--app-*` tokens for surfaces, foregrounds, hints, and borders.
-- Add only permission-primary tokens that need stable contrast independent of Telegram theme inheritance.
+- Add only narrowly-scoped tool-tone and permission-primary tokens; do not introduce a general color system.
 - Explicit approval foreground must meet WCAG AA contrast (at least 4.5:1) against its background in light and dark themes.
 - Preserve visible focus rings, semantic buttons, dialog semantics, `aria-busy`, disabled states, and keyboard operation.
 - Do not encode state by color alone: retain icons, labels, counts, and status text.
+- Disable the Reasoning disclosure transition under `prefers-reduced-motion: reduce`.
+- Route only newly introduced labels/count copy through the existing locale dictionaries; localizing unrelated legacy strings is out of scope.
 
 ## 7. Verification
 
@@ -110,9 +120,10 @@ Automated checks:
 - visual-tone mapping for neutral, planning, diff, and permission states;
 - ToolCard shell rendering and dialog trigger preservation;
 - permission action visibility, loading/disabled states, and unchanged API payloads;
+- approve, deny, allow-all-edits, allow-for-session, Codex approve-for-session, and Codex abort payloads;
 - explicit primary-action theme tokens and contrast;
 - plan progress math and inline/full checklist behavior;
-- unified-diff summary for one file, multiple files, empty input, and header lines;
+- `parsePatch()`-based diff summary for one file, multiple files, empty/malformed input, quoted paths, and content beginning with `+++`/`---`;
 - reasoning collapse, streaming auto-open, and keyboard-accessible toggle;
 - web typecheck and production build.
 
@@ -127,7 +138,7 @@ Manual browser checks:
 
 1. **Shared ToolCard blast radius:** every provider uses it. Control with tone defaults, focused fixtures across Claude/Codex-style tools, and no registry contract removal.
 2. **Permission regression:** visually changing a security-sensitive control can hide or miswire choices. Control with callback/payload tests and unchanged mutation functions.
-3. **Diff performance/accuracy:** large or multi-file diffs can be expensive or miscount headers. Control with a single memoized linear scan and bounded inline rows.
+3. **Diff performance/accuracy:** large or multi-file diffs can be expensive or miscount headers. Control by reusing the installed `diff.parsePatch()` parser, memoizing the derived summary, and bounding inline rows.
 4. **Theme contrast:** Telegram/browser theme inheritance can produce unreadable text. Control with explicit foreground tokens and contrast tests.
 
 ## 9. Rollback
