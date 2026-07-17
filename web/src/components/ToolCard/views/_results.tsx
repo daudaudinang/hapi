@@ -197,7 +197,7 @@ function RawJsonDevOnly(props: { value: unknown }) {
     )
 }
 
-function extractStdoutStderr(result: unknown): { stdout: string | null; stderr: string | null } | null {
+export function extractStdoutStderr(result: unknown): { stdout: string | null; stderr: string | null } | null {
     if (!isObject(result)) return null
 
     const stdout = typeof result.stdout === 'string' ? result.stdout : null

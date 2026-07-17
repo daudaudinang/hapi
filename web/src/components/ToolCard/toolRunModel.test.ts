@@ -156,20 +156,45 @@ describe('tool expansion', () => {
         expect(getToolExpansionKind(block('CodexPatch', { result: ' done (no output) ' }))).toBeNull()
     })
 
-    it('opens CodexDiff input only for a parseable unified diff with hunks', () => {
+    it('applies completion sentinels only to mutation result views', () => {
+        expect(getToolExpansionKind(block('Grep', { result: 'Done' }))).toBe('result')
+        expect(getToolExpansionKind(block('Read', { result: '(no output)' }))).toBe('result')
+        expect(getToolExpansionKind(block('CodexPatch', { result: 'Done' }))).toBeNull()
+    })
+
+    it('opens CodexDiff input for renderer-supported hunks and metadata-only diffs', () => {
         expect(getToolExpansionKind(block('CodexDiff', {
             input: {
                 unified_diff: 'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1 +1 @@\n-a\n+b'
             }
         }))).toBe('input')
-        expect(getToolExpansionKind(block('CodexDiff', { input: {} }))).toBeNull()
-        expect(getToolExpansionKind(block('CodexDiff', { input: { unified_diff: 'not a diff' } }))).toBeNull()
-        expect(getToolExpansionKind(block('CodexDiff', {
-            input: { unified_diff: 'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts' }
-        }))).toBeNull()
+        for (const unifiedDiff of [
+            'diff --git a/old.ts b/new.ts\nsimilarity index 100%\nrename from old.ts\nrename to new.ts',
+            'diff --git a/a.sh b/a.sh\nold mode 100644\nnew mode 100755',
+            'diff --git a/a.png b/a.png\nBinary files a/a.png and b/a.png differ'
+        ]) {
+            expect(getToolExpansionKind(block('CodexDiff', {
+                input: { unified_diff: unifiedDiff }
+            }))).toBe('input')
+        }
     })
 
-    it('opens shell results only for meaningful stdout or stderr', () => {
+    it('falls back to meaningful CodexDiff results when input is missing or malformed', () => {
+        expect(getToolExpansionKind(block('CodexDiff', {
+            input: {},
+            result: 'result-only-diff'
+        }))).toBe('result')
+        expect(getToolExpansionKind(block('CodexDiff', {
+            input: { unified_diff: 'not a diff' },
+            result: 'result-fallback-diff'
+        }))).toBe('result')
+        expect(getToolExpansionKind(block('CodexDiff', {
+            input: { unified_diff: 'not a diff' }
+        }))).toBe('input')
+        expect(getToolExpansionKind(block('CodexDiff', { input: {}, result: '  \n' }))).toBeNull()
+    })
+
+    it('opens shell results for any non-whitespace renderer-supported stdout or stderr', () => {
         expect(getToolExpansionKind(block('Bash', {
             result: { stdout: 'ready\n', stderr: '' }
         }))).toBe('result')
@@ -181,7 +206,12 @@ describe('tool expansion', () => {
         }))).toBe('result')
         expect(getToolExpansionKind(block('CodexBash', {
             result: { stdout: 'Done', stderr: '(no output)' }
-        }))).toBeNull()
+        }))).toBe('result')
+        expect(getToolExpansionKind(block('Bash', {
+            result: { output: { stdout: 'nested stdout', stderr: '' } }
+        }))).toBe('result')
+        expect(getToolExpansionKind(block('Bash', { result: 'Done' }))).toBe('result')
+        expect(getToolExpansionKind(block('Bash', { result: '(no output)' }))).toBe('result')
     })
 })
 

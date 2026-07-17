@@ -1,5 +1,12 @@
 # Safe Tool Run Grouping Implementation Plan
 
+> [!IMPORTANT]
+> **Final implementation erratum — baseline `ffa4ca7`, independent-review fix wave.**
+> The task snippets below are historical execution notes, not the final contract where they conflict with this status:
+> 1. `HapiCliOutput` uses the CLI renderer only for a complete, structurally valid **assistant-source** `CliOutputBlock` (`kind`, `id`, `localId`, `createdAt`, `text`, `source`). Partial artifacts, user-source artifacts, and provider tools with the same name delegate exactly once to `HappyToolMessage`, preserving provider arguments, result, error, and status.
+> 2. Group-row disclosure follows the actual renderer: structured `Read.file.content`, renderer-supported shell stdout/stderr (including nested Bash output and literal `Done`/`(no output)`), and meaningful Diff input/result are expandable. Only Apply/mutation completion sentinels suppress an empty chevron; Diff result is the fallback when malformed/missing input cannot provide a structured view.
+> 3. The output region keeps stable disclosure semantics, but heavyweight result/full views mount **only while open** and unmount when closed. Do not reproduce the eager hidden-child mount shown in the old Task 4 snippet.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Gom các tool được duyệt thành nhóm UI gọn mà vẫn giữ nguyên toàn bộ stream reasoning, text, CLI output, event, team mention và tool theo đúng thứ tự.

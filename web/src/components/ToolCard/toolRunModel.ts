@@ -1,5 +1,9 @@
 import type { ToolCallBlock } from '@/chat/types'
-import { extractCodexBashDisplay, extractTextFromResult } from '@/components/ToolCard/views/_results'
+import {
+    extractCodexBashDisplay,
+    extractStdoutStderr,
+    extractTextFromResult
+} from '@/components/ToolCard/views/_results'
 import { isObject } from '@hapi/protocol'
 import { parsePatch } from 'diff'
 
@@ -13,7 +17,7 @@ const GROUPABLE_TOOL_NAMES = new Set([
     'CodexDiff'
 ])
 
-const EMPTY_RESULT = /^(done|\(no output\)|done\s*\(no output\))$/i
+const EMPTY_MUTATION_RESULT = /^(done|\(no output\)|done\s*\(no output\))$/i
 
 export type ToolRunPart = {
     type?: string
@@ -106,9 +110,14 @@ export function partitionToolRunParts(parts: readonly ToolRunPart[]): ToolRunSeg
     return segments
 }
 
-function hasMeaningfulText(value: string | null | undefined): boolean {
+function hasNonWhitespaceText(value: string | null | undefined): boolean {
     const text = value?.trim() ?? ''
-    return text.length > 0 && !EMPTY_RESULT.test(text)
+    return text.length > 0
+}
+
+function hasMeaningfulMutationText(value: string | null | undefined): boolean {
+    const text = value?.trim() ?? ''
+    return text.length > 0 && !EMPTY_MUTATION_RESULT.test(text)
 }
 
 function hasRenderableUnifiedDiff(value: unknown): boolean {
@@ -129,23 +138,39 @@ function hasMeaningfulStructuredReadResult(result: unknown): boolean {
 export function getToolExpansionKind(block: ToolCallBlock): 'input' | 'result' | null {
     if (block.tool.name === 'CodexDiff') {
         const input = block.tool.input
-        return isObject(input) && hasRenderableUnifiedDiff(input.unified_diff)
-            ? 'input'
+        const unifiedDiff = isObject(input) && typeof input.unified_diff === 'string'
+            ? input.unified_diff
             : null
+        if (hasRenderableUnifiedDiff(unifiedDiff)) return 'input'
+        if (hasNonWhitespaceText(extractTextFromResult(block.tool.result))) return 'result'
+        return hasNonWhitespaceText(unifiedDiff) ? 'input' : null
     }
 
-    if (block.tool.name === 'Bash' || block.tool.name === 'CodexBash') {
-        const display = extractCodexBashDisplay(block.tool.result)
-        if (display && (hasMeaningfulText(display.stdout) || hasMeaningfulText(display.stderr))) {
+    if (block.tool.name === 'Bash') {
+        const stdio = extractStdoutStderr(block.tool.result)
+        if (stdio && (hasNonWhitespaceText(stdio.stdout) || hasNonWhitespaceText(stdio.stderr))) {
             return 'result'
         }
+        return hasNonWhitespaceText(extractTextFromResult(block.tool.result)) ? 'result' : null
+    }
+
+    if (block.tool.name === 'CodexBash') {
+        const display = extractCodexBashDisplay(block.tool.result)
+        if (display && (hasNonWhitespaceText(display.stdout) || hasNonWhitespaceText(display.stderr))) {
+            return 'result'
+        }
+        return hasNonWhitespaceText(extractTextFromResult(block.tool.result)) ? 'result' : null
     }
 
     if (block.tool.name === 'Read' && hasMeaningfulStructuredReadResult(block.tool.result)) {
         return 'result'
     }
 
-    return hasMeaningfulText(extractTextFromResult(block.tool.result)) ? 'result' : null
+    const text = extractTextFromResult(block.tool.result)
+    if (block.tool.name === 'CodexPatch') {
+        return hasMeaningfulMutationText(text) ? 'result' : null
+    }
+    return hasNonWhitespaceText(text) ? 'result' : null
 }
 
 export function getToolRunDurationMs(

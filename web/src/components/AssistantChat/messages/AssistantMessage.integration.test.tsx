@@ -273,19 +273,48 @@ describe('Happy assistant actual-runtime tool grouping', () => {
         })
     })
 
-    it('allows pagination remount to reset disclosure but not ordered content', () => {
-        const first = render(<RuntimeHarness blocks={mixedBlocks} />)
-        const beforeIds = toolIds(first.container)
-        const beforeOffsets = markerOffsets(first.container)
-        first.unmount()
+    it('prepends an older converted page without duplicating or reordering existing content', async () => {
+        const olderRead = toolBlock('Read', { file_path: '/workspace/older.ts' })
+        olderRead.id = 'block-older-Read'
+        olderRead.tool.id = 'tool-older-Read'
+        const olderBash = toolBlock('Bash', { command: 'printf older' })
+        olderBash.id = 'block-older-Bash'
+        olderBash.tool.id = 'tool-older-Bash'
+        const olderPage: ChatBlock[] = [
+            { kind: 'agent-text', id: 'older-start', localId: null, createdAt: -2, text: 'older-page-start' },
+            olderRead,
+            olderBash,
+            { kind: 'agent-text', id: 'older-end', localId: null, createdAt: -1, text: 'older-page-end' }
+        ]
+        const view = render(<RuntimeHarness blocks={mixedBlocks} />)
+        const currentIds = toolIds(view.container)
 
-        const second = render(<RuntimeHarness blocks={mixedBlocks} />)
-        expect(toolIds(second.container)).toEqual(beforeIds)
-        expect(markerOffsets(second.container)).toEqual(beforeOffsets)
-        expect(second.container.querySelectorAll('[data-tool-run-group]')).toHaveLength(3)
-        for (const trigger of second.container.querySelectorAll('[data-tool-run-group] > button')) {
-            expect(trigger).toHaveAttribute('aria-expanded', 'false')
+        view.rerender(<RuntimeHarness blocks={[...olderPage, ...mixedBlocks]} />)
+
+        await waitFor(() => {
+            expect(toolIds(view.container)).toEqual([
+                'block-older-Read',
+                'block-older-Bash',
+                ...currentIds
+            ])
+        })
+        const text = view.container.textContent ?? ''
+        const orderedMarkers = ['older-page-start', 'older-page-end', ...[
+            'reason-before-tools',
+            'text-between-runs',
+            'assistant-cli-marker',
+            'text-after-tools',
+            'event-marker',
+            'team-mention-marker',
+            'user-cli-marker'
+        ]]
+        for (const marker of orderedMarkers) {
+            expect(text.split(marker)).toHaveLength(2)
         }
+        expect(orderedMarkers.map((marker) => text.indexOf(marker))).toEqual(
+            [...orderedMarkers.map((marker) => text.indexOf(marker))].sort((a, b) => a - b)
+        )
+        expect(view.container.querySelectorAll('[data-tool-run-group]')).toHaveLength(4)
     })
 
     it('splits a grouped run when a child arrives late without dropping or reordering content', async () => {

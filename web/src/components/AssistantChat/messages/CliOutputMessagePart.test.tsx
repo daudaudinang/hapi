@@ -1,6 +1,6 @@
-import { render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import type { ToolCallMessagePartProps } from '@assistant-ui/react'
-import { beforeAll, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, expect, it, vi } from 'vitest'
 import type { CliOutputBlock } from '@/chat/types'
 import type { ApiClient } from '@/api/client'
 import { HappyChatProvider } from '@/components/AssistantChat/context'
@@ -27,6 +27,8 @@ beforeAll(() => {
         dispatchEvent: vi.fn()
     })) as unknown as typeof window.matchMedia
 })
+
+afterEach(cleanup)
 
 function harness(children: React.ReactNode) {
     return (
@@ -59,10 +61,18 @@ it('routes a valid CLI artifact to the CLI renderer', () => {
     expect(screen.queryByText('Tool: HapiCliOutput')).not.toBeInTheDocument()
 })
 
-it('falls back with provider fields when HapiCliOutput has a non-CLI artifact', () => {
+it.each([
+    ['a partial assistant CLI artifact', {
+        kind: 'cli-output',
+        id: 'partial-assistant-cli',
+        text: 'partial-cli-text',
+        source: 'assistant'
+    }],
+    ['a user-source CLI artifact', cli('user')]
+])('falls back exactly once with provider fields for %s', (_label, artifact) => {
     const { container } = render(harness(
         <CliOutputMessagePart {...({
-            artifact: { kind: 'tool-call' },
+            artifact,
             toolName: 'HapiCliOutput',
             argsText: '{"query":"needle"}',
             result: 'provider-result',
@@ -72,8 +82,8 @@ it('falls back with provider fields when HapiCliOutput has a non-CLI artifact', 
     ))
 
     expect(container.querySelector('[data-cli-output-part]')).toBeNull()
-    expect(screen.getByText('Tool: HapiCliOutput')).toBeInTheDocument()
-    expect(screen.getByText('{"query":"needle"}')).toBeInTheDocument()
-    expect(screen.getByText('provider-result')).toBeInTheDocument()
-    expect(screen.getByText('Error')).toBeInTheDocument()
+    expect(screen.getAllByText('Tool: HapiCliOutput')).toHaveLength(1)
+    expect(screen.getAllByText('{"query":"needle"}')).toHaveLength(1)
+    expect(screen.getAllByText('provider-result')).toHaveLength(1)
+    expect(screen.getAllByText('Error')).toHaveLength(1)
 })

@@ -352,6 +352,18 @@ describe('ToolCard presentation hierarchy', () => {
     })
 
     it.each([
+        ['literal shell output', 'Done', 'Done'],
+        ['nested shell output', { output: { stdout: 'nested-shell-marker', stderr: '' } }, 'nested-shell-marker']
+    ])('exposes and renders %s in a grouped Bash row', (_label, result, marker) => {
+        const { container } = renderTool(makeToolBlock('Bash', { command: 'printf ready' }, undefined, {
+            result
+        }), { displayMode: 'group-row' })
+
+        fireEvent.click(screen.getByRole('button', { name: /show output/i }))
+        expect(container.querySelector('[data-tool-inline-output]')).toHaveTextContent(marker)
+    })
+
+    it.each([
         {
             label: 'result view',
             block: makeToolBlock('Bash', { command: 'printf ready' }, undefined, {
@@ -411,7 +423,7 @@ describe('ToolCard presentation hierarchy', () => {
         expect(screen.getByRole('dialog')).toHaveTextContent('d.ts')
     })
 
-    it('expands valid Diff input and keeps malformed Diff dialog-only', () => {
+    it('expands renderer-supported Diff input, including raw malformed input without a result', () => {
         const valid = renderTool(
             makeToolBlock('CodexDiff', { unified_diff: oneFileDiff }),
             { displayMode: 'group-row' }
@@ -428,10 +440,22 @@ describe('ToolCard presentation hierarchy', () => {
             makeToolBlock('CodexDiff', { unified_diff: 'not a diff' }),
             { displayMode: 'group-row' }
         )
-        expect(screen.queryByRole('button', { name: /show output/i })).toBeNull()
+        fireEvent.click(screen.getByRole('button', { name: /show output/i }))
+        expect(screen.getByRole('region', { name: /diff output/i })).toHaveTextContent('not a diff')
         expect(malformed.container.querySelector('button button')).toBeNull()
-        fireEvent.click(screen.getByRole('button', { name: /diff/i }))
-        expect(screen.getByRole('dialog')).toHaveTextContent('not a diff')
+    })
+
+    it('falls back to meaningful Diff result when malformed input cannot provide a structured view', () => {
+        const { container } = renderTool(makeToolBlock('CodexDiff', {
+            unified_diff: 'not a diff'
+        }, undefined, {
+            result: 'result-fallback-marker'
+        }), { displayMode: 'group-row' })
+
+        fireEvent.click(screen.getByRole('button', { name: /show output/i }))
+        const output = container.querySelector('[data-tool-inline-output]')
+        expect(output).toHaveTextContent('result-fallback-marker')
+        expect(output).not.toHaveTextContent('not a diff')
     })
 
     it('lets the group output region scroll long Diff lines without clipping or wrapping', () => {
@@ -467,6 +491,19 @@ describe('ToolCard presentation hierarchy', () => {
 
         expect(container.querySelector('[data-tool-surface="neutral"]')).toHaveAttribute('data-tool-block-id', block.id)
         expect(container.querySelector('[data-tool-display="group-row"]')).toBeNull()
+    })
+
+    it('does not inspect group-only expansion output for a standalone card', () => {
+        const result = {}
+        Object.defineProperty(result, 'stdout', {
+            get: () => {
+                throw new Error('standalone output was classified eagerly')
+            }
+        })
+
+        expect(() => renderTool(makeToolBlock('Bash', { command: 'true' }, undefined, {
+            result
+        }))).not.toThrow()
     })
 
     it('defines every new shell label in all supported locales', () => {

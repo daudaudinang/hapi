@@ -280,7 +280,9 @@ type ToolCardProps = {
 function ToolCardInner(props: ToolCardProps) {
     const { t } = useTranslation()
     const displayMode = props.displayMode ?? 'card'
-    const expansionKind = getToolExpansionKind(props.block)
+    const expansionKind = displayMode === 'group-row'
+        ? getToolExpansionKind(props.block)
+        : null
     const [outputOpen, setOutputOpen] = useState(false)
     const outputId = useId()
     const presentation = useMemo(() => getToolPresentation({
