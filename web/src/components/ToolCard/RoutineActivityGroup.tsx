@@ -20,7 +20,8 @@ export function RoutineActivityGroup(props: { blocks: ToolCallBlock[] }) {
             result: block.tool.result,
             childrenCount: block.children.length,
             description: block.tool.description,
-            metadata: context.metadata
+            metadata: context.metadata,
+            t
         }).title)
         .join(', ')
 

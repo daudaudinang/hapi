@@ -95,9 +95,12 @@ function toolCardElement(
 
 function renderTool(
     block: ToolCallBlock,
-    options: { displayMode?: 'card' | 'activity-row' } = {}
+    options: {
+        displayMode?: 'card' | 'activity-row'
+        locale?: 'en' | 'vi-VN' | 'zh-CN'
+    } = {}
 ) {
-    localStorage.setItem('hapi-lang', 'en')
+    localStorage.setItem('hapi-lang', options.locale ?? 'en')
     return render(toolCardElement(block, options.displayMode))
 }
 
@@ -134,6 +137,34 @@ describe('ToolCard presentation hierarchy', () => {
         })
 
         expect(presentation.tone).toBe(expectedTone)
+    })
+
+    it('localizes built-in tool titles through the selected dictionary', () => {
+        const translations: Record<string, string> = {
+            'tool.title.applyChanges': 'Áp dụng thay đổi',
+            'tool.title.terminal': 'Dòng lệnh',
+            'tool.title.reasoning': 'Lập luận',
+            'tool.title.diff': 'Thay đổi',
+            'tool.title.plan': 'Kế hoạch',
+            'tool.title.readFile': 'Đọc tệp'
+        }
+        const t = (key: string) => translations[key] ?? key
+        const presentationFor = (toolName: string) => getToolPresentation({
+            toolName,
+            input: {},
+            result: null,
+            childrenCount: 0,
+            description: null,
+            metadata: null,
+            t
+        }).title
+
+        expect(presentationFor('CodexPatch')).toBe('Áp dụng thay đổi')
+        expect(presentationFor('CodexBash')).toBe('Dòng lệnh')
+        expect(presentationFor('CodexReasoning')).toBe('Lập luận')
+        expect(presentationFor('CodexDiff')).toBe('Thay đổi')
+        expect(presentationFor('update_plan')).toBe('Kế hoạch')
+        expect(presentationFor('Read')).toBe('Đọc tệp')
     })
 
     it('lets pending approval override the underlying diff tone', () => {
@@ -174,7 +205,7 @@ describe('ToolCard presentation hierarchy', () => {
             'hover:bg-[var(--app-subtle-bg)]',
             'focus-visible:ring-2'
         )
-        expect(screen.getByLabelText('completed')).toBeVisible()
+        expect(screen.getByLabelText('Completed')).toBeVisible()
         expect(container.querySelector('time')).toHaveClass('hidden', 'sm:block')
     })
 
@@ -236,6 +267,88 @@ describe('ToolCard presentation hierarchy', () => {
         expect(dialog).toHaveTextContent('Result')
     })
 
+    it('uses the selected locale for activity title, time, state, dialog, and result copy', () => {
+        renderTool(
+            makeToolBlock('CodexPatch', arrayPatchPayload, undefined, {
+                result: { success: true }
+            }),
+            { displayMode: 'activity-row', locale: 'vi-VN' }
+        )
+
+        const row = screen.getByRole('button', { name: /Áp dụng thay đổi/i })
+        expect(row).toHaveTextContent(
+            new Date(1000).toLocaleTimeString('vi-VN', {
+                hour: 'numeric',
+                minute: '2-digit'
+            })
+        )
+        expect(screen.getByLabelText('Đã hoàn tất')).toBeVisible()
+
+        fireEvent.click(row)
+
+        const dialog = screen.getByRole('dialog')
+        expect(dialog).toHaveTextContent('Áp dụng thay đổi')
+        expect(dialog).toHaveTextContent('Đầu vào')
+        expect(dialog).toHaveTextContent('Kết quả')
+        expect(dialog).toHaveTextContent('(không có đầu ra)')
+        expect(dialog).toHaveTextContent('JSON thô')
+        expect(screen.getByRole('button', { name: 'Đóng' })).toBeVisible()
+    })
+
+    it('localizes skill and agent detail/result labels without translating provider content', () => {
+        const { rerender } = renderTool(
+            makeToolBlock('Skill', {}, undefined, { result: null }),
+            { locale: 'vi-VN' }
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: /Kỹ năng/i }))
+        expect(screen.getByRole('dialog')).toHaveTextContent('Kỹ năng không xác định')
+        expect(screen.getByRole('dialog')).toHaveTextContent('Đã tải kỹ năng')
+
+        fireEvent.click(screen.getByRole('button', { name: 'Đóng' }))
+        rerender(toolCardElement(makeToolBlock('Agent', {
+            description: 'Keep this provider text',
+            subagent_type: 'reviewer',
+            run_in_background: true
+        }, undefined, {
+            result: 'Async agent launched successfully. agentId: agent-1'
+        })))
+
+        fireEvent.click(screen.getByRole('button', { name: /Keep this provider text/i }))
+        const dialog = screen.getByRole('dialog')
+        expect(dialog).toHaveTextContent('Keep this provider text')
+        expect(dialog).toHaveTextContent('Loại: reviewer')
+        expect(dialog).toHaveTextContent('Chạy nền')
+        expect(dialog).toHaveTextContent('Đã khởi chạy agent')
+    })
+
+    it('localizes parsed command metadata labels', () => {
+        renderTool(makeToolBlock('SomeUnknownTool', { command: 'pwd' }, undefined, {
+            result: 'Exit code: 0\nWall time: 1.2 seconds\nOutput:\n/workspace'
+        }), { locale: 'vi-VN' })
+
+        fireEvent.click(screen.getByRole('button', { name: /SomeUnknownTool/i }))
+        const dialog = screen.getByRole('dialog')
+        expect(dialog).toHaveTextContent('Mã thoát: 0')
+        expect(dialog).toHaveTextContent('Thời gian chạy: 1.2 seconds')
+        expect(dialog).toHaveTextContent('/workspace')
+    })
+
+    it('localizes structured Codex command metadata', () => {
+        renderTool(makeToolBlock('CodexBash', { command: 'pwd' }, undefined, {
+            result: {
+                stdout: '/workspace\n',
+                exit_code: 0,
+                status: 'completed'
+            }
+        }), { locale: 'vi-VN' })
+
+        fireEvent.click(screen.getByRole('button', { name: /Dòng lệnh/i }))
+        const dialog = screen.getByRole('dialog')
+        expect(dialog).toHaveTextContent('Mã thoát: 0')
+        expect(dialog).not.toHaveTextContent('exit 0')
+    })
+
     it('uses a permission heading and lock icon for pending approval', () => {
         renderTool(makeToolBlock('Write', {}, pendingPermission))
 
@@ -259,7 +372,32 @@ describe('ToolCard presentation hierarchy', () => {
             'tool.reviewDiff',
             'tool.permissionRequired',
             'tool.backgroundActions',
-            'tool.patchDetailsUnavailable'
+            'tool.patchDetailsUnavailable',
+            'tool.title.applyChanges',
+            'tool.title.terminal',
+            'tool.title.reasoning',
+            'tool.title.diff',
+            'tool.title.plan',
+            'tool.title.readFile',
+            'tool.status.pending',
+            'tool.status.running',
+            'tool.status.completed',
+            'tool.status.error',
+            'tool.result.waitingPermission',
+            'tool.result.running',
+            'tool.result.noOutput',
+            'tool.result.done',
+            'tool.result.rawJson',
+            'tool.result.agentFailed',
+            'tool.result.agentLaunched',
+            'tool.result.skillLoaded',
+            'tool.result.skillLoadFailed',
+            'tool.result.skillNamedLoaded',
+            'tool.result.exitCode',
+            'tool.result.wallTime',
+            'tool.detail.unknownSkill',
+            'tool.detail.agentType',
+            'tool.detail.background'
         ]
 
         for (const dictionary of dictionaries) {

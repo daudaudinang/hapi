@@ -50,8 +50,11 @@ const bashBlock = makeToolBlock('CodexBash', { command: 'bun test' })
 const globBlock = makeToolBlock('Glob', { pattern: '**/*.ts' })
 const grepBlock = makeToolBlock('Grep', { pattern: 'ActivityGroup' })
 
-function renderGroup(blocks: ToolCallBlock[]) {
-    localStorage.setItem('hapi-lang', 'en')
+function renderGroup(
+    blocks: ToolCallBlock[],
+    locale: 'en' | 'vi-VN' | 'zh-CN' = 'en'
+) {
+    localStorage.setItem('hapi-lang', locale)
     return render(
         <I18nProvider>
             <HappyChatProvider value={contextValue}>
@@ -110,8 +113,8 @@ describe('RoutineActivityGroup', () => {
         const failed = makeToolBlock('Read', {}, { state: 'error' })
         renderGroup([running, failed])
 
-        expect(screen.getByLabelText('running')).toBeVisible()
-        expect(screen.getByLabelText('error')).toBeVisible()
+        expect(screen.getByLabelText('Running')).toBeVisible()
+        expect(screen.getByLabelText('Error')).toBeVisible()
     })
 
     it('keeps disclosure focusable and prevents narrow-row overflow', () => {
@@ -134,5 +137,14 @@ describe('RoutineActivityGroup', () => {
 
         expect(toggle).toHaveAttribute('aria-controls', region.id)
         expect(within(region).getAllByRole('button')).toHaveLength(2)
+    })
+
+    it('localizes the group shell and built-in row titles', () => {
+        renderGroup([readBlock, bashBlock], 'vi-VN')
+
+        const toggle = screen.getByRole('button', { name: /2 tác vụ nền/i })
+        expect(toggle).toHaveTextContent('Dòng lệnh')
+        const region = screen.getByRole('region', { name: /2 tác vụ nền/i })
+        expect(within(region).getByRole('button', { name: /Dòng lệnh/i })).toBeVisible()
     })
 })

@@ -33,11 +33,11 @@ const SURFACE_CLASS = {
     permission: 'border-[var(--app-tool-attention-border)] bg-[var(--app-tool-attention-bg)]'
 } as const
 
-function formatActivityTime(value: number): string {
+function formatActivityTime(value: number, locale: string): string {
     const timestamp = value < 1_000_000_000_000 ? value * 1000 : value
     const date = new Date(timestamp)
     if (Number.isNaN(date.getTime())) return ''
-    return date.toLocaleTimeString(undefined, {
+    return date.toLocaleTimeString(locale, {
         hour: 'numeric',
         minute: '2-digit'
     })
@@ -84,7 +84,11 @@ function getTaskSummaryChildren(block: ToolCallBlock): { visible: ToolCallBlock[
     return { visible, remaining: children.length - visible.length }
 }
 
-function renderTaskSummary(block: ToolCallBlock, metadata: SessionMetadataSummary | null): ReactNode | null {
+function renderTaskSummary(
+    block: ToolCallBlock,
+    metadata: SessionMetadataSummary | null,
+    t: (key: string, params?: Record<string, string | number>) => string
+): ReactNode | null {
     const summary = getTaskSummaryChildren(block)
     if (!summary) return null
 
@@ -101,7 +105,7 @@ function renderTaskSummary(block: ToolCallBlock, metadata: SessionMetadataSummar
                                 <TaskStateIcon state={child.tool.state} />
                             </span>
                             <span className="align-middle break-all">
-                                {formatTaskChildLabel(child, metadata)}
+                                {formatTaskChildLabel(child, metadata, t)}
                             </span>
                         </div>
                     </div>
@@ -283,27 +287,29 @@ type ToolCardProps = {
 }
 
 function ToolCardInner(props: ToolCardProps) {
-    const { t } = useTranslation()
+    const { t, locale } = useTranslation()
     const presentation = useMemo(() => getToolPresentation({
         toolName: props.block.tool.name,
         input: props.block.tool.input,
         result: props.block.tool.result,
         childrenCount: props.block.children.length,
         description: props.block.tool.description,
-        metadata: props.metadata
+        metadata: props.metadata,
+        t
     }), [
         props.block.tool.name,
         props.block.tool.input,
         props.block.tool.result,
         props.block.children.length,
         props.block.tool.description,
-        props.metadata
+        props.metadata,
+        t
     ])
 
     const toolName = props.block.tool.name
     const toolTitle = presentation.title
     const subtitle = presentation.subtitle ?? props.block.tool.description
-    const taskSummary = renderTaskSummary(props.block, props.metadata)
+    const taskSummary = renderTaskSummary(props.block, props.metadata, t)
     const runningFrom = props.block.tool.startedAt ?? props.block.tool.createdAt
     const showInline = !presentation.minimal && toolName !== 'Task'
     const CompactToolView = showInline ? getToolViewComponent(toolName) : null
@@ -334,7 +340,11 @@ function ToolCardInner(props: ToolCardProps) {
     )
 
     const detailsDialog = (
-        <DialogContent className="max-w-2xl" aria-describedby={undefined}>
+        <DialogContent
+            className="max-w-2xl"
+            aria-describedby={undefined}
+            closeLabel={t('button.close')}
+        >
             <DialogHeader>
                 <DialogTitle>{toolTitle}</DialogTitle>
             </DialogHeader>
@@ -350,6 +360,7 @@ function ToolCardInner(props: ToolCardProps) {
                             block={props.block}
                             metadata={props.metadata}
                             surface="dialog"
+                            t={t}
                         />
                     ) : (
                         renderToolInput(props.block, 'dialog')
@@ -365,6 +376,7 @@ function ToolCardInner(props: ToolCardProps) {
                             block={props.block}
                             metadata={props.metadata}
                             surface="dialog"
+                            t={t}
                         />
                     </div>
                 ) : null}
@@ -388,7 +400,7 @@ function ToolCardInner(props: ToolCardProps) {
                             onBlur={onTriggerBlur}
                         >
                             <time className="hidden font-mono text-[10px] text-[var(--app-hint)] sm:block">
-                                {formatActivityTime(props.block.createdAt)}
+                                {formatActivityTime(props.block.createdAt, locale)}
                             </time>
                             <span className="flex h-4 w-4 items-center justify-center text-[var(--app-hint)]">
                                 {presentation.icon}
@@ -401,7 +413,10 @@ function ToolCardInner(props: ToolCardProps) {
                                     {subtitle ?? ''}
                                 </span>
                             </span>
-                            <span className={stateColor} aria-label={props.block.tool.state}>
+                            <span
+                                className={stateColor}
+                                aria-label={t(`tool.status.${props.block.tool.state}`)}
+                            >
                                 <StatusIcon state={props.block.tool.state} />
                             </span>
                             <span aria-hidden="true" className="text-[var(--app-hint)]">
@@ -504,7 +519,7 @@ function ToolCardInner(props: ToolCardProps) {
                     {showInline ? (
                         CompactToolView ? (
                             <div className="mt-3">
-                                <CompactToolView block={props.block} metadata={props.metadata} surface="inline" />
+                                <CompactToolView block={props.block} metadata={props.metadata} surface="inline" t={t} />
                             </div>
                         ) : (
                             <div className="mt-3 flex flex-col gap-3">
@@ -514,7 +529,7 @@ function ToolCardInner(props: ToolCardProps) {
                                 </div>
                                 <div>
                                     <div className="mb-1 text-xs font-medium text-[var(--app-hint)]">{t('tool.result')}</div>
-                                    <ResultToolView block={props.block} metadata={props.metadata} surface="inline" />
+                                    <ResultToolView block={props.block} metadata={props.metadata} surface="inline" t={t} />
                                 </div>
                             </div>
                         )
