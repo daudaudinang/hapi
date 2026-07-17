@@ -213,7 +213,14 @@ describe('Happy assistant actual-runtime tool grouping', () => {
         view.rerender(<RuntimeHarness blocks={[toolBlock('Read'), toolBlock('Bash')]} />)
         await waitFor(() => {
             expect(toolIds(view.container)).toEqual(['block-Read', 'block-Bash'])
-            expect(groupTrigger).toHaveAttribute('aria-expanded', 'true')
+            const currentTrigger = view.container.querySelector('[data-tool-run-group] > button')
+            expect(currentTrigger).toBe(groupTrigger)
+            expect(currentTrigger?.isConnected).toBe(true)
+            expect(currentTrigger).toHaveAttribute('aria-expanded', 'true')
+            expect(currentTrigger).toHaveAttribute(
+                'aria-label',
+                'Toggle tool group: 2 actions completed'
+            )
         })
 
         view.rerender(<RuntimeHarness blocks={[
@@ -252,8 +259,13 @@ describe('Happy assistant actual-runtime tool grouping', () => {
         }
     })
 
-    it('splits a late child without dropping the child or neighboring tool', () => {
+    it('splits a grouped run when a child arrives late without dropping or reordering content', async () => {
         const read = toolBlock('Read')
+        const bash = toolBlock('Bash')
+        const view = render(<RuntimeHarness blocks={[read, bash]} />)
+        expect(view.container.querySelectorAll('[data-tool-run-group]')).toHaveLength(1)
+        expect(toolIds(view.container)).toEqual(['block-Read', 'block-Bash'])
+
         const withChild: ToolCallBlock = {
             ...read,
             children: [{
@@ -264,12 +276,22 @@ describe('Happy assistant actual-runtime tool grouping', () => {
                 text: 'late-child-marker'
             }]
         }
-        const { container } = render(
-            <RuntimeHarness blocks={[withChild, toolBlock('Bash')]} />
-        )
+        view.rerender(<RuntimeHarness blocks={[withChild, bash]} />)
 
-        expect(toolIds(container)).toEqual(['block-Read', 'block-Bash'])
-        expect(container.querySelector('[data-tool-run-group]')).toBeNull()
-        expect((container.textContent ?? '').split('late-child-marker')).toHaveLength(2)
+        await waitFor(() => {
+            expect(view.container.querySelector('[data-tool-run-group]')).toBeNull()
+            expect(toolIds(view.container)).toEqual(['block-Read', 'block-Bash'])
+            expect((view.container.textContent ?? '').split('late-child-marker')).toHaveLength(2)
+        })
+
+        const readNode = view.container.querySelector('[data-tool-block-id="block-Read"]')
+        const bashNode = view.container.querySelector('[data-tool-block-id="block-Bash"]')
+        const childNode = Array.from(view.container.querySelectorAll('*'))
+            .find((node) => node.textContent === 'late-child-marker')
+        expect(readNode).not.toBeNull()
+        expect(bashNode).not.toBeNull()
+        expect(childNode).toBeDefined()
+        expect(readNode!.compareDocumentPosition(childNode!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        expect(childNode!.compareDocumentPosition(bashNode!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     })
 })
