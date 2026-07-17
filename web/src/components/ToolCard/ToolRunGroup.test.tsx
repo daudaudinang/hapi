@@ -246,10 +246,10 @@ describe('ToolRunGroup', () => {
 })
 
 describe('HappyToolMessage group layout', () => {
-    it('passes group-row only when rendered inside the tool run provider', () => {
+    it('uses group-row for safe singletons and grouped tools but keeps special tools as cards', () => {
         const props = toolMessageProps(block('Read'))
         const standalone = render(<HappyToolMessage {...props} />)
-        expect(screen.getByTestId('tool-card')).toHaveAttribute('data-display-mode', 'card')
+        expect(screen.getByTestId('tool-card')).toHaveAttribute('data-display-mode', 'group-row')
         standalone.unmount()
 
         render(
@@ -258,5 +258,9 @@ describe('HappyToolMessage group layout', () => {
             </ToolRunLayoutProvider>
         )
         expect(screen.getByTestId('tool-card')).toHaveAttribute('data-display-mode', 'group-row')
+
+        cleanup()
+        render(<HappyToolMessage {...toolMessageProps(block('Agent'))} />)
+        expect(screen.getByTestId('tool-card')).toHaveAttribute('data-display-mode', 'card')
     })
 })

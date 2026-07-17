@@ -168,6 +168,119 @@ function markerOffsets(container: HTMLElement): number[] {
 afterEach(cleanup)
 
 describe('Happy assistant actual-runtime tool grouping', () => {
+    it('renders production-shaped Codex reasoning and separated terminal tools compactly without data loss', () => {
+        const reasoningFirst = toolBlock('CodexReasoning', {
+            title: 'Inspecting review details'
+        }, {
+            result: { content: 'reasoning-first-marker', status: 'completed' }
+        })
+        reasoningFirst.id = 'block-reasoning-first'
+        reasoningFirst.tool.id = 'tool-reasoning-first'
+
+        const terminalFirst = toolBlock('CodexBash', {
+            command: 'printf first'
+        }, {
+            result: { stdout: 'terminal-first-marker', stderr: '', exitCode: 0 }
+        })
+        terminalFirst.id = 'block-terminal-first'
+        terminalFirst.tool.id = 'tool-terminal-first'
+
+        const reasoningSecond = toolBlock('CodexReasoning', {
+            title: 'Appending findings'
+        }, {
+            result: { content: 'reasoning-second-marker', status: 'completed' }
+        })
+        reasoningSecond.id = 'block-reasoning-second'
+        reasoningSecond.tool.id = 'tool-reasoning-second'
+
+        const terminalSecond = toolBlock('CodexBash', {
+            command: 'printf second'
+        }, {
+            result: { stdout: 'terminal-second-marker', stderr: '', exitCode: 0 }
+        })
+        terminalSecond.id = 'block-terminal-second'
+        terminalSecond.tool.id = 'tool-terminal-second'
+
+        const { container } = render(<RuntimeHarness blocks={[
+            reasoningFirst,
+            terminalFirst,
+            reasoningSecond,
+            terminalSecond
+        ]} />)
+
+        expect(toolIds(container)).toEqual([
+            'block-reasoning-first',
+            'block-terminal-first',
+            'block-reasoning-second',
+            'block-terminal-second'
+        ])
+        expect(container.querySelectorAll('[data-codex-reasoning]')).toHaveLength(2)
+        expect(container.querySelectorAll('[data-tool-run-group]')).toHaveLength(0)
+
+        for (const id of ['block-terminal-first', 'block-terminal-second']) {
+            const node = container.querySelector(`[data-tool-block-id="${id}"]`)
+            expect(node).toHaveAttribute('data-tool-display', 'group-row')
+            expect(node?.closest('[data-tool-singleton-compact]')).toHaveClass('max-w-[600px]')
+        }
+
+        for (const id of ['block-reasoning-first', 'block-reasoning-second']) {
+            const node = container.querySelector(`[data-tool-block-id="${id}"]`)
+            expect(node).toHaveAttribute('data-codex-reasoning')
+            expect(node).not.toHaveAttribute('data-tool-surface')
+        }
+
+        fireEvent.click(screen.getByRole('button', { name: 'Inspecting review details' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Appending findings' }))
+        expect(container).toHaveTextContent('reasoning-first-marker')
+        expect(container).toHaveTextContent('reasoning-second-marker')
+    })
+
+    it('keeps plan, permission, error and child-bearing tools on standalone cards', () => {
+        const permissionRead = toolBlock('Read', {}, {
+            permission: { id: 'permission-read', status: 'pending' }
+        })
+        permissionRead.id = 'block-permission-read'
+
+        const errorRead = toolBlock('Read', {}, {
+            state: 'error',
+            result: 'read failed'
+        })
+        errorRead.id = 'block-error-read'
+
+        const childRead = toolBlock('Read')
+        childRead.id = 'block-child-read'
+        childRead.children = [{
+            kind: 'agent-text',
+            id: 'child-marker',
+            localId: null,
+            createdAt: 1001,
+            text: 'child-marker'
+        }]
+
+        const plan = toolBlock('update_plan', {
+            plan: [{ step: 'Keep plan visible', status: 'in_progress' }]
+        })
+        plan.id = 'block-plan'
+
+        const { container } = render(<RuntimeHarness blocks={[
+            permissionRead,
+            errorRead,
+            childRead,
+            plan
+        ]} />)
+
+        expect(container.querySelector('[data-tool-block-id="block-permission-read"]'))
+            .toHaveAttribute('data-tool-surface', 'permission')
+        expect(container.querySelector('[data-tool-block-id="block-error-read"]'))
+            .toHaveAttribute('data-tool-surface', 'neutral')
+        expect(container.querySelector('[data-tool-block-id="block-child-read"]'))
+            .toHaveAttribute('data-tool-surface', 'neutral')
+        expect(container.querySelector('[data-tool-block-id="block-plan"]'))
+            .toHaveAttribute('data-tool-surface', 'plan')
+        expect(container.querySelectorAll('[data-tool-singleton-compact]')).toHaveLength(0)
+        expect((container.textContent ?? '').split('child-marker')).toHaveLength(2)
+    })
+
     it('renders a provider HapiCliOutput collision exactly once in stream order', () => {
         const collision = toolBlock('HapiCliOutput', { query: 'collision-args-marker' }, {
             result: 'collision-result-marker',

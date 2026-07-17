@@ -10,8 +10,13 @@ import { MessageStatusIndicator } from '@/components/AssistantChat/messages/Mess
 import { ToolCard } from '@/components/ToolCard/ToolCard'
 import { useHappyChatContext } from '@/components/AssistantChat/context'
 import { CliOutputBlock } from '@/components/CliOutputBlock'
-import { isToolCallBlock } from '@/components/ToolCard/toolRunModel'
+import { isGroupableToolBlock, isToolCallBlock } from '@/components/ToolCard/toolRunModel'
 import { useToolRunLayout } from '@/components/ToolCard/toolRunContext'
+import { getToolPresentation } from '@/components/ToolCard/knownTools'
+import { getToolResultViewComponent } from '@/components/ToolCard/views/_results'
+import { ReasoningDisclosure } from '@/components/assistant-ui/reasoning'
+import { useTranslation } from '@/lib/use-translation'
+import { cn } from '@/lib/utils'
 
 function isPendingPermissionBlock(block: ChatBlock): boolean {
     return block.kind === 'tool-call' && block.tool.permission?.status === 'pending'
@@ -146,6 +151,7 @@ function HappyNestedBlockList(props: {
 
 export function HappyToolMessage(props: ToolCallMessagePartProps) {
     const ctx = useHappyChatContext()
+    const { t } = useTranslation()
     const grouped = useToolRunLayout()
     const artifact = props.artifact
 
@@ -187,11 +193,59 @@ export function HappyToolMessage(props: ToolCallMessagePartProps) {
     }
 
     const block = artifact
+    const isCodexReasoning = block.tool.name === 'CodexReasoning'
+        && block.tool.state !== 'error'
+        && block.tool.permission === undefined
+        && block.children.length === 0
+
+    if (isCodexReasoning) {
+        const presentation = getToolPresentation({
+            toolName: block.tool.name,
+            input: block.tool.input,
+            result: block.tool.result,
+            childrenCount: block.children.length,
+            description: block.tool.description,
+            metadata: ctx.metadata,
+            t
+        })
+        const ResultView = getToolResultViewComponent(block.tool.name)
+        const isStreaming = block.tool.state === 'pending' || block.tool.state === 'running'
+
+        return (
+            <div
+                data-codex-reasoning
+                data-tool-block-id={block.id}
+                className="py-1 min-w-0 max-w-full overflow-x-hidden"
+            >
+                <ReasoningDisclosure
+                    label={presentation.title}
+                    ariaLabel={presentation.title}
+                    isStreaming={isStreaming}
+                >
+                    <ResultView
+                        block={block}
+                        metadata={ctx.metadata}
+                        surface="group-output"
+                        t={t}
+                    />
+                </ReasoningDisclosure>
+            </div>
+        )
+    }
+
     const isTask = block.tool.name === 'Task'
     const taskChildren = isTask ? splitTaskChildren(block) : null
+    const standaloneCompact = !grouped && isGroupableToolBlock(block)
+    const compact = grouped || standaloneCompact
 
     return (
-        <div className="py-1 min-w-0 max-w-full overflow-x-hidden">
+        <div
+            data-tool-singleton-compact={standaloneCompact ? '' : undefined}
+            className={cn(
+                'py-1 min-w-0 max-w-full overflow-x-hidden',
+                standaloneCompact && 'w-full max-w-[600px]'
+            )}
+        >
             <ToolCard
                 api={ctx.api}
                 sessionId={ctx.sessionId}
@@ -199,7 +253,7 @@ export function HappyToolMessage(props: ToolCallMessagePartProps) {
                 disabled={ctx.disabled}
                 onDone={ctx.onRefresh}
                 block={block}
-                displayMode={grouped ? 'group-row' : 'card'}
+                displayMode={compact ? 'group-row' : 'card'}
             />
             {block.children.length > 0 ? (
                 isTask ? (

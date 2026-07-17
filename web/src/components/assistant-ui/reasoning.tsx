@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type FC, type PropsWithChildren } from 'react'
+import { useEffect, useId, useState, type FC, type PropsWithChildren, type ReactNode } from 'react'
 import { useMessage } from '@assistant-ui/react'
 import { MarkdownTextPrimitive } from '@assistant-ui/react-markdown'
 import { cn } from '@/lib/utils'
@@ -53,27 +53,22 @@ export const Reasoning: FC = () => {
     )
 }
 
-/**
- * Wraps consecutive reasoning parts in a collapsible container.
- * Shows shimmer effect while reasoning is streaming.
- */
-export const ReasoningGroup: FC<PropsWithChildren> = ({ children }) => {
-    const { t } = useTranslation()
+type ReasoningDisclosureProps = {
+    label: string
+    ariaLabel: string
+    isStreaming: boolean
+    children: ReactNode
+}
+
+export function ReasoningDisclosure(props: ReasoningDisclosureProps) {
     const [isOpen, setIsOpen] = useState(false)
     const contentId = useId()
 
-    // Check if reasoning is still streaming
-    const message = useMessage()
-    const isStreaming = message.status?.type === 'running'
-        && message.content.length > 0
-        && message.content[message.content.length - 1]?.type === 'reasoning'
-
-    // Auto-expand while streaming
     useEffect(() => {
-        if (isStreaming) {
+        if (props.isStreaming) {
             setIsOpen(true)
         }
-    }, [isStreaming])
+    }, [props.isStreaming])
 
     return (
         <div className="aui-reasoning-group my-1">
@@ -81,13 +76,13 @@ export const ReasoningGroup: FC<PropsWithChildren> = ({ children }) => {
                 type="button"
                 aria-expanded={isOpen}
                 aria-controls={contentId}
-                aria-label={isStreaming ? t('reasoning.streaming') : t('reasoning.toggle')}
+                aria-label={props.ariaLabel}
                 onClick={() => setIsOpen((value) => !value)}
                 className="inline-flex min-h-8 cursor-pointer select-none items-center gap-1.5 rounded-md px-1 text-xs font-medium text-[var(--app-hint)] transition-colors hover:bg-[var(--app-subtle-bg)] hover:text-[var(--app-fg)] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]"
             >
                 <ChevronIcon open={isOpen} />
-                <span>{t('tool.title.reasoning')}</span>
-                {isStreaming ? <ShimmerDot /> : null}
+                <span>{props.label}</span>
+                {props.isStreaming ? <ShimmerDot /> : null}
             </button>
 
             <div
@@ -99,8 +94,32 @@ export const ReasoningGroup: FC<PropsWithChildren> = ({ children }) => {
                     isOpen ? 'max-h-[5000px] opacity-100' : 'max-h-0 opacity-0'
                 )}
             >
-                <div className="pl-4 pt-1">{children}</div>
+                <div className="pl-4 pt-1">{props.children}</div>
             </div>
         </div>
+    )
+}
+
+/**
+ * Wraps consecutive reasoning parts in a collapsible container.
+ * Shows shimmer effect while reasoning is streaming.
+ */
+export const ReasoningGroup: FC<PropsWithChildren> = ({ children }) => {
+    const { t } = useTranslation()
+
+    // Check if reasoning is still streaming
+    const message = useMessage()
+    const isStreaming = message.status?.type === 'running'
+        && message.content.length > 0
+        && message.content[message.content.length - 1]?.type === 'reasoning'
+
+    return (
+        <ReasoningDisclosure
+            label={t('tool.title.reasoning')}
+            ariaLabel={isStreaming ? t('reasoning.streaming') : t('reasoning.toggle')}
+            isStreaming={isStreaming}
+        >
+            {children}
+        </ReasoningDisclosure>
     )
 }
