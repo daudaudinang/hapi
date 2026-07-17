@@ -27,11 +27,21 @@ import { LockIcon } from '@/components/ToolCard/icons'
 const ELAPSED_INTERVAL_MS = 1000
 
 const SURFACE_CLASS = {
-    neutral: 'border-transparent bg-transparent shadow-none',
+    neutral: 'border-[var(--app-border)] bg-[var(--app-secondary-bg)] shadow-none',
     plan: 'border-[var(--app-tool-plan-border)] bg-[var(--app-secondary-bg)]',
     diff: 'border-[var(--app-tool-diff-border)] bg-[var(--app-secondary-bg)]',
     permission: 'border-[var(--app-tool-attention-border)] bg-[var(--app-tool-attention-bg)]'
 } as const
+
+function formatActivityTime(value: number): string {
+    const timestamp = value < 1_000_000_000_000 ? value * 1000 : value
+    const date = new Date(timestamp)
+    if (Number.isNaN(date.getTime())) return ''
+    return date.toLocaleTimeString(undefined, {
+        hour: 'numeric',
+        minute: '2-digit'
+    })
+}
 
 const ICON_CLASS = {
     neutral: 'h-3.5 w-3.5 text-[var(--app-hint)]',
@@ -269,6 +279,7 @@ type ToolCardProps = {
     disabled: boolean
     onDone: () => void
     block: ToolCallBlock
+    displayMode?: 'card' | 'activity-row'
 }
 
 function ToolCardInner(props: ToolCardProps) {
@@ -316,6 +327,93 @@ function ToolCardInner(props: ToolCardProps) {
     const hasBody = showInline || taskSummary !== null || showsPermissionFooter
     const stateColor = statusColorClass(props.block.tool.state)
     const { suppressFocusRing, onTriggerPointerDown, onTriggerKeyDown, onTriggerBlur } = usePointerFocusRing()
+    const isQuestionToolWithAnswers = Boolean(
+        isQuestionTool
+        && permission?.answers
+        && Object.keys(permission.answers).length > 0
+    )
+
+    const detailsDialog = (
+        <DialogContent className="max-w-2xl" aria-describedby={undefined}>
+            <DialogHeader>
+                <DialogTitle>{toolTitle}</DialogTitle>
+            </DialogHeader>
+            <div className="mt-3 flex max-h-[75vh] flex-col gap-4 overflow-auto">
+                <div>
+                    <div className="mb-1 text-xs font-medium text-[var(--app-hint)]">
+                        {isQuestionToolWithAnswers
+                            ? t('tool.questionsAnswers')
+                            : t('tool.input')}
+                    </div>
+                    {FullToolView ? (
+                        <FullToolView
+                            block={props.block}
+                            metadata={props.metadata}
+                            surface="dialog"
+                        />
+                    ) : (
+                        renderToolInput(props.block, 'dialog')
+                    )}
+                </div>
+                <TraceSection block={props.block} metadata={props.metadata} />
+                {!isQuestionToolWithAnswers ? (
+                    <div>
+                        <div className="mb-1 text-xs font-medium text-[var(--app-hint)]">
+                            {t('tool.result')}
+                        </div>
+                        <ResultToolView
+                            block={props.block}
+                            metadata={props.metadata}
+                            surface="dialog"
+                        />
+                    </div>
+                ) : null}
+            </div>
+        </DialogContent>
+    )
+
+    if (props.displayMode === 'activity-row') {
+        return (
+            <div data-tool-display="activity-row" className="min-w-0">
+                <Dialog>
+                    <DialogTrigger asChild>
+                        <button
+                            type="button"
+                            className={cn(
+                                'grid min-h-9 w-full grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-2 rounded-md px-2 text-left transition-colors hover:bg-[var(--app-subtle-bg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)] sm:grid-cols-[3.5rem_auto_minmax(0,1fr)_auto_auto]',
+                                suppressFocusRing && 'focus-visible:ring-0'
+                            )}
+                            onPointerDown={onTriggerPointerDown}
+                            onKeyDown={onTriggerKeyDown}
+                            onBlur={onTriggerBlur}
+                        >
+                            <time className="hidden font-mono text-[10px] text-[var(--app-hint)] sm:block">
+                                {formatActivityTime(props.block.createdAt)}
+                            </time>
+                            <span className="flex h-4 w-4 items-center justify-center text-[var(--app-hint)]">
+                                {presentation.icon}
+                            </span>
+                            <span className="min-w-0 sm:grid sm:grid-cols-[5rem_minmax(0,1fr)] sm:items-center sm:gap-2">
+                                <span className="block truncate text-xs font-medium text-[var(--app-fg)]">
+                                    {toolTitle}
+                                </span>
+                                <span className="block min-w-0 truncate font-mono text-xs text-[var(--app-hint)]">
+                                    {subtitle ?? ''}
+                                </span>
+                            </span>
+                            <span className={stateColor} aria-label={props.block.tool.state}>
+                                <StatusIcon state={props.block.tool.state} />
+                            </span>
+                            <span aria-hidden="true" className="text-[var(--app-hint)]">
+                                <DetailsIcon />
+                            </span>
+                        </button>
+                    </DialogTrigger>
+                    {detailsDialog}
+                </Dialog>
+            </div>
+        )
+    }
 
     const header = (
         <div className="flex flex-col gap-1">
@@ -391,38 +489,7 @@ function ToolCardInner(props: ToolCardProps) {
                             {header}
                         </button>
                     </DialogTrigger>
-                    <DialogContent className="max-w-2xl">
-                        <DialogHeader>
-                            <DialogTitle>{toolTitle}</DialogTitle>
-                        </DialogHeader>
-                        {(() => {
-                            const isQuestionToolWithAnswers = isQuestionTool
-                                && permission?.answers
-                                && Object.keys(permission.answers).length > 0
-
-                            return (
-                                <div className="mt-3 flex max-h-[75vh] flex-col gap-4 overflow-auto">
-                                    <div>
-                                        <div className="mb-1 text-xs font-medium text-[var(--app-hint)]">
-                                            {isQuestionToolWithAnswers ? t('tool.questionsAnswers') : t('tool.input')}
-                                        </div>
-                                        {FullToolView ? (
-                                            <FullToolView block={props.block} metadata={props.metadata} surface="dialog" />
-                                        ) : (
-                                            renderToolInput(props.block, 'dialog')
-                                        )}
-                                    </div>
-                                    <TraceSection block={props.block} metadata={props.metadata} />
-                                    {!isQuestionToolWithAnswers && (
-                                        <div>
-                                            <div className="mb-1 text-xs font-medium text-[var(--app-hint)]">{t('tool.result')}</div>
-                                            <ResultToolView block={props.block} metadata={props.metadata} surface="dialog" />
-                                        </div>
-                                    )}
-                                </div>
-                            )
-                        })()}
-                    </DialogContent>
+                    {detailsDialog}
                 </Dialog>
             </CardHeader>
 

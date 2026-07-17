@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '@/api/client'
 import type { ToolCallBlock, ToolPermission } from '@/chat/types'
@@ -41,7 +41,8 @@ const api = {} as ApiClient
 function makeToolBlock(
     name: string,
     input: unknown = {},
-    permission?: ToolPermission
+    permission?: ToolPermission,
+    overrides: Partial<ToolCallBlock['tool']> = {}
 ): ToolCallBlock {
     return {
         kind: 'tool-call',
@@ -59,12 +60,16 @@ function makeToolBlock(
             completedAt: 2,
             description: null,
             result: null,
-            permission
+            permission,
+            ...overrides
         }
     }
 }
 
-function toolCardElement(block: ToolCallBlock) {
+function toolCardElement(
+    block: ToolCallBlock,
+    displayMode?: 'card' | 'activity-row'
+) {
     return (
         <I18nProvider>
             <ToolCard
@@ -74,14 +79,18 @@ function toolCardElement(block: ToolCallBlock) {
                 disabled={false}
                 onDone={vi.fn()}
                 block={block}
+                displayMode={displayMode}
             />
         </I18nProvider>
     )
 }
 
-function renderTool(block: ToolCallBlock) {
+function renderTool(
+    block: ToolCallBlock,
+    options: { displayMode?: 'card' | 'activity-row' } = {}
+) {
     localStorage.setItem('hapi-lang', 'en')
-    return render(toolCardElement(block))
+    return render(toolCardElement(block, options.displayMode))
 }
 
 describe('ToolCard presentation hierarchy', () => {
@@ -135,14 +144,49 @@ describe('ToolCard presentation hierarchy', () => {
         }
     )
 
-    it('keeps routine tools compact but visibly interactive', () => {
+    it('keeps a singleton neutral tool inside a subtle visible surface', () => {
         const { container } = renderTool(makeToolBlock('Read'))
         const card = container.querySelector('[data-tool-surface="neutral"]')
 
-        expect(card).toHaveClass('bg-transparent')
+        expect(card).toHaveClass(
+            'border-[var(--app-border)]',
+            'bg-[var(--app-secondary-bg)]'
+        )
         expect(screen.getByRole('button', { name: /read/i })).toHaveClass(
             'hover:bg-[var(--app-subtle-bg)]'
         )
+    })
+
+    it('renders activity-row mode without an individual card frame', () => {
+        const { container } = renderTool(makeToolBlock('Read'), {
+            displayMode: 'activity-row'
+        })
+        expect(container.querySelector('[data-tool-display="activity-row"]')).not.toBeNull()
+        expect(screen.getByRole('button', { name: /read/i })).toHaveClass(
+            'hover:bg-[var(--app-subtle-bg)]',
+            'focus-visible:ring-2'
+        )
+        expect(screen.getByLabelText('completed')).toBeVisible()
+        expect(container.querySelector('time')).toHaveClass('hidden', 'sm:block')
+    })
+
+    it('truncates long activity detail instead of widening the row', () => {
+        const command = 'x'.repeat(400)
+        renderTool(makeToolBlock('CodexBash', { command }), {
+            displayMode: 'activity-row'
+        })
+
+        expect(screen.getByText(command)).toHaveClass('min-w-0', 'truncate')
+    })
+
+    it('activity-row mode opens the unchanged details dialog', async () => {
+        renderTool(makeToolBlock('Read', { file_path: '/tmp/example.ts' }), {
+            displayMode: 'activity-row'
+        })
+
+        fireEvent.click(screen.getByRole('button', { name: /example\.ts/i }))
+
+        expect(screen.getByRole('dialog')).toHaveTextContent('/tmp/example.ts')
     })
 
     it('shows explicit artifact actions', () => {
