@@ -6,6 +6,7 @@ import { renderEventLabel } from '@/chat/presentation'
 import type { ChatBlock, CliOutputBlock } from '@/chat/types'
 import type { AgentEvent, TeamMentionBlock, ToolCallBlock } from '@/chat/types'
 import { CLI_OUTPUT_TOOL_NAME } from '@/lib/cliOutputPart'
+import { REASONING_TOOL_NAME, reasoningToolCallId } from '@/lib/reasoningPart'
 import type { AttachmentMetadata, MessageStatus as HappyMessageStatus, Session } from '@/types/api'
 
 export type HappyChatMessageMetadata = {
@@ -76,7 +77,14 @@ export function toThreadMessageLike(block: ChatBlock): ThreadMessageLike {
             role: 'assistant',
             id: messageId,
             createdAt: new Date(block.createdAt),
-            content: [{ type: 'reasoning', text: block.text }],
+            content: [{
+                type: 'tool-call',
+                toolCallId: reasoningToolCallId(block.id),
+                toolName: REASONING_TOOL_NAME,
+                argsText: '',
+                result: block.text,
+                artifact: block
+            }],
             metadata: {
                 custom: { kind: 'assistant' } satisfies HappyChatMessageMetadata
             }

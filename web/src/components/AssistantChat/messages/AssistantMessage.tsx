@@ -2,17 +2,22 @@ import { MessagePrimitive, useAssistantState } from '@assistant-ui/react'
 import { MarkdownText } from '@/components/assistant-ui/markdown-text'
 import { Reasoning, ReasoningGroup } from '@/components/assistant-ui/reasoning'
 import { CliOutputMessagePart } from '@/components/AssistantChat/messages/CliOutputMessagePart'
+import { ReasoningMessagePart } from '@/components/AssistantChat/messages/ReasoningMessagePart'
 import { HappyToolMessage } from '@/components/AssistantChat/messages/ToolMessage'
 import { ToolRunGroup } from '@/components/ToolCard/ToolRunGroup'
 import { CopyIcon, CheckIcon } from '@/components/icons'
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
 import { CLI_OUTPUT_TOOL_NAME } from '@/lib/cliOutputPart'
+import { REASONING_TOOL_NAME } from '@/lib/reasoningPart'
 import { getAssistantCopyText } from '@/components/AssistantChat/messages/assistantCopyText'
 import { getConversationMessageAnchorId } from '@/chat/outline'
 
 const TOOL_COMPONENTS = {
     Fallback: HappyToolMessage,
-    by_name: { [CLI_OUTPUT_TOOL_NAME]: CliOutputMessagePart }
+    by_name: {
+        [CLI_OUTPUT_TOOL_NAME]: CliOutputMessagePart,
+        [REASONING_TOOL_NAME]: ReasoningMessagePart
+    }
 } as const
 
 const MESSAGE_PART_COMPONENTS = {
