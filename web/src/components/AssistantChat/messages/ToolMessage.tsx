@@ -1,7 +1,7 @@
 import type { ToolCallMessagePartProps } from '@assistant-ui/react'
 import type { ChatBlock } from '@/chat/types'
 import type { ToolCallBlock } from '@/chat/types'
-import { isObject, safeStringify } from '@hapi/protocol'
+import { safeStringify } from '@hapi/protocol'
 import { getEventPresentation } from '@/chat/presentation'
 import { CodeBlock } from '@/components/CodeBlock'
 import { MarkdownRenderer } from '@/components/MarkdownRenderer'
@@ -10,21 +10,7 @@ import { MessageStatusIndicator } from '@/components/AssistantChat/messages/Mess
 import { ToolCard } from '@/components/ToolCard/ToolCard'
 import { useHappyChatContext } from '@/components/AssistantChat/context'
 import { CliOutputBlock } from '@/components/CliOutputBlock'
-
-function isToolCallBlock(value: unknown): value is ToolCallBlock {
-    if (!isObject(value)) return false
-    if (value.kind !== 'tool-call') return false
-    if (typeof value.id !== 'string') return false
-    if (value.localId !== null && typeof value.localId !== 'string') return false
-    if (typeof value.createdAt !== 'number') return false
-    if (!Array.isArray(value.children)) return false
-    if (!isObject(value.tool)) return false
-    if (typeof value.tool.name !== 'string') return false
-    if (!('input' in value.tool)) return false
-    if (value.tool.description !== null && typeof value.tool.description !== 'string') return false
-    if (value.tool.state !== 'pending' && value.tool.state !== 'running' && value.tool.state !== 'completed' && value.tool.state !== 'error') return false
-    return true
-}
+import { isToolCallBlock } from '@/components/ToolCard/toolRunModel'
 
 function isPendingPermissionBlock(block: ChatBlock): boolean {
     return block.kind === 'tool-call' && block.tool.permission?.status === 'pending'
