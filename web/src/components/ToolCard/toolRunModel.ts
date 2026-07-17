@@ -239,8 +239,12 @@ export function getActivityGroupDurationMs(entries: readonly ActivityEntry[]): n
     if (first?.kind !== 'tool' || last?.kind !== 'tool') return null
 
     const start = first.block.tool.startedAt
+    const lastStart = last.block.tool.startedAt
     const end = last.block.tool.completedAt
-    if (!isExactTimestamp(start) || !isExactTimestamp(end)) return null
+    if (!isExactTimestamp(start) || !isExactTimestamp(lastStart) || !isExactTimestamp(end)) {
+        return null
+    }
+    if (end < lastStart) return null
 
     const duration = end - start
     return Number.isFinite(duration) && duration >= 0 ? duration : null

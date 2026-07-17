@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/lib/i18n-context'
+import { useTranslation, type Locale } from '@/lib/use-translation'
 import { ReasoningDisclosure, ReasoningGroup } from './reasoning'
 
 const { useMessageMock } = vi.hoisted(() => ({
@@ -23,6 +24,25 @@ function renderReasoning() {
         <I18nProvider>
             <ReasoningGroup><span>Body</span></ReasoningGroup>
         </I18nProvider>
+    )
+}
+
+function LocalizedGroupRowDisclosure() {
+    const { t } = useTranslation()
+    const duration = '4.6s'
+    const title = t('tool.title.reasoning')
+    return (
+        <ReasoningDisclosure
+            label={title}
+            ariaLabel={title}
+            isStreaming={false}
+            presentation="group-row"
+            duration={duration}
+            durationAriaLabel={t('tool.group.activityDuration', { duration })}
+            statusLabel={t('tool.status.completed')}
+        >
+            <span>Body</span>
+        </ReasoningDisclosure>
     )
 }
 
@@ -138,13 +158,34 @@ describe('ReasoningDisclosure group row', () => {
         )
 
         const trigger = screen.getByRole('button', { name: 'Toggle reasoning' })
-        const duration = screen.getByText('4.6s')
+        const duration = trigger.querySelector('.font-mono')
         const status = screen.getByRole('status', { name: 'Completed' })
         expect(trigger).toHaveClass('w-full')
         expect(container.querySelector('[data-reasoning-layout="group-row"]')).not.toHaveClass('border')
-        expect(duration).toHaveAccessibleName('Activity duration: 4.6s')
-        expect(duration.compareDocumentPosition(status) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        expect(trigger).toHaveAccessibleDescription('Activity duration: 4.6s')
+        expect(duration).toHaveAttribute('aria-hidden', 'true')
+        expect(duration!.compareDocumentPosition(status) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
         expect(screen.getByText('Completed')).toHaveClass('sr-only')
         expect(container.querySelector('button button')).toBeNull()
+    })
+
+    it.each([
+        ['en', 'Reasoning', 'Activity duration: 4.6s'],
+        ['vi-VN', 'Lập luận', 'Thời gian hoạt động: 4.6s'],
+        ['zh-CN', '推理', '活动用时：4.6s']
+    ] satisfies [Locale, string, string][])('exposes the translated per-activity duration in %s', (
+        locale,
+        accessibleName,
+        accessibleDescription
+    ) => {
+        localStorage.setItem('hapi-lang', locale)
+        render(
+            <I18nProvider>
+                <LocalizedGroupRowDisclosure />
+            </I18nProvider>
+        )
+
+        expect(screen.getByRole('button', { name: accessibleName }))
+            .toHaveAccessibleDescription(accessibleDescription)
     })
 })

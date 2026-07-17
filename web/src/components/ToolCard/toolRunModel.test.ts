@@ -417,6 +417,13 @@ describe('activity timing', () => {
         ])).toBe(3000)
     })
 
+    it('rejects a last boundary whose completion predates its own start', () => {
+        expect(getActivityGroupDurationMs([
+            toolEntry('Read', { startedAt: 1000, completedAt: 2000 }),
+            toolEntry('Bash', { startedAt: 5000, completedAt: 4000 })
+        ])).toBeNull()
+    })
+
     it('allows generic reasoning in the middle of exact tool boundaries', () => {
         expect(getActivityGroupDurationMs([
             toolEntry('Read', { startedAt: 1000, completedAt: 2000 }),

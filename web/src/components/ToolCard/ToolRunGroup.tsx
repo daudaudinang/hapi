@@ -37,6 +37,7 @@ function useRunClock(active: boolean): number {
 
     useEffect(() => {
         if (!active) return
+        setNow(Date.now())
         const timer = window.setInterval(() => setNow(Date.now()), 1000)
         return () => window.clearInterval(timer)
     }, [active])
@@ -52,6 +53,7 @@ function ActivityRun(props: PropsWithChildren<{
     const running = props.entries.some(isActivityRunning)
     const [open, setOpen] = useState(() => running)
     const regionId = useId()
+    const durationDescriptionId = useId()
     const now = useRunClock(running)
     const durationMs = getActivityGroupDurationMs(props.entries)
     const duration = durationMs === null ? null : formatActivityDuration(durationMs)
@@ -73,18 +75,24 @@ function ActivityRun(props: PropsWithChildren<{
                 aria-expanded={open}
                 aria-controls={regionId}
                 aria-label={t('tool.group.toggleActivities', { status: statusLabel })}
+                aria-describedby={duration ? durationDescriptionId : undefined}
                 onClick={() => setOpen((value) => !value)}
                 className="flex min-h-11 w-full min-w-0 items-center gap-2 px-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]"
             >
                 <ChevronIcon open={open} />
                 <span className="min-w-0 flex-1 text-xs font-semibold">{statusLabel}</span>
                 {duration ? (
-                    <span
-                        aria-label={t('tool.group.totalDuration', { duration })}
-                        className="shrink-0 font-mono text-[11px] font-semibold text-[var(--app-hint)]"
-                    >
-                        {duration}
-                    </span>
+                    <>
+                        <span
+                            aria-hidden="true"
+                            className="shrink-0 font-mono text-[11px] font-semibold text-[var(--app-hint)]"
+                        >
+                            {duration}
+                        </span>
+                        <span id={durationDescriptionId} className="sr-only">
+                            {t('tool.group.totalDuration', { duration })}
+                        </span>
+                    </>
                 ) : null}
             </button>
             <div

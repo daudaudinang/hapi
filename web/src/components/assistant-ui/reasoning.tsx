@@ -67,7 +67,11 @@ type ReasoningDisclosureProps = {
 export function ReasoningDisclosure(props: ReasoningDisclosureProps) {
     const [isOpen, setIsOpen] = useState(false)
     const contentId = useId()
+    const durationDescriptionId = useId()
     const groupRow = props.presentation === 'group-row'
+    const describedBy = groupRow && props.duration && props.durationAriaLabel
+        ? durationDescriptionId
+        : undefined
 
     useEffect(() => {
         if (props.isStreaming) {
@@ -85,6 +89,7 @@ export function ReasoningDisclosure(props: ReasoningDisclosureProps) {
                 aria-expanded={isOpen}
                 aria-controls={contentId}
                 aria-label={props.ariaLabel}
+                aria-describedby={describedBy}
                 onClick={() => setIsOpen((value) => !value)}
                 className={cn(
                     'cursor-pointer select-none items-center gap-1.5 rounded-md px-1 text-xs font-medium text-[var(--app-hint)] transition-colors hover:bg-[var(--app-subtle-bg)] hover:text-[var(--app-fg)] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]',
@@ -94,12 +99,19 @@ export function ReasoningDisclosure(props: ReasoningDisclosureProps) {
                 <ChevronIcon open={isOpen} />
                 <span className={cn(groupRow && 'min-w-0 flex-1 truncate')}>{props.label}</span>
                 {groupRow && props.duration ? (
-                    <span
-                        aria-label={props.durationAriaLabel}
-                        className="shrink-0 font-mono text-[10px] text-[var(--app-hint)]"
-                    >
-                        {props.duration}
-                    </span>
+                    <>
+                        <span
+                            aria-hidden="true"
+                            className="shrink-0 font-mono text-[10px] text-[var(--app-hint)]"
+                        >
+                            {props.duration}
+                        </span>
+                        {props.durationAriaLabel ? (
+                            <span id={durationDescriptionId} className="sr-only">
+                                {props.durationAriaLabel}
+                            </span>
+                        ) : null}
+                    </>
                 ) : null}
                 {groupRow && props.statusLabel ? (
                     <span

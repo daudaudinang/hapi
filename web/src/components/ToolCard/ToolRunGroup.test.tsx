@@ -10,10 +10,15 @@ import {
     useToolRunLayout
 } from '@/components/ToolCard/toolRunContext'
 import { HappyToolMessage } from '@/components/AssistantChat/messages/ToolMessage'
+import { en, viVN, zhCN } from '@/lib/locales'
 
 const assistantState = vi.hoisted(() => ({
     parts: [] as ActivityPart[],
     status: { type: 'complete' }
+}))
+
+const translationState = vi.hoisted(() => ({
+    dictionary: null as Record<string, string> | null
 }))
 
 vi.mock('@assistant-ui/react', async (importOriginal) => {
@@ -38,8 +43,14 @@ vi.mock('@assistant-ui/react', async (importOriginal) => {
 
 vi.mock('@/lib/use-translation', () => ({
     useTranslation: () => ({
-        t: (key: string, params?: Record<string, string | number>) =>
-            `${key}:${params ? JSON.stringify(params) : ''}`
+        t: (key: string, params?: Record<string, string | number>) => {
+            const template = translationState.dictionary?.[key]
+            if (!template) return `${key}:${params ? JSON.stringify(params) : ''}`
+            return template.replace(/\{(\w+)\}/g, (match, name: string) => {
+                const value = params?.[name]
+                return value === undefined ? match : String(value)
+            })
+        }
     })
 }))
 
@@ -63,6 +74,7 @@ vi.mock('@/components/ToolCard/ToolCard', () => ({
 
 type BlockOptions = {
     state?: ToolCallBlock['tool']['state']
+    startedAt?: number | null
     completedAt?: number | null
     children?: ChatBlock[]
 }
@@ -80,7 +92,7 @@ function block(name: string, options: BlockOptions = {}): ToolCallBlock {
             input: {},
             state: options.state ?? 'completed',
             createdAt: 1000,
-            startedAt: 1000,
+            startedAt: options.startedAt === undefined ? 1000 : options.startedAt,
             completedAt: options.completedAt === undefined ? 2000 : options.completedAt,
             description: null
         }
@@ -138,7 +150,11 @@ function LayoutProbe(props: { name: string; children: ReactNode }) {
     )
 }
 
-afterEach(cleanup)
+afterEach(() => {
+    cleanup()
+    translationState.dictionary = null
+    vi.useRealTimers()
+})
 
 describe('ToolRunGroup', () => {
     it('groups five reasoning and tool activities in original order with the approved header', () => {
@@ -170,6 +186,9 @@ describe('ToolRunGroup', () => {
         expect(group).toHaveClass('w-full', 'max-w-[600px]')
         expect(trigger).toHaveAttribute('aria-expanded', 'false')
         expect(trigger).toHaveAccessibleName(/tool\.group\.toggleActivities/)
+        expect(trigger).toHaveAccessibleDescription(
+            'tool.group.totalDuration:{"duration":"4.0s"}'
+        )
         expect(trigger).toHaveTextContent('tool.group.activitiesCompleted:{"count":5}')
         expect(trigger).toHaveTextContent('4.0s')
         expect(trigger).not.toHaveTextContent('Terminal')
@@ -192,6 +211,33 @@ describe('ToolRunGroup', () => {
         expect(labels.map((label) => orderedText.indexOf(label))).toEqual(
             [...labels].map((label) => orderedText.indexOf(label)).sort((a, b) => a - b)
         )
+    })
+
+    it.each([
+        ['English', en, 'Toggle activity group: 2 activities completed', 'Total duration: 4.0s'],
+        ['Vietnamese', viVN, 'Mở hoặc đóng nhóm hoạt động: 2 hoạt động đã hoàn tất', 'Tổng thời gian: 4.0s'],
+        ['Chinese', zhCN, '展开或收起活动组：已完成 2 项活动', '总用时：4.0s']
+    ])('exposes the translated group total as the %s toggle description', (
+        _language,
+        dictionary,
+        accessibleName,
+        accessibleDescription
+    ) => {
+        translationState.dictionary = dictionary
+        setMessageParts([
+            part(block('Read', { completedAt: 2000 })),
+            part(block('Bash', { startedAt: 2500, completedAt: 5000 }))
+        ])
+
+        render(
+            <ToolRunGroup startIndex={0} endIndex={1}>
+                <span>read-child</span>
+                <span>bash-child</span>
+            </ToolRunGroup>
+        )
+
+        expect(screen.getByRole('button', { name: accessibleName }))
+            .toHaveAccessibleDescription(accessibleDescription)
     })
 
     it('renders an internal boundary exactly once between two valid activity groups', () => {
@@ -303,6 +349,39 @@ describe('ToolRunGroup', () => {
         expect(trigger).toHaveTextContent('tool.group.activitiesCompleted:{"count":2}')
     })
 
+    it('refreshes the shared clock immediately when a completed group becomes active', () => {
+        vi.useFakeTimers()
+        vi.setSystemTime(3000)
+        const read = block('Read', { completedAt: 2000 })
+        const bash = block('Bash', { completedAt: 2500 })
+        setMessageParts([part(read), part(bash)])
+        const view = render(
+            <ToolRunGroup startIndex={0} endIndex={1}>
+                <span>read-child</span>
+                <span>bash-child</span>
+            </ToolRunGroup>
+        )
+        fireEvent.click(screen.getByRole('button'))
+
+        vi.setSystemTime(10000)
+        const runningReasoning = block('CodexReasoning', {
+            state: 'running',
+            startedAt: 6000,
+            completedAt: null
+        })
+        setMessageParts([part(read), part(bash), part(runningReasoning)])
+        view.rerender(
+            <ToolRunGroup startIndex={0} endIndex={2}>
+                <span>read-child</span>
+                <span>bash-child</span>
+                <HappyToolMessage {...toolMessageProps(runningReasoning)} />
+            </ToolRunGroup>
+        )
+
+        expect(screen.getByRole('button', { name: 'tool.title.reasoning:' }))
+            .toHaveAccessibleDescription('tool.group.activityDuration:{"duration":"4.0s"}')
+    })
+
     it('renders a singleton without a group wrapper', () => {
         setMessageParts([part(block('Read'))])
         const { container } = render(
@@ -364,8 +443,7 @@ describe('HappyToolMessage group layout', () => {
             </ToolRunLayoutProvider>
         )
 
-        expect(screen.getByText('4.6s')).toHaveAccessibleName(
-            'tool.group.activityDuration:{"duration":"4.6s"}'
-        )
+        expect(screen.getByRole('button', { name: 'tool.title.reasoning:' }))
+            .toHaveAccessibleDescription('tool.group.activityDuration:{"duration":"4.6s"}')
     })
 })
