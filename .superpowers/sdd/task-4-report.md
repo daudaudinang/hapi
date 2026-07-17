@@ -58,3 +58,47 @@ git diff --name-only main...HEAD
 - Build still prints existing Browserslist age, KaTeX font-resolution and large-chunk warnings; build succeeds.
 - Full test run includes the intentional Mermaid error-boundary stderr fixture; all tests pass.
 - No manual browser/session E2E was requested or run; `RuntimeHarness` exercises the real web runtime adapter under jsdom.
+
+## Review-fix addendum
+
+### Coverage hardened
+
+- Five-activity group now opens and scopes each authoritative region:
+  - generic/Codex reasoning disclosure bodies;
+  - Codex terminal and diff output regions;
+  - Codex patch inline file summary plus details dialog.
+- Late error asserts standalone neutral surface and error result in its details dialog.
+- Late permission asserts pending permission surface, status heading and enabled Allow / Allow for session / Deny controls.
+- Provider `HapiReasoning` collision opens its fallback details dialog and verifies both input/result payloads.
+- Boundary matrix now includes `user-text` and user-sourced CLI output, each proven once between two activity groups in DOM order.
+- Removed the invalid cast of malformed reasoning into public `ChatBlock[]`. `AgentReasoningBlock.text` is statically a string and `useHappyRuntime` always constructs its pseudo artifact from that valid public block. Defensive malformed-artifact behavior is therefore tested directly at `ReasoningMessagePart`, the closest renderer boundary accepting `artifact: unknown`, without fabricating runtime input.
+
+### Review verification evidence
+
+1. Focused required command:
+
+```text
+cd web && bun run test src/components/AssistantChat/messages/AssistantMessage.integration.test.tsx
+Test Files  1 passed (1)
+Tests       29 passed (29)
+Exit        0
+```
+
+2. Full release gates rerun:
+
+```text
+bun run test:web       -> 113 files, 794/794 tests passed, exit 0
+bun run typecheck:web  -> tsc --noEmit, exit 0
+bun run build:web      -> Vite/PWA production build, exit 0
+git diff --check       -> exit 0
+```
+
+3. Review RED: first focused run after adding the real user-message boundary was **28/29 passed** because jsdom lacked `IntersectionObserver` required by `LazyRainbowText`. A test-harness observer stub fixed the environment; no production change was required.
+
+4. Post-review-test commit range check:
+
+```text
+git diff --check main...HEAD
+Output      (empty)
+Exit        0
+```
