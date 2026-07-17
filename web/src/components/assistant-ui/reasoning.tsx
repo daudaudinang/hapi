@@ -17,7 +17,7 @@ function ChevronIcon(props: { className?: string; open?: boolean }) {
             strokeLinecap="round"
             strokeLinejoin="round"
             className={cn(
-                'transition-transform duration-200',
+                'transition-transform duration-200 motion-reduce:transition-none',
                 props.open ? 'rotate-90' : '',
                 props.className
             )}
@@ -71,11 +71,14 @@ export const ReasoningGroup: FC<PropsWithChildren> = ({ children }) => {
         <div className="aui-reasoning-group my-2">
             <button
                 type="button"
+                aria-expanded={isOpen}
                 onClick={() => setIsOpen(!isOpen)}
                 className={cn(
-                    'flex items-center gap-1.5 text-xs font-medium',
-                    'text-[var(--app-hint)] hover:text-[var(--app-fg)]',
-                    'transition-colors cursor-pointer select-none'
+                    'flex min-h-10 w-full items-center gap-2 rounded-md border border-[var(--app-border)]',
+                    'bg-[var(--app-bg)] px-2.5 py-2 text-left text-xs font-medium',
+                    'text-[var(--app-hint)] hover:bg-[var(--app-subtle-bg)] hover:text-[var(--app-fg)]',
+                    'cursor-pointer select-none transition-colors motion-reduce:transition-none',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]'
                 )}
             >
                 <ChevronIcon open={isOpen} />
@@ -89,7 +92,7 @@ export const ReasoningGroup: FC<PropsWithChildren> = ({ children }) => {
 
             <div
                 className={cn(
-                    'overflow-hidden transition-all duration-200 ease-in-out',
+                    'overflow-hidden transition-all duration-200 ease-in-out motion-reduce:transition-none',
                     isOpen ? 'max-h-[5000px] opacity-100' : 'max-h-0 opacity-0'
                 )}
             >
