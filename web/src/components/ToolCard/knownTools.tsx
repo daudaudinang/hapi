@@ -23,7 +23,7 @@ export type ToolSurfaceTone = 'neutral' | 'plan' | 'diff'
 const PLAN_TOOLS = new Set(['update_plan', 'TodoWrite', 'ExitPlanMode', 'exit_plan_mode'])
 const DIFF_TOOLS = new Set(['CodexDiff', 'CodexPatch', 'Edit', 'MultiEdit', 'Write', 'NotebookEdit'])
 
-function getToolSurfaceTone(toolName: string): ToolSurfaceTone {
+export function getToolSurfaceTone(toolName: string): ToolSurfaceTone {
     if (PLAN_TOOLS.has(toolName)) return 'plan'
     if (DIFF_TOOLS.has(toolName)) return 'diff'
     return 'neutral'
