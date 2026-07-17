@@ -230,7 +230,6 @@ export default {
   'tool.exitPlan': 'Thoát chế độ lập kế hoạch',
   'tool.patch': 'Bản vá',
   'tool.details': 'Chi tiết',
-  'tool.backgroundActions': '{count} tác vụ nền',
   'tool.patchDetailsUnavailable': 'Không có chi tiết thay đổi',
   'tool.title.task': 'Tác vụ',
   'tool.title.team': 'Nhóm: {name}',

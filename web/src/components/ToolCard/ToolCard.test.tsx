@@ -74,10 +74,7 @@ function makeToolBlock(
     }
 }
 
-function toolCardElement(
-    block: ToolCallBlock,
-    displayMode?: 'card' | 'activity-row'
-) {
+function toolCardElement(block: ToolCallBlock) {
     return (
         <I18nProvider>
             <ToolCard
@@ -87,7 +84,6 @@ function toolCardElement(
                 disabled={false}
                 onDone={vi.fn()}
                 block={block}
-                displayMode={displayMode}
             />
         </I18nProvider>
     )
@@ -96,12 +92,11 @@ function toolCardElement(
 function renderTool(
     block: ToolCallBlock,
     options: {
-        displayMode?: 'card' | 'activity-row'
         locale?: 'en' | 'vi-VN' | 'zh-CN'
     } = {}
 ) {
     localStorage.setItem('hapi-lang', options.locale ?? 'en')
-    return render(toolCardElement(block, options.displayMode))
+    return render(toolCardElement(block))
 }
 
 describe('ToolCard presentation hierarchy', () => {
@@ -196,38 +191,6 @@ describe('ToolCard presentation hierarchy', () => {
         )
     })
 
-    it('renders activity-row mode without an individual card frame', () => {
-        const { container } = renderTool(makeToolBlock('Read'), {
-            displayMode: 'activity-row'
-        })
-        expect(container.querySelector('[data-tool-display="activity-row"]')).not.toBeNull()
-        expect(screen.getByRole('button', { name: /read/i })).toHaveClass(
-            'hover:bg-[var(--app-subtle-bg)]',
-            'focus-visible:ring-2'
-        )
-        expect(screen.getByLabelText('Completed')).toBeVisible()
-        expect(container.querySelector('time')).toHaveClass('hidden', 'sm:block')
-    })
-
-    it('truncates long activity detail instead of widening the row', () => {
-        const command = 'x'.repeat(400)
-        renderTool(makeToolBlock('CodexBash', { command }), {
-            displayMode: 'activity-row'
-        })
-
-        expect(screen.getByText(command)).toHaveClass('min-w-0', 'truncate')
-    })
-
-    it('activity-row mode opens the unchanged details dialog', async () => {
-        renderTool(makeToolBlock('Read', { file_path: '/tmp/example.ts' }), {
-            displayMode: 'activity-row'
-        })
-
-        fireEvent.click(screen.getByRole('button', { name: /example\.ts/i }))
-
-        expect(screen.getByRole('dialog')).toHaveTextContent('/tmp/example.ts')
-    })
-
     it('shows explicit artifact actions', () => {
         const { rerender } = renderTool(makeToolBlock('update_plan', {
             plan: [{ step: 'Ship', status: 'pending' }]
@@ -252,13 +215,13 @@ describe('ToolCard presentation hierarchy', () => {
         expect(screen.getByText('plan.md')).toBeInTheDocument()
     })
 
-    it('opens affected files and result from an Apply changes row', () => {
+    it('opens affected files and result from an Apply changes card', () => {
         renderTool(makeToolBlock(
             'CodexPatch',
             arrayPatchPayload,
             undefined,
             { result: { success: true } }
-        ), { displayMode: 'activity-row' })
+        ))
 
         fireEvent.click(screen.getByRole('button', { name: /apply changes/i }))
 
@@ -267,24 +230,15 @@ describe('ToolCard presentation hierarchy', () => {
         expect(dialog).toHaveTextContent('Result')
     })
 
-    it('uses the selected locale for activity title, time, state, dialog, and result copy', () => {
+    it('uses the selected locale for card title, dialog, and result copy', () => {
         renderTool(
             makeToolBlock('CodexPatch', arrayPatchPayload, undefined, {
                 result: { success: true }
             }),
-            { displayMode: 'activity-row', locale: 'vi-VN' }
+            { locale: 'vi-VN' }
         )
 
-        const row = screen.getByRole('button', { name: /Áp dụng thay đổi/i })
-        expect(row).toHaveTextContent(
-            new Date(1000).toLocaleTimeString('vi-VN', {
-                hour: 'numeric',
-                minute: '2-digit'
-            })
-        )
-        expect(screen.getByLabelText('Đã hoàn tất')).toBeVisible()
-
-        fireEvent.click(row)
+        fireEvent.click(screen.getByRole('button', { name: /Áp dụng thay đổi/i }))
 
         const dialog = screen.getByRole('dialog')
         expect(dialog).toHaveTextContent('Áp dụng thay đổi')
@@ -371,7 +325,6 @@ describe('ToolCard presentation hierarchy', () => {
             'tool.openPlan',
             'tool.reviewDiff',
             'tool.permissionRequired',
-            'tool.backgroundActions',
             'tool.patchDetailsUnavailable',
             'tool.title.applyChanges',
             'tool.title.terminal',

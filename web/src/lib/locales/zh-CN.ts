@@ -235,7 +235,6 @@ export default {
   'tool.exitPlan': '退出计划模式',
   'tool.patch': '补丁',
   'tool.details': '详情',
-  'tool.backgroundActions': '{count} 个后台操作',
   'tool.patchDetailsUnavailable': '补丁详情不可用',
   'tool.title.task': '任务',
   'tool.title.team': '团队：{name}',

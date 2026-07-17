@@ -8,7 +8,6 @@ import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
 import type { HappyChatMessageMetadata } from '@/lib/assistant-runtime'
 import { getAssistantCopyText } from '@/components/AssistantChat/messages/assistantCopyText'
 import { getConversationMessageAnchorId } from '@/chat/outline'
-import { RoutineActivityGroup } from '@/components/ToolCard/RoutineActivityGroup'
 
 const TOOL_COMPONENTS = {
     Fallback: HappyToolMessage
@@ -33,13 +32,6 @@ export function HappyAssistantMessage() {
         if (custom?.kind !== 'cli-output') return ''
         return message.content.find((part) => part.type === 'text')?.text ?? ''
     })
-    const activityBlocks = useAssistantState(({ message }) => {
-        const custom = message.metadata.custom as Partial<HappyChatMessageMetadata> | undefined
-        if (custom?.kind !== 'activity-group') return null
-        return Array.isArray(custom.activityBlocks) && custom.activityBlocks.length > 0
-            ? custom.activityBlocks
-            : null
-    })
     const toolOnly = useAssistantState(({ message }) => {
         if (message.role !== 'assistant') return false
         const parts = message.content
@@ -52,17 +44,6 @@ export function HappyAssistantMessage() {
     const rootClass = toolOnly
         ? 'py-1 min-w-0 max-w-full overflow-x-hidden'
         : 'px-1 min-w-0 max-w-full overflow-x-hidden'
-
-    if (activityBlocks) {
-        return (
-            <MessagePrimitive.Root
-                id={getConversationMessageAnchorId(messageId)}
-                className="scroll-mt-4 min-w-0 max-w-full overflow-x-hidden"
-            >
-                <RoutineActivityGroup blocks={activityBlocks} />
-            </MessagePrimitive.Root>
-        )
-    }
 
     if (isCliOutput) {
         return (

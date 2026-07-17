@@ -6,13 +6,9 @@ import { renderEventLabel } from '@/chat/presentation'
 import type { ChatBlock, CliOutputBlock } from '@/chat/types'
 import type { AgentEvent, TeamMentionBlock, ToolCallBlock } from '@/chat/types'
 import type { AttachmentMetadata, MessageStatus as HappyMessageStatus, Session } from '@/types/api'
-import {
-    groupRoutineActivities,
-    type HappyDisplayItem
-} from '@/components/ToolCard/activityGrouping'
 
 export type HappyChatMessageMetadata = {
-    kind: 'user' | 'assistant' | 'tool' | 'event' | 'cli-output' | 'team-mention' | 'activity-group'
+    kind: 'user' | 'assistant' | 'tool' | 'event' | 'cli-output' | 'team-mention'
     status?: HappyMessageStatus
     localId?: string | null
     originalText?: string
@@ -21,25 +17,9 @@ export type HappyChatMessageMetadata = {
     source?: CliOutputBlock['source']
     attachments?: AttachmentMetadata[]
     teamMention?: TeamMentionBlock
-    activityBlocks?: ToolCallBlock[]
 }
 
-export function toThreadMessageLike(block: HappyDisplayItem): ThreadMessageLike {
-    if (block.kind === 'routine-activity-group') {
-        return {
-            role: 'assistant',
-            id: block.id,
-            createdAt: new Date(block.createdAt),
-            content: [{ type: 'text', text: '' }],
-            metadata: {
-                custom: {
-                    kind: 'activity-group',
-                    activityBlocks: block.blocks
-                } satisfies HappyChatMessageMetadata
-            }
-        }
-    }
-
+function toThreadMessageLike(block: ChatBlock): ThreadMessageLike {
     if (block.kind === 'team-mention') {
         const messageId = `team-mention:${block.id}`
         return {
@@ -217,14 +197,9 @@ export function useHappyRuntime(props: {
 }) {
     // Use cached message converter for performance optimization
     // This prevents re-converting all messages on every render
-    const displayItems = useMemo(
-        () => groupRoutineActivities(props.blocks),
-        [props.blocks]
-    )
-
-    const convertedMessages = useExternalMessageConverter<HappyDisplayItem>({
+    const convertedMessages = useExternalMessageConverter<ChatBlock>({
         callback: toThreadMessageLike,
-        messages: displayItems,
+        messages: props.blocks as ChatBlock[],
         isRunning: props.session.thinking,
     })
 

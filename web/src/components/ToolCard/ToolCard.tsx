@@ -33,16 +33,6 @@ const SURFACE_CLASS = {
     permission: 'border-[var(--app-tool-attention-border)] bg-[var(--app-tool-attention-bg)]'
 } as const
 
-function formatActivityTime(value: number, locale: string): string {
-    const timestamp = value < 1_000_000_000_000 ? value * 1000 : value
-    const date = new Date(timestamp)
-    if (Number.isNaN(date.getTime())) return ''
-    return date.toLocaleTimeString(locale, {
-        hour: 'numeric',
-        minute: '2-digit'
-    })
-}
-
 const ICON_CLASS = {
     neutral: 'h-3.5 w-3.5 text-[var(--app-hint)]',
     plan: 'h-7 w-7 rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-tool-plan-accent)]',
@@ -283,11 +273,10 @@ type ToolCardProps = {
     disabled: boolean
     onDone: () => void
     block: ToolCallBlock
-    displayMode?: 'card' | 'activity-row'
 }
 
 function ToolCardInner(props: ToolCardProps) {
-    const { t, locale } = useTranslation()
+    const { t } = useTranslation()
     const presentation = useMemo(() => getToolPresentation({
         toolName: props.block.tool.name,
         input: props.block.tool.input,
@@ -383,52 +372,6 @@ function ToolCardInner(props: ToolCardProps) {
             </div>
         </DialogContent>
     )
-
-    if (props.displayMode === 'activity-row') {
-        return (
-            <div data-tool-display="activity-row" className="min-w-0">
-                <Dialog>
-                    <DialogTrigger asChild>
-                        <button
-                            type="button"
-                            className={cn(
-                                'grid min-h-9 w-full grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-2 rounded-md px-2 text-left transition-colors hover:bg-[var(--app-subtle-bg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)] sm:grid-cols-[3.5rem_auto_minmax(0,1fr)_auto_auto]',
-                                suppressFocusRing && 'focus-visible:ring-0'
-                            )}
-                            onPointerDown={onTriggerPointerDown}
-                            onKeyDown={onTriggerKeyDown}
-                            onBlur={onTriggerBlur}
-                        >
-                            <time className="hidden font-mono text-[10px] text-[var(--app-hint)] sm:block">
-                                {formatActivityTime(props.block.createdAt, locale)}
-                            </time>
-                            <span className="flex h-4 w-4 items-center justify-center text-[var(--app-hint)]">
-                                {presentation.icon}
-                            </span>
-                            <span className="min-w-0 sm:grid sm:grid-cols-[5rem_minmax(0,1fr)] sm:items-center sm:gap-2">
-                                <span className="block truncate text-xs font-medium text-[var(--app-fg)]">
-                                    {toolTitle}
-                                </span>
-                                <span className="block min-w-0 truncate font-mono text-xs text-[var(--app-hint)]">
-                                    {subtitle ?? ''}
-                                </span>
-                            </span>
-                            <span
-                                className={stateColor}
-                                aria-label={t(`tool.status.${props.block.tool.state}`)}
-                            >
-                                <StatusIcon state={props.block.tool.state} />
-                            </span>
-                            <span aria-hidden="true" className="text-[var(--app-hint)]">
-                                <DetailsIcon />
-                            </span>
-                        </button>
-                    </DialogTrigger>
-                    {detailsDialog}
-                </Dialog>
-            </div>
-        )
-    }
 
     const header = (
         <div className="flex flex-col gap-1">

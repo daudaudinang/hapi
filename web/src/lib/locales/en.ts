@@ -236,7 +236,6 @@ export default {
   'tool.exitPlan': 'Exit Plan Mode',
   'tool.patch': 'Patch',
   'tool.details': 'Details',
-  'tool.backgroundActions': '{count} background actions',
   'tool.patchDetailsUnavailable': 'Patch details unavailable',
   'tool.title.task': 'Task',
   'tool.title.team': 'Team: {name}',
