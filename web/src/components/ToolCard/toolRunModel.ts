@@ -1,13 +1,15 @@
-import type { ToolCallBlock } from '@/chat/types'
+import type { AgentReasoningBlock, ToolCallBlock } from '@/chat/types'
 import {
     extractCodexBashDisplay,
     extractStdoutStderr,
     extractTextFromResult
 } from '@/components/ToolCard/views/_results'
+import { isAgentReasoningBlock, reasoningToolCallId } from '@/lib/reasoningPart'
 import { isObject } from '@hapi/protocol'
 import { parsePatch } from 'diff'
 
 const GROUPABLE_TOOL_NAMES = new Set([
+    'CodexReasoning',
     'Read',
     'Grep',
     'Glob',
@@ -23,6 +25,39 @@ export type ToolRunPart = {
     type?: string
     artifact?: unknown
 }
+
+export type ActivityPart = {
+    type?: string
+    toolCallId?: string
+    artifact?: unknown
+    isFinalRunningPart?: boolean
+}
+
+export type ActivityEntry =
+    | {
+        kind: 'reasoning'
+        block: AgentReasoningBlock
+        isStreaming: boolean
+    }
+    | {
+        kind: 'tool'
+        block: ToolCallBlock
+    }
+
+export type ActivitySegment =
+    | {
+        kind: 'group'
+        id: string
+        startOffset: number
+        endOffset: number
+        entries: ActivityEntry[]
+    }
+    | {
+        kind: 'single'
+        startOffset: number
+        endOffset: number
+        entry: ActivityEntry | null
+    }
 
 export type ToolRunSegment =
     | {
@@ -104,6 +139,74 @@ export function partitionToolRunParts(parts: readonly ToolRunPart[]): ToolRunSeg
             startOffset: offset,
             endOffset: offset,
             block
+        })
+    })
+    flushRun()
+    return segments
+}
+
+function activityEntryFromPart(part: ActivityPart): ActivityEntry | null {
+    if (part.type !== 'tool-call') return null
+
+    if (isAgentReasoningBlock(part.artifact)) {
+        return part.toolCallId === reasoningToolCallId(part.artifact.id)
+            ? {
+                kind: 'reasoning',
+                block: part.artifact,
+                isStreaming: part.isFinalRunningPart === true
+            }
+            : null
+    }
+
+    if (!isToolCallBlock(part.artifact) || !isGroupableToolBlock(part.artifact)) return null
+    return { kind: 'tool', block: part.artifact }
+}
+
+function activityGroupId(first: ActivityEntry): string {
+    return `activity-group:${first.block.id}`
+}
+
+export function partitionActivityParts(parts: readonly ActivityPart[]): ActivitySegment[] {
+    const segments: ActivitySegment[] = []
+    let runStart = -1
+    let runEntries: ActivityEntry[] = []
+
+    const flushRun = () => {
+        if (runEntries.length === 0) return
+
+        const endOffset = runStart + runEntries.length - 1
+        segments.push(runEntries.length >= 2
+            ? {
+                kind: 'group',
+                id: activityGroupId(runEntries[0]!),
+                startOffset: runStart,
+                endOffset,
+                entries: runEntries
+            }
+            : {
+                kind: 'single',
+                startOffset: runStart,
+                endOffset,
+                entry: runEntries[0]
+            })
+        runStart = -1
+        runEntries = []
+    }
+
+    parts.forEach((part, offset) => {
+        const entry = activityEntryFromPart(part)
+        if (entry) {
+            if (runEntries.length === 0) runStart = offset
+            runEntries.push(entry)
+            return
+        }
+
+        flushRun()
+        segments.push({
+            kind: 'single',
+            startOffset: offset,
+            endOffset: offset,
+            entry: null
         })
     })
     flushRun()
@@ -196,4 +299,46 @@ export function getToolRunDurationMs(
     const end = running ? now : Math.max(...(completions as number[]))
     const duration = end - start
     return Number.isFinite(duration) && duration >= 0 ? duration : null
+}
+
+function isExactTimestamp(value: number | null): value is number {
+    return value !== null && Number.isFinite(value) && value >= 0
+}
+
+export function isActivityRunning(entry: ActivityEntry): boolean {
+    if (entry.kind === 'reasoning') return entry.isStreaming
+    return entry.block.tool.state === 'running' || entry.block.tool.state === 'pending'
+}
+
+export function getActivityDurationMs(entry: ActivityEntry, now: number): number | null {
+    if (entry.kind === 'reasoning') return null
+
+    const start = entry.block.tool.startedAt
+    if (!isExactTimestamp(start)) return null
+
+    const end = isActivityRunning(entry) ? now : entry.block.tool.completedAt
+    if (!isExactTimestamp(end)) return null
+
+    const duration = end - start
+    return Number.isFinite(duration) && duration >= 0 ? duration : null
+}
+
+export function getActivityGroupDurationMs(entries: readonly ActivityEntry[]): number | null {
+    if (entries.length === 0 || entries.some(isActivityRunning)) return null
+
+    const first = entries[0]
+    const last = entries[entries.length - 1]
+    if (first?.kind !== 'tool' || last?.kind !== 'tool') return null
+
+    const start = first.block.tool.startedAt
+    const end = last.block.tool.completedAt
+    if (!isExactTimestamp(start) || !isExactTimestamp(end)) return null
+
+    const duration = end - start
+    return Number.isFinite(duration) && duration >= 0 ? duration : null
+}
+
+export function formatActivityDuration(durationMs: number): string {
+    if (durationMs > 0 && durationMs < 100) return '<0.1s'
+    return `${(durationMs / 1000).toFixed(1)}s`
 }

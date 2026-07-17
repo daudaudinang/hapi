@@ -1,13 +1,22 @@
 import { describe, expect, it } from 'vitest'
-import type { ChatBlock, ToolCallBlock, ToolPermission } from '@/chat/types'
+import type {
+    AgentReasoningBlock,
+    ChatBlock,
+    ToolCallBlock,
+    ToolPermission
+} from '@/chat/types'
 import {
+    formatActivityDuration,
+    getActivityDurationMs,
+    getActivityGroupDurationMs,
     getToolExpansionKind,
-    getToolRunDurationMs,
-    isGroupableToolBlock,
+    isActivityRunning,
     isToolCallBlock,
-    partitionToolRunParts,
-    type ToolRunPart
+    partitionActivityParts,
+    type ActivityEntry,
+    type ActivityPart
 } from '@/components/ToolCard/toolRunModel'
+import { reasoningToolCallId } from '@/lib/reasoningPart'
 
 type BlockOptions = {
     input?: unknown
@@ -41,8 +50,43 @@ function block(name: string, options: BlockOptions = {}): ToolCallBlock {
     }
 }
 
-function part(artifact: unknown): ToolRunPart {
-    return { type: 'tool-call', artifact }
+function part(artifact: unknown, options: Partial<ActivityPart> = {}): ActivityPart {
+    return { type: 'tool-call', artifact, ...options }
+}
+
+function reasoningBlock(id = 'reasoning-1'): AgentReasoningBlock {
+    return {
+        kind: 'agent-reasoning',
+        id,
+        localId: null,
+        createdAt: 1000,
+        text: `Reasoning ${id}`
+    }
+}
+
+function reasoningPart(
+    reasoning = reasoningBlock(),
+    options: Partial<ActivityPart> = {}
+): ActivityPart {
+    return part(reasoning, {
+        toolCallId: reasoningToolCallId(reasoning.id),
+        ...options
+    })
+}
+
+function toolEntry(name: string, options: BlockOptions = {}): ActivityEntry {
+    return { kind: 'tool', block: block(name, options) }
+}
+
+function reasoningEntry(options: {
+    id?: string
+    isStreaming?: boolean
+} = {}): ActivityEntry {
+    return {
+        kind: 'reasoning',
+        block: reasoningBlock(options.id),
+        isStreaming: options.isStreaming ?? false
+    }
 }
 
 const permission = (status: ToolPermission['status']): ToolPermission => ({
@@ -50,42 +94,34 @@ const permission = (status: ToolPermission['status']): ToolPermission => ({
     status
 })
 
-describe('tool run partitioning', () => {
-    it('groups allowlisted runs and preserves every offset', () => {
+describe('activity partitioning', () => {
+    it('groups only the exact reasoning and routine-tool allowlist', () => {
         const parts = [
+            reasoningPart(),
+            part(block('CodexReasoning')),
             part(block('Read')),
-            part(block('Bash')),
-            part(block('Agent')),
             part(block('Grep')),
-            part(block('Glob'))
+            part(block('Glob')),
+            part(block('Bash')),
+            part(block('CodexBash')),
+            part(block('CodexPatch')),
+            part(block('CodexDiff'))
         ]
 
-        const segments = partitionToolRunParts(parts)
+        const segments = partitionActivityParts(parts)
 
-        expect(segments.map((item) => [item.kind, item.startOffset, item.endOffset])).toEqual([
-            ['group', 0, 1],
-            ['single', 2, 2],
-            ['group', 3, 4]
-        ])
-        expect(segments.flatMap((item) =>
-            Array.from(
-                { length: item.endOffset - item.startOffset + 1 },
-                (_, index) => item.startOffset + index
-            )
-        )).toEqual([0, 1, 2, 3, 4])
-        expect(segments.filter((item) => item.kind === 'group').map((item) => item.id)).toEqual([
-            'tool-run:block-Read',
-            'tool-run:block-Grep'
-        ])
-    })
-
-    it.each(['Agent', 'Task', 'update_plan', 'SendMessage', 'mcp__server__tool'])(
-        'keeps %s outside groups',
-        (name) => expect(isGroupableToolBlock(block(name))).toBe(false)
-    )
-
-    it('allows only the exact safe tool allowlist', () => {
-        expect([
+        expect(segments).toHaveLength(1)
+        expect(segments[0]).toMatchObject({
+            kind: 'group',
+            id: 'activity-group:reasoning-1',
+            startOffset: 0,
+            endOffset: 8
+        })
+        expect(segments[0]?.kind === 'group' && segments[0].entries.map((entry) =>
+            entry.kind === 'reasoning' ? 'generic-reasoning' : entry.block.tool.name
+        )).toEqual([
+            'generic-reasoning',
+            'CodexReasoning',
             'Read',
             'Grep',
             'Glob',
@@ -93,32 +129,145 @@ describe('tool run partitioning', () => {
             'CodexBash',
             'CodexPatch',
             'CodexDiff'
-        ].every((name) => isGroupableToolBlock(block(name)))).toBe(true)
-        expect(isGroupableToolBlock(block('read'))).toBe(false)
+        ])
     })
 
-    it('treats permission, children and error as hard boundaries', () => {
-        expect(isGroupableToolBlock(block('Read', { permission: permission('pending') }))).toBe(false)
-        expect(isGroupableToolBlock(block('Read', { permission: permission('approved') }))).toBe(false)
-        expect(isGroupableToolBlock(block('Read', { children: [block('Grep')] }))).toBe(false)
-        expect(isGroupableToolBlock(block('Read', { state: 'error' }))).toBe(false)
+    it.each([
+        ['plan', block('update_plan')],
+        ['todo', block('TodoWrite')],
+        ['exit-plan', block('ExitPlanMode')],
+        ['permission-pending', block('Read', { permission: permission('pending') })],
+        ['permission-approved', block('Read', { permission: permission('approved') })],
+        ['error', block('Read', { state: 'error' })],
+        ['children', block('Read', { children: [block('Grep')] })],
+        ['Task', block('Task')],
+        ['Agent', block('Agent')],
+        ['Skill', block('Skill')],
+        ['MCP', block('mcp__server__tool')],
+        ['unknown', block('UnknownTool')],
+        ['HapiCliOutput', block('HapiCliOutput')],
+        ['provider HapiReasoning collision', block('HapiReasoning')],
+        ['case mismatch', block('read')]
+    ])('keeps %s as a hard boundary', (_label, artifact) => {
+        const segments = partitionActivityParts([
+            part(block('Read')),
+            part(artifact),
+            part(block('Bash'))
+        ])
+
+        expect(segments.map((segment) => [
+            segment.kind,
+            segment.startOffset,
+            segment.endOffset,
+            segment.kind === 'single' ? segment.entry : undefined
+        ])).toEqual([
+            ['single', 0, 0, expect.objectContaining({ kind: 'tool' })],
+            ['single', 1, 1, null],
+            ['single', 2, 2, expect.objectContaining({ kind: 'tool' })]
+        ])
     })
 
-    it('keeps non-tool and CLI offsets lossless', () => {
-        const parts = [part(block('Read')), part({ kind: 'cli-output' }), part(block('Bash'))]
-
-        const segments = partitionToolRunParts(parts)
+    it.each([
+        ['null artifact', null],
+        ['missing artifact', undefined],
+        ['text-like artifact', {
+            kind: 'agent-text',
+            id: 'text-1',
+            localId: null,
+            createdAt: 1000,
+            text: 'boundary'
+        }],
+        ['CLI artifact', {
+            kind: 'cli-output',
+            id: 'cli-1',
+            localId: null,
+            createdAt: 1000,
+            text: 'boundary',
+            source: 'assistant'
+        }]
+    ])('keeps %s as a lossless single', (_label, artifact) => {
+        const segments = partitionActivityParts([
+            part(block('Read')),
+            part(artifact),
+            part(block('Bash'))
+        ])
 
         expect(segments.map((item) => [item.kind, item.startOffset, item.endOffset])).toEqual([
             ['single', 0, 0],
             ['single', 1, 1],
             ['single', 2, 2]
         ])
-        expect(segments.map((item) => item.kind === 'single' ? item.block?.tool.name ?? null : null)).toEqual([
-            'Read',
-            null,
-            'Bash'
+    })
+
+    it.each([
+        ['missing text', (() => {
+            const value = { ...reasoningBlock() } as Record<string, unknown>
+            delete value.text
+            return value
+        })()],
+        ['non-finite createdAt', { ...reasoningBlock(), createdAt: Number.NaN }],
+        ['invalid localId', { ...reasoningBlock(), localId: 42 }],
+        ['wrong kind', { ...reasoningBlock(), kind: 'agent-text' }]
+    ])('rejects malformed HapiReasoning: %s', (_label, artifact) => {
+        const segments = partitionActivityParts([
+            reasoningPart(),
+            part(artifact, { toolCallId: reasoningToolCallId('reasoning-1') })
         ])
+
+        expect(segments.map((segment) => segment.kind)).toEqual(['single', 'single'])
+        expect(segments[1]).toMatchObject({ kind: 'single', entry: null })
+    })
+
+    it('rejects a valid reasoning artifact when its stable tool-call ID does not match', () => {
+        const segments = partitionActivityParts([
+            reasoningPart(reasoningBlock('reasoning-1')),
+            reasoningPart(reasoningBlock('reasoning-2'), { toolCallId: 'reasoning:wrong' })
+        ])
+
+        expect(segments.map((segment) => segment.kind)).toEqual(['single', 'single'])
+        expect(segments[1]).toMatchObject({ kind: 'single', entry: null })
+    })
+
+    it('captures presentation-only streaming state for generic reasoning', () => {
+        const segments = partitionActivityParts([
+            reasoningPart(reasoningBlock('streaming'), { isFinalRunningPart: true })
+        ])
+
+        expect(segments[0]).toMatchObject({
+            kind: 'single',
+            entry: {
+                kind: 'reasoning',
+                block: { id: 'streaming' },
+                isStreaming: true
+            }
+        })
+    })
+
+    it('preserves every offset exactly once across groups and boundaries', () => {
+        const parts = [
+            reasoningPart(reasoningBlock('reasoning-offset')),
+            part(block('Read')),
+            part(block('update_plan')),
+            part(block('CodexBash')),
+            part(block('CodexDiff'))
+        ]
+
+        const segments = partitionActivityParts(parts)
+
+        expect(segments.map((segment) => [
+            segment.kind,
+            segment.startOffset,
+            segment.endOffset,
+            segment.kind === 'group' ? segment.id : null
+        ])).toEqual([
+            ['group', 0, 1, 'activity-group:reasoning-offset'],
+            ['single', 2, 2, null],
+            ['group', 3, 4, 'activity-group:block-CodexBash']
+        ])
+        expect(segments.flatMap((segment) => Array.from(
+            { length: segment.endOffset - segment.startOffset + 1 },
+            (_, index) => segment.startOffset + index
+        ))).toEqual(parts.map((_, offset) => offset))
     })
 
     it('recognizes only structurally valid tool-call blocks', () => {
@@ -227,33 +376,112 @@ describe('tool expansion', () => {
     })
 })
 
-describe('tool run duration', () => {
-    it('uses injected now when any block is still running', () => {
-        expect(getToolRunDurationMs([
-            block('Read', { startedAt: 1000, completedAt: 2000 }),
-            block('Bash', { state: 'running', startedAt: 1500, completedAt: null })
-        ], 4000)).toBe(3000)
-        expect(getToolRunDurationMs([
-            block('Read', { state: 'pending', startedAt: 2000, completedAt: null })
-        ], 4500)).toBe(2500)
+describe('activity timing', () => {
+    it('uses exact completed tool timestamps', () => {
+        expect(getActivityDurationMs(toolEntry('Read', {
+            startedAt: 1000,
+            completedAt: 2000
+        }), 9000)).toBe(1000)
     })
 
-    it('uses the earliest start and latest completion for completed blocks', () => {
-        expect(getToolRunDurationMs([
-            block('Read', { startedAt: 1500, completedAt: 2500 }),
-            block('Bash', { startedAt: 1000, completedAt: 3000 })
-        ], 9000)).toBe(2000)
+    it('uses injected now while a tool runs and freezes on exact completion', () => {
+        expect(getActivityDurationMs(toolEntry('Bash', {
+            state: 'running',
+            startedAt: 1000,
+            completedAt: null
+        }), 3500)).toBe(2500)
+        expect(getActivityDurationMs(toolEntry('Bash', {
+            state: 'completed',
+            startedAt: 1000,
+            completedAt: 2800
+        }), 9000)).toBe(1800)
     })
 
-    it('rejects missing, negative and non-finite timestamps or durations', () => {
-        expect(getToolRunDurationMs([block('Read', { startedAt: null })], 4000)).toBeNull()
-        expect(getToolRunDurationMs([block('Read', { completedAt: null })], 4000)).toBeNull()
-        expect(getToolRunDurationMs([block('Read', { startedAt: -1 })], 4000)).toBeNull()
-        expect(getToolRunDurationMs([block('Read', { completedAt: Number.POSITIVE_INFINITY })], 4000)).toBeNull()
-        expect(getToolRunDurationMs([block('Read', { startedAt: 4000, completedAt: 3000 })], 4000)).toBeNull()
-        expect(getToolRunDurationMs([
-            block('Read', { state: 'running', startedAt: 1000, completedAt: null })
-        ], Number.NaN)).toBeNull()
-        expect(getToolRunDurationMs([], 4000)).toBeNull()
+    it('does not invent an item duration for generic reasoning', () => {
+        expect(getActivityDurationMs(reasoningEntry(), 4000)).toBeNull()
+    })
+
+    it('reports running state from tool state and reasoning presentation state', () => {
+        expect(isActivityRunning(toolEntry('Read', { state: 'pending' }))).toBe(true)
+        expect(isActivityRunning(toolEntry('Read', { state: 'running' }))).toBe(true)
+        expect(isActivityRunning(toolEntry('Read', { state: 'completed' }))).toBe(false)
+        expect(isActivityRunning(reasoningEntry({ isStreaming: true }))).toBe(true)
+        expect(isActivityRunning(reasoningEntry())).toBe(false)
+    })
+
+    it('uses only the first start and last completion for the group total', () => {
+        expect(getActivityGroupDurationMs([
+            toolEntry('Read', { startedAt: 1000, completedAt: 2000 }),
+            toolEntry('Grep', { startedAt: 500, completedAt: 6000 }),
+            toolEntry('Bash', { startedAt: 2500, completedAt: 4000 })
+        ])).toBe(3000)
+    })
+
+    it('allows generic reasoning in the middle of exact tool boundaries', () => {
+        expect(getActivityGroupDurationMs([
+            toolEntry('Read', { startedAt: 1000, completedAt: 2000 }),
+            reasoningEntry(),
+            toolEntry('Bash', { startedAt: 2500, completedAt: 4000 })
+        ])).toBe(3000)
+    })
+
+    it('hides the group total when generic reasoning is either boundary', () => {
+        expect(getActivityGroupDurationMs([
+            reasoningEntry(),
+            toolEntry('Read', { startedAt: 1000, completedAt: 2000 })
+        ])).toBeNull()
+        expect(getActivityGroupDurationMs([
+            toolEntry('Read', { startedAt: 1000, completedAt: 2000 }),
+            reasoningEntry()
+        ])).toBeNull()
+    })
+
+    it('hides the group total while any activity is running', () => {
+        expect(getActivityGroupDurationMs([
+            toolEntry('Read', { startedAt: 1000, completedAt: 2000 }),
+            toolEntry('Bash', { state: 'running', startedAt: 2000, completedAt: null })
+        ])).toBeNull()
+        expect(getActivityGroupDurationMs([
+            toolEntry('Read', { startedAt: 1000, completedAt: 2000 }),
+            reasoningEntry({ isStreaming: true }),
+            toolEntry('Bash', { startedAt: 2000, completedAt: 3000 })
+        ])).toBeNull()
+    })
+
+    it.each([
+        ['null start', { startedAt: null }],
+        ['NaN start', { startedAt: Number.NaN }],
+        ['infinite completion', { completedAt: Number.POSITIVE_INFINITY }],
+        ['negative start', { startedAt: -1 }],
+        ['completion before start', { startedAt: 2000, completedAt: 1000 }]
+    ] satisfies [string, BlockOptions][])('hides invalid item duration for %s', (_label, options) => {
+        expect(getActivityDurationMs(toolEntry('Read', options), 4000)).toBeNull()
+    })
+
+    it('hides invalid running duration and invalid group boundaries', () => {
+        expect(getActivityDurationMs(toolEntry('Read', {
+            state: 'running',
+            startedAt: 1000,
+            completedAt: null
+        }), Number.NaN)).toBeNull()
+        expect(getActivityGroupDurationMs([])).toBeNull()
+        expect(getActivityGroupDurationMs([
+            toolEntry('Read', { startedAt: null, completedAt: 2000 }),
+            toolEntry('Bash', { startedAt: 2000, completedAt: 3000 })
+        ])).toBeNull()
+        expect(getActivityGroupDurationMs([
+            toolEntry('Read', { startedAt: 3000, completedAt: 3500 }),
+            toolEntry('Bash', { startedAt: 1000, completedAt: 2000 })
+        ])).toBeNull()
+    })
+
+    it.each([
+        [0, '0.0s'],
+        [1, '<0.1s'],
+        [99, '<0.1s'],
+        [700, '0.7s'],
+        [12400, '12.4s']
+    ])('formats %dms as %s', (durationMs, expected) => {
+        expect(formatActivityDuration(durationMs)).toBe(expected)
     })
 })
