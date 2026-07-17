@@ -236,6 +236,7 @@ export default {
   'tool.exitPlan': 'Exit Plan Mode',
   'tool.patch': 'Patch',
   'tool.details': 'Details',
+  'tool.backgroundActions': '{count} background actions',
   'tool.openPlan': 'Open plan',
   'tool.reviewDiff': 'Review diff',
   'tool.permissionRequired': 'Permission required',

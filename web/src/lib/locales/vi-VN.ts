@@ -230,6 +230,7 @@ export default {
   'tool.exitPlan': 'Thoát chế độ lập kế hoạch',
   'tool.patch': 'Bản vá',
   'tool.details': 'Chi tiết',
+  'tool.backgroundActions': '{count} tác vụ nền',
   'tool.openPlan': 'Mở kế hoạch',
   'tool.reviewDiff': 'Xem thay đổi',
   'tool.permissionRequired': 'Cần cấp quyền',

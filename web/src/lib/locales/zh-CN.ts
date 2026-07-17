@@ -235,6 +235,7 @@ export default {
   'tool.exitPlan': '退出计划模式',
   'tool.patch': '补丁',
   'tool.details': '详情',
+  'tool.backgroundActions': '{count} 个后台操作',
   'tool.openPlan': '打开计划',
   'tool.reviewDiff': '查看差异',
   'tool.permissionRequired': '需要授权',
