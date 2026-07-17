@@ -19,7 +19,9 @@ vi.mock('@/components/ToolCard/RequestUserInputFooter', () => ({
     RequestUserInputFooter: () => null
 }))
 vi.mock('@/components/CodeBlock', () => ({
-    CodeBlock: ({ code }: { code: string }) => <pre>{code}</pre>
+    CodeBlock: ({ code, collapseLongContent }: { code: string; collapseLongContent?: boolean }) => (
+        <pre data-collapse-long-content={String(collapseLongContent === true)}>{code}</pre>
+    )
 }))
 
 const oneFileDiff = [
@@ -37,6 +39,14 @@ const arrayPatchPayload = {
         kind: { type: 'update', move_path: null },
         diff: '@@ -1 +1 @@\n-old\n+new'
     }]
+}
+
+const fourFilePatchPayload = {
+    changes: ['a.ts', 'b.ts', 'c.ts', 'd.ts'].map((path) => ({
+        path: `/workspace/src/${path}`,
+        kind: { type: 'update', move_path: null },
+        diff: '@@ -1 +1 @@\n-old\n+new'
+    }))
 }
 
 const pendingPermission = {
@@ -74,7 +84,7 @@ function makeToolBlock(
     }
 }
 
-function toolCardElement(block: ToolCallBlock) {
+function toolCardElement(block: ToolCallBlock, displayMode: 'card' | 'group-row' = 'card') {
     return (
         <I18nProvider>
             <ToolCard
@@ -84,6 +94,7 @@ function toolCardElement(block: ToolCallBlock) {
                 disabled={false}
                 onDone={vi.fn()}
                 block={block}
+                displayMode={displayMode}
             />
         </I18nProvider>
     )
@@ -93,10 +104,11 @@ function renderTool(
     block: ToolCallBlock,
     options: {
         locale?: 'en' | 'vi-VN' | 'zh-CN'
+        displayMode?: 'card' | 'group-row'
     } = {}
 ) {
     localStorage.setItem('hapi-lang', options.locale ?? 'en')
-    return render(toolCardElement(block))
+    return render(toolCardElement(block, options.displayMode))
 }
 
 describe('ToolCard presentation hierarchy', () => {
@@ -318,6 +330,72 @@ describe('ToolCard presentation hierarchy', () => {
         expect(trigger).toHaveAttribute('aria-controls')
     })
 
+    it('keeps no-output rows compact but preserves details dialog', () => {
+        const block = makeToolBlock('Read', { file_path: '/tmp/example.ts' })
+        const { container } = renderTool(block, { displayMode: 'group-row' })
+
+        expect(screen.queryByRole('button', { name: /show output/i })).not.toBeInTheDocument()
+        expect(container.querySelector('[data-tool-display="group-row"]')).toHaveAttribute('data-tool-block-id', block.id)
+        fireEvent.click(screen.getByRole('button', { name: /example\.ts/i }))
+        expect(screen.getByRole('dialog')).toHaveTextContent('/tmp/example.ts')
+    })
+
+    it('opens terminal output at full width with a 300px cap without internal truncation', () => {
+        const { container } = renderTool(makeToolBlock('Bash', { command: 'printf ready' }, undefined, {
+            result: { stdout: 'ready\n', stderr: '', exitCode: 0 }
+        }), { displayMode: 'group-row' })
+
+        fireEvent.click(screen.getByRole('button', { name: /show output/i }))
+        const output = container.querySelector('[data-tool-inline-output]')
+        expect(output).toHaveClass('w-full', 'max-h-[300px]', 'overflow-auto')
+        expect(output?.querySelector('pre')).toHaveAttribute('data-collapse-long-content', 'false')
+    })
+
+    it('shows at most three Apply Changes files inline and every file in its dialog without an empty accordion', () => {
+        renderTool(makeToolBlock('CodexPatch', fourFilePatchPayload), { displayMode: 'group-row' })
+
+        expect(screen.getByText('a.ts')).toBeInTheDocument()
+        expect(screen.getByText('b.ts')).toBeInTheDocument()
+        expect(screen.getByText('c.ts')).toBeInTheDocument()
+        expect(screen.queryByText('d.ts')).not.toBeInTheDocument()
+        expect(screen.getByText('+1 more files')).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /show output/i })).toBeNull()
+
+        fireEvent.click(screen.getByRole('button', { name: /apply changes/i }))
+        expect(screen.getByRole('dialog')).toHaveTextContent('d.ts')
+    })
+
+    it('expands valid Diff input and keeps malformed Diff dialog-only', () => {
+        const valid = renderTool(
+            makeToolBlock('CodexDiff', { unified_diff: oneFileDiff }),
+            { displayMode: 'group-row' }
+        )
+        const outputButton = screen.getByRole('button', { name: /show output/i })
+        expect(outputButton).toHaveAttribute('aria-expanded', 'false')
+        expect(outputButton).toHaveAttribute('aria-controls')
+        expect(valid.container.querySelector('button button')).toBeNull()
+        fireEvent.click(outputButton)
+        expect(screen.getByRole('region', { name: /diff output/i })).toHaveTextContent('old')
+        valid.unmount()
+
+        const malformed = renderTool(
+            makeToolBlock('CodexDiff', { unified_diff: 'not a diff' }),
+            { displayMode: 'group-row' }
+        )
+        expect(screen.queryByRole('button', { name: /show output/i })).toBeNull()
+        expect(malformed.container.querySelector('button button')).toBeNull()
+        fireEvent.click(screen.getByRole('button', { name: /diff/i }))
+        expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    it('adds lossless block ids without changing the standalone card surface', () => {
+        const block = makeToolBlock('Read')
+        const { container } = renderTool(block)
+
+        expect(container.querySelector('[data-tool-surface="neutral"]')).toHaveAttribute('data-tool-block-id', block.id)
+        expect(container.querySelector('[data-tool-display="group-row"]')).toBeNull()
+    })
+
     it('defines every new shell label in all supported locales', () => {
         const dictionaries: Array<Record<string, string>> = [en, viVN, zhCN]
         const keys = [
@@ -350,7 +428,10 @@ describe('ToolCard presentation hierarchy', () => {
             'tool.result.wallTime',
             'tool.detail.unknownSkill',
             'tool.detail.agentType',
-            'tool.detail.background'
+            'tool.detail.background',
+            'tool.group.showOutput',
+            'tool.group.hideOutput',
+            'tool.group.outputRegion'
         ]
 
         for (const dictionary of dictionaries) {

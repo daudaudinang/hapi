@@ -1,7 +1,7 @@
 import type { ToolCallBlock } from '@/chat/types'
 import type { ApiClient } from '@/api/client'
 import type { SessionMetadataSummary } from '@/types/api'
-import { memo, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { memo, useEffect, useId, useMemo, useState, type ReactNode } from 'react'
 import { isObject, safeStringify } from '@hapi/protocol'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { CodeBlock } from '@/components/CodeBlock'
@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils'
 import { useTranslation } from '@/lib/use-translation'
 import { TraceSection } from '@/components/ToolCard/trace'
 import { LockIcon } from '@/components/ToolCard/icons'
+import { getToolExpansionKind } from '@/components/ToolCard/toolRunModel'
 
 const ELAPSED_INTERVAL_MS = 1000
 
@@ -278,6 +279,10 @@ type ToolCardProps = {
 
 function ToolCardInner(props: ToolCardProps) {
     const { t } = useTranslation()
+    const displayMode = props.displayMode ?? 'card'
+    const expansionKind = getToolExpansionKind(props.block)
+    const [outputOpen, setOutputOpen] = useState(false)
+    const outputId = useId()
     const presentation = useMemo(() => getToolPresentation({
         toolName: props.block.tool.name,
         input: props.block.tool.input,
@@ -374,6 +379,89 @@ function ToolCardInner(props: ToolCardProps) {
         </DialogContent>
     )
 
+    if (displayMode === 'group-row') {
+        return (
+            <div
+                data-tool-display="group-row"
+                data-tool-block-id={props.block.id}
+                className="w-full min-w-0"
+            >
+                <div className="flex min-h-10 w-full min-w-0 items-center gap-1 rounded-md hover:bg-[var(--app-subtle-bg)]">
+                    <Dialog>
+                        <DialogTrigger asChild>
+                            <button
+                                type="button"
+                                className="flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]"
+                            >
+                                <span className="shrink-0 text-[var(--app-hint)]">
+                                    {presentation.icon}
+                                </span>
+                                <span className="shrink-0 text-xs font-medium">
+                                    {toolTitle}
+                                </span>
+                                <span className="min-w-0 flex-1 truncate font-mono text-xs text-[var(--app-hint)]">
+                                    {subtitle}
+                                </span>
+                                <span className={stateColor}>
+                                    <StatusIcon state={props.block.tool.state} />
+                                </span>
+                            </button>
+                        </DialogTrigger>
+                        {detailsDialog}
+                    </Dialog>
+                    {expansionKind ? (
+                        <button
+                            type="button"
+                            aria-expanded={outputOpen}
+                            aria-controls={outputId}
+                            aria-label={t(outputOpen ? 'tool.group.hideOutput' : 'tool.group.showOutput')}
+                            onClick={() => setOutputOpen((value) => !value)}
+                            className="grid min-h-10 min-w-10 shrink-0 place-items-center rounded-md text-[var(--app-hint)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]"
+                        >
+                            <DetailsIcon />
+                        </button>
+                    ) : null}
+                </div>
+                {toolName === 'CodexPatch' && FullToolView ? (
+                    <div data-tool-patch-files className="px-7 pb-1 text-xs text-[var(--app-hint)]">
+                        <FullToolView
+                            block={props.block}
+                            metadata={props.metadata}
+                            surface="inline"
+                            t={t}
+                        />
+                    </div>
+                ) : null}
+                {expansionKind ? (
+                    <div
+                        id={outputId}
+                        hidden={!outputOpen}
+                        role="region"
+                        aria-label={t('tool.group.outputRegion', { tool: toolTitle })}
+                        data-tool-inline-output
+                        className="w-full min-w-0 max-h-[300px] overflow-auto overscroll-contain"
+                    >
+                        {expansionKind === 'input' && FullToolView ? (
+                            <FullToolView
+                                block={props.block}
+                                metadata={props.metadata}
+                                surface="dialog"
+                                t={t}
+                            />
+                        ) : (
+                            <ResultToolView
+                                block={props.block}
+                                metadata={props.metadata}
+                                surface="dialog"
+                                t={t}
+                            />
+                        )}
+                    </div>
+                ) : null}
+            </div>
+        )
+    }
+
     const header = (
         <div className="flex flex-col gap-1">
             <div className="flex items-center justify-between gap-3">
@@ -430,6 +518,7 @@ function ToolCardInner(props: ToolCardProps) {
     return (
         <Card
             data-tool-surface={surfaceTone}
+            data-tool-block-id={props.block.id}
             className={cn('overflow-hidden border', SURFACE_CLASS[surfaceTone])}
         >
             <CardHeader className="p-3 space-y-0">
