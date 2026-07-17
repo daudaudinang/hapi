@@ -139,7 +139,44 @@ describe('summarizeUnifiedDiff', () => {
 
         expect(diffViewMock).toHaveBeenCalledWith(expect.objectContaining({
             filePath: 'src/a.ts',
-            variant: 'inline'
+            variant: 'inline',
+            overflowMode: 'contained'
+        }))
+    })
+
+    it('delegates group output overflow to the parent scroll owner', () => {
+        render(
+            <I18nProvider>
+                <CodexDiffFullView
+                    block={makeBlock(fileDiff('src/a.ts', ['old'], ['new']))}
+                    metadata={null}
+                    surface="group-output"
+                />
+            </I18nProvider>
+        )
+
+        expect(diffViewMock).toHaveBeenCalledWith(expect.objectContaining({
+            overflowMode: 'parent-scroll'
+        }))
+    })
+
+    it('renders each file in a multi-file unified diff without flattening their changes', () => {
+        render(
+            <I18nProvider>
+                <CodexDiffFullView block={makeBlock(twoFileDiff)} metadata={null} surface="dialog" />
+            </I18nProvider>
+        )
+
+        expect(diffViewMock).toHaveBeenCalledTimes(2)
+        expect(diffViewMock).toHaveBeenNthCalledWith(1, expect.objectContaining({
+            filePath: 'src/a.ts',
+            oldString: 'old a',
+            newString: 'new a\nextra a'
+        }))
+        expect(diffViewMock).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            filePath: 'src/b.ts',
+            oldString: 'old b',
+            newString: 'new b'
         }))
     })
 

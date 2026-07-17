@@ -17,7 +17,7 @@ import { getInputStringAny } from '@/lib/toolInputUtils'
 export type ToolViewProps = {
     block: ToolCallBlock
     metadata: SessionMetadataSummary | null
-    surface?: 'inline' | 'dialog'
+    surface?: 'inline' | 'dialog' | 'group-output'
     t?: (key: string, params?: Record<string, string | number>) => string
 }
 

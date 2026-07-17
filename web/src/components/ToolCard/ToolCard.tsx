@@ -445,14 +445,14 @@ function ToolCardInner(props: ToolCardProps) {
                             <FullToolView
                                 block={props.block}
                                 metadata={props.metadata}
-                                surface="dialog"
+                                surface="group-output"
                                 t={t}
                             />
                         ) : (
                             <ResultToolView
                                 block={props.block}
                                 metadata={props.metadata}
-                                surface="dialog"
+                                surface="group-output"
                                 t={t}
                             />
                         )}

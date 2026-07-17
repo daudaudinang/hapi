@@ -1,6 +1,7 @@
 import type { ToolViewProps } from '@/components/ToolCard/views/_all'
 import { isObject } from '@hapi/protocol'
 import { DiffView } from '@/components/DiffView'
+import { CodeBlock } from '@/components/CodeBlock'
 import { parsePatch } from 'diff'
 import { useMemo } from 'react'
 import { useTranslation } from '@/lib/use-translation'
@@ -52,70 +53,65 @@ export function summarizeUnifiedDiff(unifiedDiff: string): UnifiedDiffSummary {
     }
 }
 
-function parseUnifiedDiff(unifiedDiff: string): { oldText: string; newText: string; fileName?: string } {
-    const lines = unifiedDiff.split('\n')
+function patchTexts(patch: ReturnType<typeof parsePatch>[number]): { oldText: string; newText: string } {
     const oldLines: string[] = []
     const newLines: string[] = []
-    let fileName: string | undefined
-    let inHunk = false
 
-    for (const line of lines) {
-        if (line.startsWith('+++ b/') || line.startsWith('+++ ')) {
-            fileName = line.replace(/^\+\+\+ (b\/)?/, '')
-            continue
-        }
-
-        if (
-            line.startsWith('diff --git')
-            || line.startsWith('index ')
-            || line.startsWith('---')
-            || line.startsWith('new file mode')
-            || line.startsWith('deleted file mode')
-        ) {
-            continue
-        }
-
-        if (line.startsWith('@@')) {
-            inHunk = true
-            continue
-        }
-
-        if (!inHunk) continue
-
-        if (line.startsWith('+')) {
-            newLines.push(line.substring(1))
-        } else if (line.startsWith('-')) {
-            oldLines.push(line.substring(1))
-        } else if (line.startsWith(' ')) {
-            oldLines.push(line.substring(1))
-            newLines.push(line.substring(1))
-        } else if (line === '\\ No newline at end of file') {
-            continue
-        } else if (line === '') {
-            oldLines.push('')
-            newLines.push('')
+    for (const hunk of patch.hunks) {
+        for (const line of hunk.lines) {
+            if (line.startsWith('+')) {
+                newLines.push(line.substring(1))
+            } else if (line.startsWith('-')) {
+                oldLines.push(line.substring(1))
+            } else if (line.startsWith(' ')) {
+                oldLines.push(line.substring(1))
+                newLines.push(line.substring(1))
+            }
         }
     }
 
     return {
         oldText: oldLines.join('\n'),
-        newText: newLines.join('\n'),
-        fileName
+        newText: newLines.join('\n')
     }
 }
 
-function renderDiff(block: ToolViewProps['block'], showFileHeader: boolean) {
+function renderDiff(
+    block: ToolViewProps['block'],
+    showFileHeader: boolean,
+    overflowMode: 'contained' | 'parent-scroll'
+) {
     const input = block.tool.input
     if (!isObject(input) || typeof input.unified_diff !== 'string') return null
 
-    const parsed = parseUnifiedDiff(input.unified_diff)
+    let patches: ReturnType<typeof parsePatch>
+    try {
+        patches = parsePatch(input.unified_diff).filter((patch) => patch.hunks.length > 0)
+    } catch {
+        return <CodeBlock code={input.unified_diff} language="diff" />
+    }
+
+    if (patches.length === 0) {
+        return <CodeBlock code={input.unified_diff} language="diff" />
+    }
+
     return (
-        <DiffView
-            oldString={parsed.oldText}
-            newString={parsed.newText}
-            filePath={showFileHeader ? parsed.fileName : undefined}
-            variant={showFileHeader ? 'inline' : undefined}
-        />
+        <div className="flex flex-col gap-2">
+            {patches.map((patch, index) => {
+                const path = displayPatchPath(patch.oldFileName, patch.newFileName) ?? undefined
+                const parsed = patchTexts(patch)
+                return (
+                    <DiffView
+                        key={`${path ?? 'diff'}:${index}`}
+                        oldString={parsed.oldText}
+                        newString={parsed.newText}
+                        filePath={showFileHeader ? path : undefined}
+                        variant={showFileHeader ? 'inline' : undefined}
+                        overflowMode={overflowMode}
+                    />
+                )
+            })}
+        </div>
     )
 }
 
@@ -162,5 +158,9 @@ export function CodexDiffCompactView(props: ToolViewProps) {
 }
 
 export function CodexDiffFullView(props: ToolViewProps) {
-    return renderDiff(props.block, true)
+    return renderDiff(
+        props.block,
+        true,
+        props.surface === 'group-output' ? 'parent-scroll' : 'contained'
+    )
 }

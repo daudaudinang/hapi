@@ -385,7 +385,34 @@ describe('ToolCard presentation hierarchy', () => {
         expect(screen.queryByRole('button', { name: /show output/i })).toBeNull()
         expect(malformed.container.querySelector('button button')).toBeNull()
         fireEvent.click(screen.getByRole('button', { name: /diff/i }))
-        expect(screen.getByRole('dialog')).toBeInTheDocument()
+        expect(screen.getByRole('dialog')).toHaveTextContent('not a diff')
+    })
+
+    it('lets the group output region scroll long Diff lines without clipping or wrapping', () => {
+        const longLine = 'x'.repeat(400)
+        const longLineDiff = [
+            'diff --git a/a.ts b/a.ts',
+            '--- a/a.ts',
+            '+++ b/a.ts',
+            '@@ -1 +1 @@',
+            '-old',
+            `+${longLine}`
+        ].join('\n')
+        const { container } = renderTool(
+            makeToolBlock('CodexDiff', { unified_diff: longLineDiff }),
+            { displayMode: 'group-row' }
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: /show output/i }))
+
+        const output = container.querySelector('[data-tool-inline-output]')
+        const line = screen.getByText(`+ ${longLine}`)
+        const diffRoot = line.closest('.rounded-md')
+        expect(output).toHaveClass('overflow-auto')
+        expect(diffRoot).toHaveClass('overflow-visible')
+        expect(diffRoot).not.toHaveClass('overflow-hidden')
+        expect(line).toHaveClass('whitespace-pre')
+        expect(line).not.toHaveClass('whitespace-pre-wrap')
     })
 
     it('adds lossless block ids without changing the standalone card surface', () => {
