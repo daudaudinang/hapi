@@ -14,7 +14,6 @@ import { useHappyRuntime } from '@/lib/assistant-runtime'
 const api = {
     updateTeamMentionStatus: vi.fn().mockResolvedValue(undefined)
 } as unknown as ApiClient
-const session = { active: true, thinking: false } as Session
 const onSendMessage = vi.fn()
 const onAbort = async () => undefined
 const onRefresh = vi.fn()
@@ -58,15 +57,33 @@ function toolBlock(
     }
 }
 
+function identifiedTool(
+    id: string,
+    name: string,
+    input: unknown = {},
+    overrides: Partial<ToolCallBlock['tool']> = {}
+): ToolCallBlock {
+    const block = toolBlock(name, input, overrides)
+    block.id = id
+    block.tool.id = `tool-${id}`
+    return block
+}
+
 const threadComponents = {
     UserMessage: HappyUserMessage,
     AssistantMessage: HappyAssistantMessage,
     SystemMessage: HappySystemMessage
 } as const
 
-function RuntimeHarness(props: { blocks: readonly ChatBlock[] }) {
+function RuntimeHarness(props: {
+    blocks: readonly ChatBlock[]
+    thinking?: boolean
+}) {
     const runtime = useHappyRuntime({
-        session,
+        session: {
+            active: true,
+            thinking: props.thinking ?? false
+        } as Session,
         blocks: props.blocks,
         isSending: false,
         onSendMessage,
@@ -152,167 +169,108 @@ function toolIds(container: HTMLElement): string[] {
         .map((node) => node.dataset.toolBlockId ?? '')
 }
 
-function markerOffsets(container: HTMLElement): number[] {
+function expectTextMarkersOnceInOrder(container: HTMLElement, markers: readonly string[]) {
     const text = container.textContent ?? ''
-    return [
-        'reason-before-tools',
-        'text-between-runs',
-        'assistant-cli-marker',
-        'text-after-tools',
-        'event-marker',
-        'team-mention-marker',
-        'user-cli-marker'
-    ].map((marker) => text.indexOf(marker))
+    const offsets = markers.map((marker) => {
+        expect(text.split(marker), `marker ${marker}`).toHaveLength(2)
+        return text.indexOf(marker)
+    })
+    expect(offsets).toEqual([...offsets].sort((a, b) => a - b))
+}
+
+function expectNodesInOrder(nodes: readonly Element[]) {
+    for (let index = 0; index < nodes.length - 1; index += 1) {
+        expect(
+            nodes[index]!.compareDocumentPosition(nodes[index + 1]!)
+                & Node.DOCUMENT_POSITION_FOLLOWING
+        ).toBeTruthy()
+    }
 }
 
 afterEach(cleanup)
 
-describe('Happy assistant actual-runtime tool grouping', () => {
-    it('renders production-shaped Codex reasoning and separated terminal tools compactly without data loss', () => {
-        const reasoningFirst = toolBlock('CodexReasoning', {
+describe('Happy assistant actual-runtime activity grouping', () => {
+    it('renders generic reasoning and four Codex activities as one lossless five-activity group', () => {
+        const genericReasoning: ChatBlock = {
+            kind: 'agent-reasoning',
+            id: 'generic-reasoning',
+            localId: null,
+            createdAt: 2,
+            text: 'generic-reasoning-marker'
+        }
+        const codexReasoning = identifiedTool('block-codex-reasoning', 'CodexReasoning', {
             title: 'Inspecting review details'
         }, {
-            result: { content: 'reasoning-first-marker', status: 'completed' }
+            result: { content: 'codex-reasoning-marker', status: 'completed' }
         })
-        reasoningFirst.id = 'block-reasoning-first'
-        reasoningFirst.tool.id = 'tool-reasoning-first'
-
-        const terminalFirst = toolBlock('CodexBash', {
-            command: 'printf first'
+        const terminal = identifiedTool('block-codex-bash', 'CodexBash', {
+            command: 'printf terminal-five-marker'
         }, {
-            result: { stdout: 'terminal-first-marker', stderr: '', exitCode: 0 }
+            result: { stdout: 'terminal-five-marker', stderr: '', exitCode: 0 }
         })
-        terminalFirst.id = 'block-terminal-first'
-        terminalFirst.tool.id = 'tool-terminal-first'
-
-        const reasoningSecond = toolBlock('CodexReasoning', {
-            title: 'Appending findings'
-        }, {
-            result: { content: 'reasoning-second-marker', status: 'completed' }
+        const diff = identifiedTool('block-codex-diff', 'CodexDiff', {
+            unified_diff: 'diff --git a/five.ts b/five.ts\n--- a/five.ts\n+++ b/five.ts\n@@ -1 +1 @@\n-diff-old-marker\n+diff-new-marker'
         })
-        reasoningSecond.id = 'block-reasoning-second'
-        reasoningSecond.tool.id = 'tool-reasoning-second'
-
-        const terminalSecond = toolBlock('CodexBash', {
-            command: 'printf second'
-        }, {
-            result: { stdout: 'terminal-second-marker', stderr: '', exitCode: 0 }
+        const patch = identifiedTool('block-codex-patch', 'CodexPatch', {
+            changes: [{
+                path: '/workspace/five-activity-marker.ts',
+                kind: { type: 'update', move_path: null },
+                diff: '@@ -1 +1 @@\n-before\n+after'
+            }]
         })
-        terminalSecond.id = 'block-terminal-second'
-        terminalSecond.tool.id = 'tool-terminal-second'
-
         const { container } = render(<RuntimeHarness blocks={[
-            reasoningFirst,
-            terminalFirst,
-            reasoningSecond,
-            terminalSecond
+            { kind: 'agent-text', id: 'before-five', localId: null, createdAt: 1, text: 'text-before-five' },
+            genericReasoning,
+            codexReasoning,
+            terminal,
+            diff,
+            patch,
+            { kind: 'agent-text', id: 'after-five', localId: null, createdAt: 8, text: 'text-after-five' }
         ]} />)
 
-        expect(toolIds(container)).toEqual([
-            'block-reasoning-first',
-            'block-terminal-first',
-            'block-reasoning-second',
-            'block-terminal-second'
+        const group = container.querySelector<HTMLElement>('[data-activity-group]')
+        expect(group).not.toBeNull()
+        expect(container.querySelectorAll('[data-activity-group]')).toHaveLength(1)
+        expect(group).toHaveTextContent('5 activities completed')
+        expect(group?.querySelector(':scope > button')).toHaveAttribute('aria-expanded', 'false')
+        expect(toolIds(group!)).toEqual([
+            'block-codex-reasoning',
+            'block-codex-bash',
+            'block-codex-diff',
+            'block-codex-patch'
         ])
-        expect(container.querySelectorAll('[data-codex-reasoning]')).toHaveLength(2)
-        expect(container.querySelectorAll('[data-tool-run-group]')).toHaveLength(0)
 
-        for (const id of ['block-terminal-first', 'block-terminal-second']) {
-            const node = container.querySelector(`[data-tool-block-id="${id}"]`)
-            expect(node).toHaveAttribute('data-tool-display', 'group-row')
-            expect(node?.closest('[data-tool-singleton-compact]')).toHaveClass('max-w-[600px]')
-        }
+        const activities = Array.from(group!.querySelectorAll(
+            '[data-hapi-reasoning], [data-tool-block-id]'
+        ))
+        expect(activities).toHaveLength(5)
+        expectNodesInOrder(activities)
+        expectTextMarkersOnceInOrder(container, [
+            'text-before-five',
+            'generic-reasoning-marker',
+            'terminal-five-marker',
+            'text-after-five'
+        ])
 
-        for (const id of ['block-reasoning-first', 'block-reasoning-second']) {
-            const node = container.querySelector(`[data-tool-block-id="${id}"]`)
-            expect(node).toHaveAttribute('data-codex-reasoning')
-            expect(node).not.toHaveAttribute('data-tool-surface')
-        }
+        const before = screen.getByText('text-before-five')
+        const after = screen.getByText('text-after-five')
+        expect(group!.contains(before)).toBe(false)
+        expect(group!.contains(after)).toBe(false)
+        expectNodesInOrder([before, group!, after])
 
-        fireEvent.click(screen.getByRole('button', { name: 'Inspecting review details' }))
-        fireEvent.click(screen.getByRole('button', { name: 'Appending findings' }))
-        expect(container).toHaveTextContent('reasoning-first-marker')
-        expect(container).toHaveTextContent('reasoning-second-marker')
+        // Completed groups mount closed. Open the group before exercising its nested disclosures.
+        fireEvent.click(group!.querySelector(':scope > button')!)
+        const genericToggle = group!.querySelector('[data-hapi-reasoning] button')!
+        const codexToggle = screen.getByRole('button', { name: 'Inspecting review details' })
+        fireEvent.click(genericToggle)
+        fireEvent.click(codexToggle)
+        expect(genericToggle).toHaveAttribute('aria-expanded', 'true')
+        expect(codexToggle).toHaveAttribute('aria-expanded', 'true')
     })
 
-    it('keeps plan, permission, error and child-bearing tools on standalone cards', () => {
-        const permissionRead = toolBlock('Read', {}, {
-            permission: { id: 'permission-read', status: 'pending' }
-        })
-        permissionRead.id = 'block-permission-read'
-
-        const errorRead = toolBlock('Read', {}, {
-            state: 'error',
-            result: 'read failed'
-        })
-        errorRead.id = 'block-error-read'
-
-        const childRead = toolBlock('Read')
-        childRead.id = 'block-child-read'
-        childRead.children = [{
-            kind: 'agent-text',
-            id: 'child-marker',
-            localId: null,
-            createdAt: 1001,
-            text: 'child-marker'
-        }]
-
-        const plan = toolBlock('update_plan', {
-            plan: [{ step: 'Keep plan visible', status: 'in_progress' }]
-        })
-        plan.id = 'block-plan'
-
-        const { container } = render(<RuntimeHarness blocks={[
-            permissionRead,
-            errorRead,
-            childRead,
-            plan
-        ]} />)
-
-        expect(container.querySelector('[data-tool-block-id="block-permission-read"]'))
-            .toHaveAttribute('data-tool-surface', 'permission')
-        expect(container.querySelector('[data-tool-block-id="block-error-read"]'))
-            .toHaveAttribute('data-tool-surface', 'neutral')
-        expect(container.querySelector('[data-tool-block-id="block-child-read"]'))
-            .toHaveAttribute('data-tool-surface', 'neutral')
-        expect(container.querySelector('[data-tool-block-id="block-plan"]'))
-            .toHaveAttribute('data-tool-surface', 'plan')
-        expect(container.querySelectorAll('[data-tool-singleton-compact]')).toHaveLength(0)
-        expect((container.textContent ?? '').split('child-marker')).toHaveLength(2)
-    })
-
-    it('renders a provider HapiCliOutput collision exactly once in stream order', () => {
-        const collision = toolBlock('HapiCliOutput', { query: 'collision-args-marker' }, {
-            result: 'collision-result-marker',
-            state: 'error'
-        })
-        const { container } = render(<RuntimeHarness blocks={[
-            { kind: 'agent-text', id: 'before-collision', localId: null, createdAt: 1, text: 'before-collision-marker' },
-            collision,
-            { kind: 'agent-text', id: 'after-collision', localId: null, createdAt: 3, text: 'after-collision-marker' }
-        ]} />)
-        const text = container.textContent ?? ''
-        const markers = ['before-collision-marker', 'HapiCliOutput', 'after-collision-marker']
-
-        for (const marker of markers) {
-            expect(text.split(marker)).toHaveLength(2)
-        }
-        expect(markers.map((marker) => text.indexOf(marker))).toEqual(
-            [...markers.map((marker) => text.indexOf(marker))].sort((a, b) => a - b)
-        )
-        expect(container.querySelectorAll('[data-cli-output-part]')).toHaveLength(0)
-        const collisionNode = container.querySelector('[data-tool-block-id="block-HapiCliOutput"]')
-        expect(collisionNode).not.toBeNull()
-        expect(collisionNode?.querySelector('.text-red-600')).not.toBeNull()
-
-        fireEvent.click(screen.getByRole('button', { name: /HapiCliOutput/i }))
-        expect(screen.getByRole('dialog')).toHaveTextContent('collision-args-marker')
-        expect(screen.getByRole('dialog')).toHaveTextContent('collision-result-marker')
-    })
-
-    it('preserves every mixed stream marker and creates only eligible groups', () => {
+    it('preserves every mixed-stream marker and ID once in input order', () => {
         const { container } = render(<RuntimeHarness blocks={mixedBlocks} />)
-        const markers = [
+        expectTextMarkersOnceInOrder(container, [
             'reason-before-tools',
             'text-between-runs',
             'assistant-cli-marker',
@@ -320,12 +278,7 @@ describe('Happy assistant actual-runtime tool grouping', () => {
             'event-marker',
             'team-mention-marker',
             'user-cli-marker'
-        ]
-
-        for (const marker of markers) {
-            expect((container.textContent ?? '').split(marker)).toHaveLength(2)
-        }
-        expect(markerOffsets(container)).toEqual([...markerOffsets(container)].sort((a, b) => a - b))
+        ])
         expect(container.querySelectorAll('[data-cli-output-part]')).toHaveLength(1)
         expect(container.querySelectorAll('[data-tool-run-group]')).toHaveLength(3)
         expect(toolIds(container)).toEqual([
@@ -336,63 +289,233 @@ describe('Happy assistant actual-runtime tool grouping', () => {
             'block-CodexPatch',
             'block-CodexDiff'
         ])
+
+        for (const text of ['text-between-runs', 'text-after-tools']) {
+            const textNode = screen.getByText(text)
+            expect(textNode.closest('[data-activity-group]')).toBeNull()
+        }
     })
 
-    it('keeps tool IDs ordered through append, singleton-to-group, and late state boundaries', async () => {
-        const readRunning = toolBlock('Read', {}, { state: 'running', completedAt: null })
-        const view = render(<RuntimeHarness blocks={[readRunning]} />)
-        expect(toolIds(view.container)).toEqual(['block-Read'])
-        expect(view.container.querySelector('[data-tool-run-group]')).toBeNull()
+    const boundaryCases: Array<{
+        label: string
+        boundary: () => ChatBlock
+        marker: string
+        markerKind: 'block-id' | 'text'
+    }> = [
+        {
+            label: 'text',
+            boundary: () => ({
+                kind: 'agent-text', id: 'boundary-text', localId: null, createdAt: 3,
+                text: 'boundary-text-marker'
+            }),
+            marker: 'boundary-text-marker',
+            markerKind: 'text'
+        },
+        {
+            label: 'assistant CLI output',
+            boundary: () => ({
+                kind: 'cli-output', id: 'boundary-cli', localId: null, createdAt: 3,
+                source: 'assistant', text: 'boundary-cli-marker'
+            }),
+            marker: 'boundary-cli-marker',
+            markerKind: 'text'
+        },
+        {
+            label: 'system event',
+            boundary: () => ({
+                kind: 'agent-event', id: 'boundary-event', createdAt: 3,
+                event: { type: 'message', message: 'boundary-event-marker' }
+            }),
+            marker: 'boundary-event-marker',
+            markerKind: 'text'
+        },
+        {
+            label: 'team mention',
+            boundary: () => ({
+                kind: 'team-mention', id: 'boundary-mention', localId: null, createdAt: 3,
+                requestId: 'boundary-request', teamChatId: 'team-1', sourceMessageId: 'source-1',
+                text: 'boundary-mention-marker', status: 'delivered'
+            }),
+            marker: 'boundary-mention-marker',
+            markerKind: 'text'
+        },
+        {
+            label: 'plan',
+            boundary: () => identifiedTool('boundary-plan', 'update_plan', {
+                plan: [{ step: 'boundary-plan-marker', status: 'in_progress' }]
+            }),
+            marker: 'boundary-plan',
+            markerKind: 'block-id'
+        },
+        {
+            label: 'permission',
+            boundary: () => identifiedTool('boundary-permission', 'Read', {}, {
+                permission: { id: 'permission-boundary', status: 'pending' }
+            }),
+            marker: 'boundary-permission',
+            markerKind: 'block-id'
+        },
+        {
+            label: 'error',
+            boundary: () => identifiedTool('boundary-error', 'Read', {}, {
+                state: 'error', result: 'boundary-error-marker'
+            }),
+            marker: 'boundary-error',
+            markerKind: 'block-id'
+        },
+        {
+            label: 'children',
+            boundary: () => {
+                const block = identifiedTool('boundary-children', 'Read')
+                block.children = [{
+                    kind: 'agent-text', id: 'boundary-child', localId: null, createdAt: 1001,
+                    text: 'boundary-child-marker'
+                }]
+                return block
+            },
+            marker: 'boundary-children',
+            markerKind: 'block-id'
+        },
+        ...[
+            ['question', 'request_user_input'],
+            ['Task', 'Task'],
+            ['Agent', 'Agent'],
+            ['Skill', 'Skill'],
+            ['MCP', 'mcp__server__tool'],
+            ['unknown', 'UnknownTool'],
+            ['CLI pseudo-tool collision', 'HapiCliOutput'],
+            ['reasoning pseudo-tool collision', 'HapiReasoning']
+        ].map(([label, name]) => ({
+            label,
+            boundary: () => identifiedTool(`boundary-${label}`, name, {
+                marker: `boundary-${label}-marker`
+            }),
+            marker: `boundary-${label}`,
+            markerKind: 'block-id' as const
+        }))
+    ]
 
-        const bashRunning = toolBlock('Bash', {}, { state: 'running', completedAt: null })
-        view.rerender(<RuntimeHarness blocks={[readRunning, bashRunning]} />)
-        await waitFor(() => {
-            expect(toolIds(view.container)).toEqual(['block-Read', 'block-Bash'])
+    it.each(boundaryCases)('keeps $label once between two valid activity groups', ({ boundary, marker, markerKind }) => {
+        const boundaryBlock = boundary()
+        const blocks: ChatBlock[] = [
+            identifiedTool('left-read', 'Read'),
+            identifiedTool('left-grep', 'Grep'),
+            boundaryBlock,
+            identifiedTool('right-bash', 'Bash'),
+            identifiedTool('right-glob', 'Glob')
+        ]
+        const { container } = render(<RuntimeHarness blocks={blocks} />)
+        const groups = Array.from(container.querySelectorAll('[data-activity-group]'))
+        expect(groups).toHaveLength(2)
+
+        const boundaryNode = markerKind === 'block-id'
+            ? container.querySelector(`[data-tool-block-id="${marker}"]`)
+            : screen.getByText(marker)
+        expect(boundaryNode).not.toBeNull()
+        if (markerKind === 'block-id') {
+            expect(container.querySelectorAll(`[data-tool-block-id="${marker}"]`)).toHaveLength(1)
+        } else {
+            expect((container.textContent ?? '').split(marker)).toHaveLength(2)
+        }
+        expect(boundaryNode!.closest('[data-activity-group]')).toBeNull()
+        expectNodesInOrder([groups[0]!, boundaryNode!, groups[1]!])
+
+        const expectedIds = markerKind === 'block-id'
+            ? ['left-read', 'left-grep', marker, 'right-bash', 'right-glob']
+            : ['left-read', 'left-grep', 'right-bash', 'right-glob']
+        expect(toolIds(container)).toEqual(expectedIds)
+    })
+
+    it('preserves IDs and disclosure state through singleton append and running completion', async () => {
+        const readRunning = identifiedTool('stream-read', 'Read', {}, {
+            state: 'running', completedAt: null
         })
-        const groupTrigger = view.container.querySelector('[data-tool-run-group] > button')
-        expect(groupTrigger).toHaveAttribute('aria-expanded', 'true')
+        const view = render(<RuntimeHarness blocks={[readRunning]} />)
+        expect(toolIds(view.container)).toEqual(['stream-read'])
+        expect(view.container.querySelector('[data-activity-group]')).toBeNull()
 
-        view.rerender(<RuntimeHarness blocks={[toolBlock('Read'), toolBlock('Bash')]} />)
+        const bashRunning = identifiedTool('stream-bash', 'Bash', {}, {
+            state: 'running', completedAt: null
+        })
+        view.rerender(<RuntimeHarness blocks={[readRunning, bashRunning]} />)
+        await waitFor(() => expect(toolIds(view.container)).toEqual(['stream-read', 'stream-bash']))
+        const groupTrigger = view.container.querySelector('[data-activity-group] > button')
+        expect(groupTrigger).toHaveAttribute('aria-expanded', 'true')
+        expect(groupTrigger).toHaveAttribute('aria-label', 'Toggle activity group: 2 activities running')
+
+        view.rerender(<RuntimeHarness blocks={[
+            identifiedTool('stream-read', 'Read'),
+            identifiedTool('stream-bash', 'Bash')
+        ]} />)
         await waitFor(() => {
-            expect(toolIds(view.container)).toEqual(['block-Read', 'block-Bash'])
-            const currentTrigger = view.container.querySelector('[data-tool-run-group] > button')
+            expect(toolIds(view.container)).toEqual(['stream-read', 'stream-bash'])
+            const currentTrigger = view.container.querySelector('[data-activity-group] > button')
             expect(currentTrigger).toBe(groupTrigger)
             expect(currentTrigger?.isConnected).toBe(true)
             expect(currentTrigger).toHaveAttribute('aria-expanded', 'true')
             expect(currentTrigger).toHaveAttribute(
                 'aria-label',
-                'Toggle tool group: 2 actions completed'
+                'Toggle activity group: 2 activities completed'
             )
-        })
-
-        view.rerender(<RuntimeHarness blocks={[
-            toolBlock('Read', {}, { state: 'error', result: 'failed' }),
-            toolBlock('Bash')
-        ]} />)
-        await waitFor(() => {
-            expect(toolIds(view.container)).toEqual(['block-Read', 'block-Bash'])
-            expect(view.container.querySelector('[data-tool-run-group]')).toBeNull()
-        })
-
-        view.rerender(<RuntimeHarness blocks={[
-            toolBlock('Read'),
-            toolBlock('Bash', {}, {
-                permission: { id: 'permission-1', status: 'pending' }
-            })
-        ]} />)
-        await waitFor(() => {
-            expect(toolIds(view.container)).toEqual(['block-Read', 'block-Bash'])
-            expect(view.container.querySelector('[data-tool-run-group]')).toBeNull()
         })
     })
 
-    it('prepends an older converted page without duplicating or reordering existing content', async () => {
-        const olderRead = toolBlock('Read', { file_path: '/workspace/older.ts' })
-        olderRead.id = 'block-older-Read'
-        olderRead.tool.id = 'tool-older-Read'
-        const olderBash = toolBlock('Bash', { command: 'printf older' })
-        olderBash.id = 'block-older-Bash'
-        olderBash.tool.id = 'tool-older-Bash'
+    it.each([
+        {
+            label: 'error',
+            change: (block: ToolCallBlock) => ({
+                ...block,
+                tool: { ...block.tool, state: 'error' as const, result: 'late-error-marker' }
+            }),
+            marker: null
+        },
+        {
+            label: 'permission',
+            change: (block: ToolCallBlock) => ({
+                ...block,
+                tool: {
+                    ...block.tool,
+                    permission: { id: 'late-permission', status: 'pending' as const }
+                }
+            }),
+            marker: null
+        },
+        {
+            label: 'children',
+            change: (block: ToolCallBlock) => ({
+                ...block,
+                children: [{
+                    kind: 'agent-text' as const,
+                    id: 'late-child',
+                    localId: null,
+                    createdAt: 1001,
+                    text: 'late-child-marker'
+                }]
+            }),
+            marker: 'late-child-marker'
+        }
+    ])('splits a group on late $label without moving or dropping content', async ({ change, marker }) => {
+        const read = identifiedTool('late-read', 'Read')
+        const bash = identifiedTool('late-bash', 'Bash')
+        const view = render(<RuntimeHarness blocks={[read, bash]} />)
+        expect(view.container.querySelectorAll('[data-activity-group]')).toHaveLength(1)
+
+        view.rerender(<RuntimeHarness blocks={[change(read), bash]} />)
+        await waitFor(() => {
+            expect(view.container.querySelector('[data-activity-group]')).toBeNull()
+            expect(toolIds(view.container)).toEqual(['late-read', 'late-bash'])
+        })
+        const readNode = view.container.querySelector('[data-tool-block-id="late-read"]')
+        const bashNode = view.container.querySelector('[data-tool-block-id="late-bash"]')
+        expectNodesInOrder([readNode!, bashNode!])
+        if (marker) {
+            expect((view.container.textContent ?? '').split(marker)).toHaveLength(2)
+        }
+    })
+
+    it('preserves content through pagination prepend and completed-group remount', async () => {
+        const olderRead = identifiedTool('older-read', 'Read', { file_path: '/workspace/older.ts' })
+        const olderBash = identifiedTool('older-bash', 'Bash', { command: 'printf older' })
         const olderPage: ChatBlock[] = [
             { kind: 'agent-text', id: 'older-start', localId: null, createdAt: -2, text: 'older-page-start' },
             olderRead,
@@ -403,16 +526,12 @@ describe('Happy assistant actual-runtime tool grouping', () => {
         const currentIds = toolIds(view.container)
 
         view.rerender(<RuntimeHarness blocks={[...olderPage, ...mixedBlocks]} />)
-
         await waitFor(() => {
-            expect(toolIds(view.container)).toEqual([
-                'block-older-Read',
-                'block-older-Bash',
-                ...currentIds
-            ])
+            expect(toolIds(view.container)).toEqual(['older-read', 'older-bash', ...currentIds])
         })
-        const text = view.container.textContent ?? ''
-        const orderedMarkers = ['older-page-start', 'older-page-end', ...[
+        const orderedMarkers = [
+            'older-page-start',
+            'older-page-end',
             'reason-before-tools',
             'text-between-runs',
             'assistant-cli-marker',
@@ -420,49 +539,99 @@ describe('Happy assistant actual-runtime tool grouping', () => {
             'event-marker',
             'team-mention-marker',
             'user-cli-marker'
-        ]]
-        for (const marker of orderedMarkers) {
-            expect(text.split(marker)).toHaveLength(2)
+        ]
+        expectTextMarkersOnceInOrder(view.container, orderedMarkers)
+        expect(view.container.querySelectorAll('[data-activity-group]')).toHaveLength(4)
+
+        view.unmount()
+        const remounted = render(<RuntimeHarness blocks={[...olderPage, ...mixedBlocks]} />)
+        expect(toolIds(remounted.container)).toEqual(['older-read', 'older-bash', ...currentIds])
+        expectTextMarkersOnceInOrder(remounted.container, orderedMarkers)
+        for (const trigger of remounted.container.querySelectorAll('[data-activity-group] > button')) {
+            expect(trigger).toHaveAttribute('aria-expanded', 'false')
         }
-        expect(orderedMarkers.map((marker) => text.indexOf(marker))).toEqual(
-            [...orderedMarkers.map((marker) => text.indexOf(marker))].sort((a, b) => a - b)
-        )
-        expect(view.container.querySelectorAll('[data-tool-run-group]')).toHaveLength(4)
     })
 
-    it('splits a grouped run when a child arrives late without dropping or reordering content', async () => {
-        const read = toolBlock('Read')
-        const bash = toolBlock('Bash')
-        const view = render(<RuntimeHarness blocks={[read, bash]} />)
-        expect(view.container.querySelectorAll('[data-tool-run-group]')).toHaveLength(1)
-        expect(toolIds(view.container)).toEqual(['block-Read', 'block-Bash'])
-
-        const withChild: ToolCallBlock = {
-            ...read,
-            children: [{
-                kind: 'agent-text',
-                id: 'child-text',
-                localId: null,
-                createdAt: 1001,
-                text: 'late-child-marker'
-            }]
+    it('does not mark generic reasoning as streaming when a newer tool is the running part', () => {
+        const reasoning: ChatBlock = {
+            kind: 'agent-reasoning',
+            id: 'older-reasoning',
+            localId: null,
+            createdAt: 1,
+            text: 'older-reasoning-marker'
         }
-        view.rerender(<RuntimeHarness blocks={[withChild, bash]} />)
-
-        await waitFor(() => {
-            expect(view.container.querySelector('[data-tool-run-group]')).toBeNull()
-            expect(toolIds(view.container)).toEqual(['block-Read', 'block-Bash'])
-            expect((view.container.textContent ?? '').split('late-child-marker')).toHaveLength(2)
+        const runningTool = identifiedTool('newer-running-tool', 'Bash', {}, {
+            state: 'running', completedAt: null
         })
+        const { container } = render(<RuntimeHarness blocks={[reasoning, runningTool]} thinking />)
+        const group = container.querySelector('[data-activity-group]')
+        expect(group?.querySelector(':scope > button')).toHaveAttribute('aria-expanded', 'true')
+        const reasoningToggle = group?.querySelector('[data-hapi-reasoning] button')
+        expect(reasoningToggle).toHaveAttribute('aria-label', 'Toggle reasoning')
+        expect(group?.querySelector('[data-hapi-reasoning]')).toHaveTextContent('Completed')
+        expect(screen.queryByRole('button', { name: 'Reasoning in progress' })).not.toBeInTheDocument()
+    })
 
-        const readNode = view.container.querySelector('[data-tool-block-id="block-Read"]')
-        const bashNode = view.container.querySelector('[data-tool-block-id="block-Bash"]')
-        const childNode = Array.from(view.container.querySelectorAll('*'))
-            .find((node) => node.textContent === 'late-child-marker')
-        expect(readNode).not.toBeNull()
-        expect(bashNode).not.toBeNull()
-        expect(childNode).toBeDefined()
-        expect(readNode!.compareDocumentPosition(childNode!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-        expect(childNode!.compareDocumentPosition(bashNode!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    it('falls back exactly once for provider HapiReasoning and malformed pseudo artifacts', () => {
+        const collision = identifiedTool('provider-reasoning-collision', 'HapiReasoning', {
+            query: 'provider-reasoning-input-marker'
+        }, {
+            result: 'provider-reasoning-result-marker'
+        })
+        const malformedReasoning = {
+            kind: 'agent-reasoning',
+            id: 'malformed-reasoning',
+            localId: null,
+            createdAt: 3,
+            text: 42
+        } as unknown as ChatBlock
+        const { container } = render(<RuntimeHarness blocks={[
+            { kind: 'agent-text', id: 'collision-before', localId: null, createdAt: 1, text: 'collision-before-marker' },
+            collision,
+            malformedReasoning,
+            { kind: 'agent-text', id: 'collision-after', localId: null, createdAt: 4, text: 'collision-after-marker' }
+        ]} />)
+
+        expect(container.querySelectorAll('[data-hapi-reasoning]')).toHaveLength(0)
+        expect(container.querySelectorAll('[data-tool-block-id="provider-reasoning-collision"]')).toHaveLength(1)
+        expect(screen.getAllByText('Tool: HapiReasoning')).toHaveLength(1)
+        expect(screen.getAllByText('HapiReasoning')).toHaveLength(1)
+        const before = screen.getByText('collision-before-marker')
+        const provider = container.querySelector('[data-tool-block-id="provider-reasoning-collision"]')
+        const malformed = screen.getByText('Tool: HapiReasoning')
+        const after = screen.getByText('collision-after-marker')
+        expectNodesInOrder([before, provider!, malformed, after])
+        expect((container.textContent ?? '').split('42')).toHaveLength(2)
+    })
+
+    it('copies assistant text without reasoning and renders no blank assistant message', async () => {
+        const writeText = vi.fn().mockResolvedValue(undefined)
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText }
+        })
+        const { container } = render(<RuntimeHarness blocks={[
+            { kind: 'agent-text', id: 'copy-before', localId: null, createdAt: 1, text: 'copy-visible-before' },
+            {
+                kind: 'agent-reasoning', id: 'copy-reasoning', localId: null, createdAt: 2,
+                text: 'copy-hidden-reasoning'
+            },
+            { kind: 'agent-text', id: 'copy-after', localId: null, createdAt: 3, text: 'copy-visible-after' }
+        ]} />)
+
+        const copyButtons = screen.getAllByTitle('Copy')
+        expect(copyButtons).toHaveLength(1)
+        fireEvent.click(copyButtons[0]!)
+        await waitFor(() => {
+            expect(writeText).toHaveBeenCalledOnce()
+            expect(writeText).toHaveBeenCalledWith('copy-visible-before\n\ncopy-visible-after')
+        })
+        expect(writeText.mock.calls[0]?.[0]).not.toContain('copy-hidden-reasoning')
+
+        const messageRoots = Array.from(container.querySelectorAll<HTMLElement>('[id^="hapi-message-"]'))
+        expect(messageRoots.length).toBeGreaterThan(0)
+        for (const messageRoot of messageRoots) {
+            expect(messageRoot.textContent?.trim().length).toBeGreaterThan(0)
+        }
     })
 })
