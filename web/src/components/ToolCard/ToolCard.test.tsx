@@ -368,6 +368,32 @@ describe('ToolCard presentation hierarchy', () => {
         expect(screen.getByText('4.6s')).toHaveAccessibleName('Activity duration: 4.6 seconds')
     })
 
+    it.each([
+        ['en', '21m 04s', 'Activity duration: 21 minutes 4 seconds'],
+        ['vi-VN', '21m 04s', 'Thời gian hoạt động: 21 phút 4 giây'],
+        ['zh-CN', '21m 04s', '活动用时：21分钟 4秒钟']
+    ] as const)('localizes minute duration accessibly in %s', (locale, compact, accessible) => {
+        renderTool(makeToolBlock('Bash', { command: 'pwd' }, undefined, {
+            startedAt: 1000,
+            completedAt: 1265000
+        }), { locale, displayMode: 'group-row', groupedNow: 1265000 })
+
+        expect(screen.getByText(compact)).toHaveAccessibleName(accessible)
+    })
+
+    it.each([
+        ['en', '1h 05m', 'Activity duration: 1 hour 5 minutes'],
+        ['vi-VN', '1h 05m', 'Thời gian hoạt động: 1 giờ 5 phút'],
+        ['zh-CN', '1h 05m', '活动用时：1小时 5分钟']
+    ] as const)('localizes hour duration accessibly in %s', (locale, compact, accessible) => {
+        renderTool(makeToolBlock('Bash', { command: 'pwd' }, undefined, {
+            startedAt: 1000,
+            completedAt: 3901000
+        }), { locale, displayMode: 'group-row', groupedNow: 3901000 })
+
+        expect(screen.getByText(compact)).toHaveAccessibleName(accessible)
+    })
+
     it('advances a running singleton duration across ticks and freezes after completion', () => {
         vi.useFakeTimers()
         vi.setSystemTime(5000)
@@ -645,6 +671,7 @@ describe('ToolCard presentation hierarchy', () => {
             'tool.group.activitiesCompleted',
             'tool.group.activitiesRunning',
             'tool.group.toggleActivities',
+            'tool.group.live',
             'tool.group.activityDuration',
             'tool.group.totalDuration',
             'tool.duration.seconds',

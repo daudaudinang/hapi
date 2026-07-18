@@ -302,6 +302,7 @@ export default {
   'tool.group.activitiesCompleted': '{count} hoạt động đã hoàn tất',
   'tool.group.activitiesRunning': '{count} hoạt động đang chạy',
   'tool.group.toggleActivities': 'Mở hoặc đóng nhóm hoạt động: {status}',
+  'tool.group.live': 'đang cập nhật',
   'tool.group.activityDuration': 'Thời gian hoạt động: {duration}',
   'tool.group.totalDuration': 'Tổng thời gian: {duration}',
   'tool.duration.seconds': '{duration} giây',

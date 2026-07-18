@@ -47,15 +47,32 @@ export function useFormattedActivityDuration(durationMs: number | null): {
     const { locale, t } = useTranslation()
     if (durationMs === null) return null
 
-    const value = formatActivityDurationValue(durationMs, locale)
-    const naturalDuration = t(
-        durationMs > 0 && durationMs < 100
-            ? 'tool.duration.lessThanSeconds'
-            : 'tool.duration.seconds',
-        { duration: value }
-    )
+    const unit = (value: number, name: 'second' | 'minute' | 'hour') =>
+        new Intl.NumberFormat(locale, {
+            style: 'unit',
+            unit: name,
+            unitDisplay: 'long',
+            maximumFractionDigits: 0
+        }).format(value)
+    let accessible: string
+    if (durationMs < 60000) {
+        const value = formatActivityDurationValue(durationMs, locale)
+        accessible = t(
+            durationMs > 0 && durationMs < 100
+                ? 'tool.duration.lessThanSeconds'
+                : 'tool.duration.seconds',
+            { duration: value }
+        )
+    } else if (durationMs < 3600000) {
+        const totalSeconds = Math.floor(durationMs / 1000)
+        accessible = `${unit(Math.floor(totalSeconds / 60), 'minute')} ${unit(totalSeconds % 60, 'second')}`
+    } else {
+        const totalSeconds = Math.floor(durationMs / 1000)
+        accessible = `${unit(Math.floor(totalSeconds / 3600), 'hour')} ${unit(Math.floor((totalSeconds % 3600) / 60), 'minute')}`
+    }
+
     return {
         compact: formatActivityDuration(durationMs),
-        accessible: naturalDuration
+        accessible
     }
 }

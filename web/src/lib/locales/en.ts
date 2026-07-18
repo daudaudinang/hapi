@@ -308,6 +308,7 @@ export default {
   'tool.group.activitiesCompleted': '{count} activities completed',
   'tool.group.activitiesRunning': '{count} activities running',
   'tool.group.toggleActivities': 'Toggle activity group: {status}',
+  'tool.group.live': 'live',
   'tool.group.activityDuration': 'Activity duration: {duration}',
   'tool.group.totalDuration': 'Total duration: {duration}',
   'tool.duration.seconds': '{duration} seconds',

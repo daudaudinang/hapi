@@ -307,6 +307,7 @@ export default {
   'tool.group.activitiesCompleted': '已完成 {count} 项活动',
   'tool.group.activitiesRunning': '正在进行 {count} 项活动',
   'tool.group.toggleActivities': '展开或收起活动组：{status}',
+  'tool.group.live': '实时',
   'tool.group.activityDuration': '活动用时：{duration}',
   'tool.group.totalDuration': '总用时：{duration}',
   'tool.duration.seconds': '{duration} 秒',
