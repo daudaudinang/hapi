@@ -535,6 +535,7 @@ describe('ToolRunGroup', () => {
         expect(group.querySelector('[aria-live]')).toBeNull()
         expect(group).toHaveClass('max-w-[600px]')
         const activityRows = scroller.querySelectorAll('[data-activity-id]')
+        expect(container.querySelectorAll('[data-activity-id]')).toHaveLength(46)
         expect(activityRows).toHaveLength(46)
         expect(Array.from(activityRows).map((node) =>
             node.getAttribute('data-activity-id')
