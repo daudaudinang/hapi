@@ -592,13 +592,14 @@ function ToolCardInner(props: ToolCardProps) {
                 SURFACE_CLASS[surfaceTone]
             )}
         >
-            <CardHeader className="px-3 py-2.5 space-y-0">
+            <CardHeader className="p-0 space-y-0">
                 <Dialog>
                     <DialogTrigger asChild>
                         <button
                             type="button"
+                            data-tool-card-trigger
                             className={cn(
-                                'w-full rounded-md px-1.5 py-1 text-left transition-colors hover:bg-[var(--app-subtle-bg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]',
+                                'min-h-[50px] w-full rounded-md px-3 py-2 text-left transition-colors hover:bg-[var(--app-subtle-bg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]',
                                 suppressFocusRing && 'focus-visible:ring-0'
                             )}
                             onPointerDown={onTriggerPointerDown}

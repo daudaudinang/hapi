@@ -11,7 +11,7 @@ import { ToolCard } from './ToolCard'
 import { ToolRunLayoutProvider } from './toolRunContext'
 
 vi.mock('@/components/ToolCard/PermissionFooter', () => ({
-    PermissionFooter: () => null
+    PermissionFooter: () => <div data-testid="permission-actions" />
 }))
 vi.mock('@/components/ToolCard/AskUserQuestionFooter', () => ({
     AskUserQuestionFooter: () => null
@@ -228,6 +228,29 @@ describe('ToolCard presentation hierarchy', () => {
 
         expect(container.querySelector('[data-tool-surface="permission"]')).not.toBeNull()
         expect(container.querySelector('[data-tool-surface="diff"]')).toBeNull()
+    })
+
+    it('uses one compact trigger hit area without stacked header padding', () => {
+        const { container } = renderTool(makeToolBlock('Read'))
+        const card = container.querySelector('[data-tool-surface="neutral"]')
+        const cardHeader = card?.firstElementChild
+        const trigger = card?.querySelector('[data-tool-card-trigger]')
+
+        expect(cardHeader).toHaveClass('p-0')
+        expect(cardHeader).not.toHaveClass('px-3')
+        expect(cardHeader).not.toHaveClass('py-2.5')
+        expect(trigger).toHaveClass('min-h-[50px]', 'px-3', 'py-2')
+    })
+
+    it('keeps pending approval context when an errored tool uses the semantic error surface', () => {
+        const { container } = renderTool(makeToolBlock('Write', {}, pendingPermission, {
+            state: 'error'
+        }))
+
+        expect(container.querySelector('[data-tool-surface="error"]')).not.toBeNull()
+        expect(container.querySelector('[data-tool-surface="permission"]')).toBeNull()
+        expect(screen.getByText('Permission required')).toBeInTheDocument()
+        expect(screen.getByTestId('permission-actions')).toBeInTheDocument()
     })
 
     it('shows compact plan progress in the header without removing the checklist', () => {
