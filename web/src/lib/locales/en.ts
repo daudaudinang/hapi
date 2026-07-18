@@ -310,6 +310,8 @@ export default {
   'tool.group.toggleActivities': 'Toggle activity group: {status}',
   'tool.group.activityDuration': 'Activity duration: {duration}',
   'tool.group.totalDuration': 'Total duration: {duration}',
+  'tool.duration.seconds': '{duration} seconds',
+  'tool.duration.lessThanSeconds': 'less than {duration} seconds',
   'tool.group.showOutput': 'Show output',
   'tool.group.hideOutput': 'Hide output',
   'tool.group.outputRegion': '{tool} output',

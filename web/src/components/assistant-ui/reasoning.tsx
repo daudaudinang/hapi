@@ -69,7 +69,7 @@ export function ReasoningDisclosure(props: ReasoningDisclosureProps) {
     const contentId = useId()
     const durationDescriptionId = useId()
     const groupRow = props.presentation === 'group-row'
-    const describedBy = groupRow && props.duration && props.durationAriaLabel
+    const describedBy = props.duration && props.durationAriaLabel
         ? durationDescriptionId
         : undefined
 
@@ -98,7 +98,7 @@ export function ReasoningDisclosure(props: ReasoningDisclosureProps) {
             >
                 <ChevronIcon open={isOpen} />
                 <span className={cn(groupRow && 'min-w-0 flex-1 truncate')}>{props.label}</span>
-                {groupRow && props.duration ? (
+                {props.duration ? (
                     <>
                         <span
                             aria-hidden="true"
@@ -133,8 +133,8 @@ export function ReasoningDisclosure(props: ReasoningDisclosureProps) {
                 hidden={!isOpen}
                 data-reasoning-body
                 className={cn(
-                    'overflow-hidden transition-all duration-200 motion-reduce:transition-none',
-                    isOpen ? 'max-h-[5000px] opacity-100' : 'max-h-0 opacity-0'
+                    'transition-opacity duration-200 motion-reduce:transition-none',
+                    isOpen ? 'opacity-100' : 'opacity-0'
                 )}
             >
                 <div className={cn(groupRow ? 'px-6 pb-2 pt-1' : 'pl-4 pt-1')}>

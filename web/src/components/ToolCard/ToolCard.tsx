@@ -23,12 +23,12 @@ import { cn } from '@/lib/utils'
 import { useTranslation } from '@/lib/use-translation'
 import { TraceSection } from '@/components/ToolCard/trace'
 import { LockIcon } from '@/components/ToolCard/icons'
+import { getActivityDurationMs, getToolExpansionKind } from '@/components/ToolCard/toolRunModel'
 import {
-    formatActivityDuration,
-    getActivityDurationMs,
-    getToolExpansionKind
-} from '@/components/ToolCard/toolRunModel'
-import { useToolRunLayout } from '@/components/ToolCard/toolRunContext'
+    useActivityClock,
+    useFormattedActivityDuration,
+    useToolRunLayout
+} from '@/components/ToolCard/toolRunContext'
 
 const ELAPSED_INTERVAL_MS = 1000
 
@@ -286,6 +286,10 @@ function ToolCardInner(props: ToolCardProps) {
     const { t } = useTranslation()
     const layout = useToolRunLayout()
     const displayMode = props.displayMode ?? 'card'
+    const standaloneRunning = displayMode === 'group-row'
+        && !layout.grouped
+        && (props.block.tool.state === 'pending' || props.block.tool.state === 'running')
+    const standaloneNow = useActivityClock(standaloneRunning)
     const expansionKind = displayMode === 'group-row'
         ? getToolExpansionKind(props.block)
         : null
@@ -335,12 +339,13 @@ function ToolCardInner(props: ToolCardProps) {
     ))
     const hasBody = showInline || taskSummary !== null || showsPermissionFooter
     const stateColor = statusColorClass(props.block.tool.state)
-    const activityDurationMs = displayMode === 'group-row' && layout.grouped
-        ? getActivityDurationMs({ kind: 'tool', block: props.block }, layout.now)
+    const activityDurationMs = displayMode === 'group-row'
+        ? getActivityDurationMs(
+            { kind: 'tool', block: props.block },
+            layout.grouped ? layout.now : standaloneNow
+        )
         : null
-    const activityDuration = activityDurationMs === null
-        ? null
-        : formatActivityDuration(activityDurationMs)
+    const activityDuration = useFormattedActivityDuration(activityDurationMs)
     const stateLabel = t(`tool.status.${props.block.tool.state}`)
     const { suppressFocusRing, onTriggerPointerDown, onTriggerKeyDown, onTriggerBlur } = usePointerFocusRing()
     const isQuestionToolWithAnswers = Boolean(
@@ -419,10 +424,12 @@ function ToolCardInner(props: ToolCardProps) {
                                 </span>
                                 {activityDuration ? (
                                     <span
-                                        aria-label={t('tool.group.activityDuration', { duration: activityDuration })}
+                                        aria-label={t('tool.group.activityDuration', {
+                                            duration: activityDuration.accessible
+                                        })}
                                         className="shrink-0 font-mono text-[10px] text-[var(--app-hint)]"
                                     >
-                                        {activityDuration}
+                                        {activityDuration.compact}
                                     </span>
                                 ) : null}
                                 <span role="status" aria-label={stateLabel} className={stateColor}>

@@ -7,6 +7,7 @@ import {
 import { isAgentReasoningBlock, reasoningToolCallId } from '@/lib/reasoningPart'
 import { isObject } from '@hapi/protocol'
 import { parsePatch } from 'diff'
+import type { Locale } from '@/lib/i18n-context'
 
 const GROUPABLE_TOOL_NAMES = new Set([
     'CodexReasoning',
@@ -239,12 +240,10 @@ export function getActivityGroupDurationMs(entries: readonly ActivityEntry[]): n
     if (first?.kind !== 'tool' || last?.kind !== 'tool') return null
 
     const start = first.block.tool.startedAt
-    const lastStart = last.block.tool.startedAt
     const end = last.block.tool.completedAt
-    if (!isExactTimestamp(start) || !isExactTimestamp(lastStart) || !isExactTimestamp(end)) {
+    if (!isExactTimestamp(start) || !isExactTimestamp(end)) {
         return null
     }
-    if (end < lastStart) return null
 
     const duration = end - start
     return Number.isFinite(duration) && duration >= 0 ? duration : null
@@ -253,4 +252,14 @@ export function getActivityGroupDurationMs(entries: readonly ActivityEntry[]): n
 export function formatActivityDuration(durationMs: number): string {
     if (durationMs > 0 && durationMs < 100) return '<0.1s'
     return `${(durationMs / 1000).toFixed(1)}s`
+}
+
+export function formatActivityDurationValue(durationMs: number, locale: Locale): string {
+    const seconds = durationMs > 0 && durationMs < 100
+        ? 0.1
+        : durationMs / 1000
+    return new Intl.NumberFormat(locale, {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1
+    }).format(seconds)
 }

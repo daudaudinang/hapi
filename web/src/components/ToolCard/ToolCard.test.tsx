@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ApiClient } from '@/api/client'
 import type { ToolCallBlock, ToolPermission } from '@/chat/types'
@@ -130,6 +130,7 @@ describe('ToolCard presentation hierarchy', () => {
 
     afterEach(() => {
         cleanup()
+        vi.useRealTimers()
     })
 
     it.each([
@@ -364,7 +365,31 @@ describe('ToolCard presentation hierarchy', () => {
             groupedNow: 5600
         })
 
-        expect(screen.getByText('4.6s')).toHaveAccessibleName('Activity duration: 4.6s')
+        expect(screen.getByText('4.6s')).toHaveAccessibleName('Activity duration: 4.6 seconds')
+    })
+
+    it('advances a running singleton duration across ticks and freezes after completion', () => {
+        vi.useFakeTimers()
+        vi.setSystemTime(5000)
+        const running = makeToolBlock('Read', { file_path: '/tmp/live.ts' }, undefined, {
+            state: 'running',
+            startedAt: 1000,
+            completedAt: null
+        })
+        const view = renderTool(running, { displayMode: 'group-row' })
+
+        expect(screen.getByText('4.0s')).toBeVisible()
+        act(() => vi.advanceTimersByTime(2000))
+        expect(screen.getByText('6.0s')).toBeVisible()
+
+        view.rerender(toolCardElement({
+            ...running,
+            tool: { ...running.tool, state: 'completed', completedAt: 7500 }
+        }, 'group-row'))
+        expect(screen.getByText('6.5s')).toBeVisible()
+
+        act(() => vi.advanceTimersByTime(5000))
+        expect(screen.getByText('6.5s')).toBeVisible()
     })
 
     it('does not reserve a duration placeholder when exact timing is unavailable', () => {
@@ -620,6 +645,8 @@ describe('ToolCard presentation hierarchy', () => {
             'tool.group.toggleActivities',
             'tool.group.activityDuration',
             'tool.group.totalDuration',
+            'tool.duration.seconds',
+            'tool.duration.lessThanSeconds',
             'tool.group.showOutput',
             'tool.group.hideOutput',
             'tool.group.outputRegion',

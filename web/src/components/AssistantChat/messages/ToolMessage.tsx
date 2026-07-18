@@ -11,12 +11,15 @@ import { ToolCard } from '@/components/ToolCard/ToolCard'
 import { useHappyChatContext } from '@/components/AssistantChat/context'
 import { CliOutputBlock } from '@/components/CliOutputBlock'
 import {
-    formatActivityDuration,
     getActivityDurationMs,
     isGroupableToolBlock,
     isToolCallBlock
 } from '@/components/ToolCard/toolRunModel'
-import { useToolRunLayout } from '@/components/ToolCard/toolRunContext'
+import {
+    useActivityClock,
+    useFormattedActivityDuration,
+    useToolRunLayout
+} from '@/components/ToolCard/toolRunContext'
 import { getToolPresentation } from '@/components/ToolCard/knownTools'
 import { getToolResultViewComponent } from '@/components/ToolCard/views/_results'
 import { ReasoningDisclosure } from '@/components/assistant-ui/reasoning'
@@ -160,6 +163,18 @@ export function HappyToolMessage(props: ToolCallMessagePartProps) {
     const layout = useToolRunLayout()
     const grouped = layout.grouped
     const artifact = props.artifact
+    const standaloneCodexRunning = !grouped
+        && isToolCallBlock(artifact)
+        && artifact.tool.name === 'CodexReasoning'
+        && (artifact.tool.state === 'pending' || artifact.tool.state === 'running')
+    const standaloneNow = useActivityClock(standaloneCodexRunning)
+    const codexDurationMs = isToolCallBlock(artifact) && artifact.tool.name === 'CodexReasoning'
+        ? getActivityDurationMs(
+            { kind: 'tool', block: artifact },
+            grouped ? layout.now : standaloneNow
+        )
+        : null
+    const codexDuration = useFormattedActivityDuration(codexDurationMs)
 
     if (!isToolCallBlock(artifact)) {
         const argsText = typeof props.argsText === 'string' ? props.argsText.trim() : ''
@@ -216,11 +231,6 @@ export function HappyToolMessage(props: ToolCallMessagePartProps) {
         })
         const ResultView = getToolResultViewComponent(block.tool.name)
         const isStreaming = block.tool.state === 'pending' || block.tool.state === 'running'
-        const durationMs = grouped
-            ? getActivityDurationMs({ kind: 'tool', block }, layout.now)
-            : null
-        const duration = durationMs === null ? undefined : formatActivityDuration(durationMs)
-
         return (
             <div
                 data-codex-reasoning
@@ -232,9 +242,11 @@ export function HappyToolMessage(props: ToolCallMessagePartProps) {
                     ariaLabel={presentation.title}
                     isStreaming={isStreaming}
                     presentation={grouped ? 'group-row' : 'standalone'}
-                    duration={duration}
-                    durationAriaLabel={duration
-                        ? t('tool.group.activityDuration', { duration })
+                    duration={codexDuration?.compact}
+                    durationAriaLabel={codexDuration
+                        ? t('tool.group.activityDuration', {
+                            duration: codexDuration.accessible
+                        })
                         : undefined}
                     statusLabel={grouped
                         ? t(isStreaming ? 'tool.status.running' : 'tool.status.completed')

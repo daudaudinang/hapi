@@ -7,6 +7,7 @@ import type {
 } from '@/chat/types'
 import {
     formatActivityDuration,
+    formatActivityDurationValue,
     getActivityDurationMs,
     getActivityGroupDurationMs,
     getToolExpansionKind,
@@ -417,11 +418,18 @@ describe('activity timing', () => {
         ])).toBe(3000)
     })
 
-    it('rejects a last boundary whose completion predates its own start', () => {
+    it('ignores the last start even when its completion predates that timestamp', () => {
         expect(getActivityGroupDurationMs([
             toolEntry('Read', { startedAt: 1000, completedAt: 2000 }),
             toolEntry('Bash', { startedAt: 5000, completedAt: 4000 })
-        ])).toBeNull()
+        ])).toBe(3000)
+    })
+
+    it('does not require a start timestamp on the last group activity', () => {
+        expect(getActivityGroupDurationMs([
+            toolEntry('Read', { startedAt: 1000, completedAt: 2000 }),
+            toolEntry('Bash', { startedAt: null, completedAt: 4000 })
+        ])).toBe(3000)
     })
 
     it('allows generic reasoning in the middle of exact tool boundaries', () => {
@@ -490,5 +498,14 @@ describe('activity timing', () => {
         [12400, '12.4s']
     ])('formats %dms as %s', (durationMs, expected) => {
         expect(formatActivityDuration(durationMs)).toBe(expected)
+    })
+
+    it.each([
+        ['en', 4600, '4.6'],
+        ['vi-VN', 4600, '4,6'],
+        ['zh-CN', 4600, '4.6'],
+        ['vi-VN', 50, '0,1']
+    ] as const)('formats the spoken duration value for %s', (locale, durationMs, expected) => {
+        expect(formatActivityDurationValue(durationMs, locale)).toBe(expected)
     })
 })

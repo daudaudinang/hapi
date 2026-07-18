@@ -309,6 +309,8 @@ export default {
   'tool.group.toggleActivities': '展开或收起活动组：{status}',
   'tool.group.activityDuration': '活动用时：{duration}',
   'tool.group.totalDuration': '总用时：{duration}',
+  'tool.duration.seconds': '{duration} 秒',
+  'tool.duration.lessThanSeconds': '少于 {duration} 秒',
   'tool.group.showOutput': '显示输出',
   'tool.group.hideOutput': '隐藏输出',
   'tool.group.outputRegion': '{tool} 输出',

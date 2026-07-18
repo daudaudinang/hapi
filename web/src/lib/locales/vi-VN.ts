@@ -304,6 +304,8 @@ export default {
   'tool.group.toggleActivities': 'Mở hoặc đóng nhóm hoạt động: {status}',
   'tool.group.activityDuration': 'Thời gian hoạt động: {duration}',
   'tool.group.totalDuration': 'Tổng thời gian: {duration}',
+  'tool.duration.seconds': '{duration} giây',
+  'tool.duration.lessThanSeconds': 'dưới {duration} giây',
   'tool.group.showOutput': 'Hiện kết quả',
   'tool.group.hideOutput': 'Ẩn kết quả',
   'tool.group.outputRegion': 'Kết quả của {tool}',

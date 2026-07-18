@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ToolCallMessagePartProps } from '@assistant-ui/react'
 import type { AgentReasoningBlock, ChatBlock, ToolCallBlock } from '@/chat/types'
@@ -18,7 +18,8 @@ const assistantState = vi.hoisted(() => ({
 }))
 
 const translationState = vi.hoisted(() => ({
-    dictionary: null as Record<string, string> | null
+    dictionary: null as Record<string, string> | null,
+    locale: 'en' as 'en' | 'vi-VN' | 'zh-CN'
 }))
 
 vi.mock('@assistant-ui/react', async (importOriginal) => {
@@ -43,6 +44,7 @@ vi.mock('@assistant-ui/react', async (importOriginal) => {
 
 vi.mock('@/lib/use-translation', () => ({
     useTranslation: () => ({
+        locale: translationState.locale,
         t: (key: string, params?: Record<string, string | number>) => {
             const template = translationState.dictionary?.[key]
             if (!template) return `${key}:${params ? JSON.stringify(params) : ''}`
@@ -153,6 +155,7 @@ function LayoutProbe(props: { name: string; children: ReactNode }) {
 afterEach(() => {
     cleanup()
     translationState.dictionary = null
+    translationState.locale = 'en'
     vi.useRealTimers()
 })
 
@@ -187,7 +190,7 @@ describe('ToolRunGroup', () => {
         expect(trigger).toHaveAttribute('aria-expanded', 'false')
         expect(trigger).toHaveAccessibleName(/tool\.group\.toggleActivities/)
         expect(trigger).toHaveAccessibleDescription(
-            'tool.group.totalDuration:{"duration":"4.0s"}'
+            'tool.group.totalDuration:{"duration":"tool.duration.seconds:{\\"duration\\":\\"4.0\\"}"}'
         )
         expect(trigger).toHaveTextContent('tool.group.activitiesCompleted:{"count":5}')
         expect(trigger).toHaveTextContent('4.0s')
@@ -214,15 +217,17 @@ describe('ToolRunGroup', () => {
     })
 
     it.each([
-        ['English', en, 'Toggle activity group: 2 activities completed', 'Total duration: 4.0s'],
-        ['Vietnamese', viVN, 'Mở hoặc đóng nhóm hoạt động: 2 hoạt động đã hoàn tất', 'Tổng thời gian: 4.0s'],
-        ['Chinese', zhCN, '展开或收起活动组：已完成 2 项活动', '总用时：4.0s']
+        ['English', 'en', en, 'Toggle activity group: 2 activities completed', 'Total duration: 4.0 seconds'],
+        ['Vietnamese', 'vi-VN', viVN, 'Mở hoặc đóng nhóm hoạt động: 2 hoạt động đã hoàn tất', 'Tổng thời gian: 4,0 giây'],
+        ['Chinese', 'zh-CN', zhCN, '展开或收起活动组：已完成 2 项活动', '总用时：4.0 秒']
     ])('exposes the translated group total as the %s toggle description', (
         _language,
+        locale,
         dictionary,
         accessibleName,
         accessibleDescription
     ) => {
+        translationState.locale = locale as 'en' | 'vi-VN' | 'zh-CN'
         translationState.dictionary = dictionary
         setMessageParts([
             part(block('Read', { completedAt: 2000 })),
@@ -379,7 +384,9 @@ describe('ToolRunGroup', () => {
         )
 
         expect(screen.getByRole('button', { name: 'tool.title.reasoning:' }))
-            .toHaveAccessibleDescription('tool.group.activityDuration:{"duration":"4.0s"}')
+            .toHaveAccessibleDescription(
+                'tool.group.activityDuration:{"duration":"tool.duration.seconds:{\\"duration\\":\\"4.0\\"}"}'
+            )
     })
 
     it('renders a singleton without a group wrapper', () => {
@@ -444,6 +451,33 @@ describe('HappyToolMessage group layout', () => {
         )
 
         expect(screen.getByRole('button', { name: 'tool.title.reasoning:' }))
-            .toHaveAccessibleDescription('tool.group.activityDuration:{"duration":"4.6s"}')
+            .toHaveAccessibleDescription(
+                'tool.group.activityDuration:{"duration":"tool.duration.seconds:{\\"duration\\":\\"4.6\\"}"}'
+            )
+    })
+
+    it('advances a standalone Codex reasoning duration and freezes on completion', () => {
+        vi.useFakeTimers()
+        vi.setSystemTime(5000)
+        const running = block('CodexReasoning', {
+            state: 'running',
+            startedAt: 1000,
+            completedAt: null
+        })
+        const view = render(<HappyToolMessage {...toolMessageProps(running)} />)
+
+        expect(screen.getByText('4.0s')).toBeVisible()
+        expect(view.container.querySelector('[data-activity-group]')).toBeNull()
+        act(() => vi.advanceTimersByTime(2000))
+        expect(screen.getByText('6.0s')).toBeVisible()
+
+        const completed = {
+            ...running,
+            tool: { ...running.tool, state: 'completed' as const, completedAt: 7500 }
+        }
+        view.rerender(<HappyToolMessage {...toolMessageProps(completed)} />)
+        expect(screen.getByText('6.5s')).toBeVisible()
+        act(() => vi.advanceTimersByTime(5000))
+        expect(screen.getByText('6.5s')).toBeVisible()
     })
 })

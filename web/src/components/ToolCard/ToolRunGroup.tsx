@@ -1,7 +1,6 @@
 import {
     Children,
     Fragment,
-    useEffect,
     useId,
     useState,
     type PropsWithChildren
@@ -9,12 +8,15 @@ import {
 import { useAssistantState } from '@assistant-ui/react'
 import type { ActivityEntry } from '@/components/ToolCard/toolRunModel'
 import {
-    formatActivityDuration,
     getActivityGroupDurationMs,
     isActivityRunning,
     partitionActivityParts
 } from '@/components/ToolCard/toolRunModel'
-import { ToolRunLayoutProvider } from '@/components/ToolCard/toolRunContext'
+import {
+    ToolRunLayoutProvider,
+    useActivityClock,
+    useFormattedActivityDuration
+} from '@/components/ToolCard/toolRunContext'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/lib/use-translation'
 
@@ -32,19 +34,6 @@ function ChevronIcon(props: { open: boolean }) {
     )
 }
 
-function useRunClock(active: boolean): number {
-    const [now, setNow] = useState(() => Date.now())
-
-    useEffect(() => {
-        if (!active) return
-        setNow(Date.now())
-        const timer = window.setInterval(() => setNow(Date.now()), 1000)
-        return () => window.clearInterval(timer)
-    }, [active])
-
-    return now
-}
-
 function ActivityRun(props: PropsWithChildren<{
     id: string
     entries: ActivityEntry[]
@@ -54,9 +43,9 @@ function ActivityRun(props: PropsWithChildren<{
     const [open, setOpen] = useState(() => running)
     const regionId = useId()
     const durationDescriptionId = useId()
-    const now = useRunClock(running)
+    const now = useActivityClock(running)
     const durationMs = getActivityGroupDurationMs(props.entries)
-    const duration = durationMs === null ? null : formatActivityDuration(durationMs)
+    const duration = useFormattedActivityDuration(durationMs)
     const statusLabel = t(
         running ? 'tool.group.activitiesRunning' : 'tool.group.activitiesCompleted',
         { count: props.entries.length }
@@ -87,10 +76,10 @@ function ActivityRun(props: PropsWithChildren<{
                             aria-hidden="true"
                             className="shrink-0 font-mono text-[11px] font-semibold text-[var(--app-hint)]"
                         >
-                            {duration}
+                            {duration.compact}
                         </span>
                         <span id={durationDescriptionId} className="sr-only">
-                            {t('tool.group.totalDuration', { duration })}
+                            {t('tool.group.totalDuration', { duration: duration.accessible })}
                         </span>
                     </>
                 ) : null}

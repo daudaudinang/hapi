@@ -662,6 +662,74 @@ describe('Happy assistant actual-runtime activity grouping', () => {
         expect(screen.queryByRole('button', { name: 'Reasoning in progress' })).not.toBeInTheDocument()
     })
 
+    it('preserves a streamed reasoning lifecycle through append, completion, prepend, and remount', async () => {
+        const reasoning: ChatBlock = {
+            kind: 'agent-reasoning',
+            id: 'lifecycle-reasoning',
+            localId: null,
+            createdAt: 10,
+            text: 'lifecycle-reasoning-marker'
+        }
+        const view = render(<RuntimeHarness blocks={[reasoning]} thinking />)
+        expect(view.container.querySelectorAll('[data-hapi-reasoning]')).toHaveLength(1)
+        expect(screen.getByRole('button', { name: 'Reasoning in progress' })).toBeInTheDocument()
+
+        const terminal = identifiedTool('lifecycle-terminal', 'Bash', { command: 'printf lifecycle' }, {
+            state: 'running',
+            completedAt: null,
+            result: { stdout: 'lifecycle-terminal-marker', stderr: '', exitCode: null }
+        })
+        view.rerender(<RuntimeHarness blocks={[reasoning, terminal]} thinking />)
+        await waitFor(() => expect(toolIds(view.container)).toEqual(['lifecycle-terminal']))
+        const reasoningNode = view.container.querySelector<HTMLElement>('[data-hapi-reasoning]')!
+        const terminalNode = view.container.querySelector<HTMLElement>(
+            '[data-tool-block-id="lifecycle-terminal"]'
+        )!
+        expectNodesInOrder([reasoningNode, terminalNode])
+        fireEvent.click(within(terminalNode).getByRole('button', { name: 'Show output' }))
+        expectTextMarkersOnceInOrder(view.container, ['lifecycle-reasoning-marker'])
+        expect(terminalNode.querySelector('[data-tool-inline-output]'))
+            .toHaveTextContent('lifecycle-terminal-marker')
+        expect(view.container.querySelectorAll('[data-hapi-reasoning]')).toHaveLength(1)
+        expect(screen.queryByRole('button', { name: 'Reasoning in progress' })).not.toBeInTheDocument()
+
+        const completedTerminal = {
+            ...terminal,
+            tool: { ...terminal.tool, state: 'completed' as const, completedAt: 3000 }
+        }
+        view.rerender(<RuntimeHarness blocks={[reasoning, completedTerminal]} />)
+        await waitFor(() => {
+            expect(toolIds(view.container)).toEqual(['lifecycle-terminal'])
+            expect(screen.queryByRole('button', { name: 'Reasoning in progress' })).not.toBeInTheDocument()
+        })
+
+        const older: ChatBlock = {
+            kind: 'agent-text', id: 'lifecycle-older', localId: null, createdAt: 1,
+            text: 'lifecycle-older-marker'
+        }
+        view.rerender(<RuntimeHarness blocks={[older, reasoning, completedTerminal]} />)
+        await waitFor(() => expectTextMarkersOnceInOrder(view.container, [
+            'lifecycle-older-marker',
+            'lifecycle-reasoning-marker'
+        ]))
+        expect(toolIds(view.container)).toEqual(['lifecycle-terminal'])
+        expectNodesInOrder([
+            screen.getByText('lifecycle-older-marker'),
+            view.container.querySelector('[data-hapi-reasoning]')!,
+            view.container.querySelector('[data-tool-block-id="lifecycle-terminal"]')!
+        ])
+
+        view.unmount()
+        const remounted = render(<RuntimeHarness blocks={[older, reasoning, completedTerminal]} />)
+        expectTextMarkersOnceInOrder(remounted.container, [
+            'lifecycle-older-marker',
+            'lifecycle-reasoning-marker'
+        ])
+        expect(toolIds(remounted.container)).toEqual(['lifecycle-terminal'])
+        expect(remounted.container.querySelectorAll('[data-hapi-reasoning]')).toHaveLength(1)
+        expect(screen.queryByRole('button', { name: 'Reasoning in progress' })).not.toBeInTheDocument()
+    })
+
     it('opens the provider HapiReasoning fallback dialog with its exact input and result', () => {
         const collision = identifiedTool('provider-reasoning-collision', 'HapiReasoning', {
             query: 'provider-reasoning-input-marker'

@@ -28,8 +28,12 @@ function renderReasoning() {
 }
 
 function LocalizedGroupRowDisclosure() {
-    const { t } = useTranslation()
+    const { t, locale } = useTranslation()
     const duration = '4.6s'
+    const durationValue = new Intl.NumberFormat(locale, {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1
+    }).format(4.6)
     const title = t('tool.title.reasoning')
     return (
         <ReasoningDisclosure
@@ -38,7 +42,9 @@ function LocalizedGroupRowDisclosure() {
             isStreaming={false}
             presentation="group-row"
             duration={duration}
-            durationAriaLabel={t('tool.group.activityDuration', { duration })}
+            durationAriaLabel={t('tool.group.activityDuration', {
+                duration: t('tool.duration.seconds', { duration: durationValue })
+            })}
             statusLabel={t('tool.status.completed')}
         >
             <span>Body</span>
@@ -112,6 +118,16 @@ describe('ReasoningGroup', () => {
         expect(body).not.toHaveAttribute('hidden')
     })
 
+    it('does not cap or scroll expanded reasoning content', () => {
+        mockMessage({ status: { type: 'complete' }, content: [] })
+        const { container } = renderReasoning()
+
+        fireEvent.click(screen.getByRole('button', { name: /reasoning/i }))
+        const body = container.querySelector('[data-reasoning-body]')
+        expect(body).not.toHaveClass('max-h-[5000px]', 'overflow-auto')
+        expect(body?.className).not.toMatch(/max-h-/)
+    })
+
     it('disables disclosure and chevron transitions for reduced motion', () => {
         mockMessage({ status: { type: 'complete' }, content: [] })
         const { container } = renderReasoning()
@@ -170,9 +186,9 @@ describe('ReasoningDisclosure group row', () => {
     })
 
     it.each([
-        ['en', 'Reasoning', 'Activity duration: 4.6s'],
-        ['vi-VN', 'Lập luận', 'Thời gian hoạt động: 4.6s'],
-        ['zh-CN', '推理', '活动用时：4.6s']
+        ['en', 'Reasoning', 'Activity duration: 4.6 seconds'],
+        ['vi-VN', 'Lập luận', 'Thời gian hoạt động: 4,6 giây'],
+        ['zh-CN', '推理', '活动用时：4.6 秒']
     ] satisfies [Locale, string, string][])('exposes the translated per-activity duration in %s', (
         locale,
         accessibleName,
@@ -187,5 +203,23 @@ describe('ReasoningDisclosure group row', () => {
 
         expect(screen.getByRole('button', { name: accessibleName }))
             .toHaveAccessibleDescription(accessibleDescription)
+    })
+
+    it('shows exact duration on a standalone Codex reasoning disclosure', () => {
+        render(
+            <ReasoningDisclosure
+                label="Inspecting"
+                ariaLabel="Inspecting"
+                isStreaming={false}
+                duration="4.6s"
+                durationAriaLabel="Activity duration: 4.6 seconds"
+            >
+                <span>Body</span>
+            </ReasoningDisclosure>
+        )
+
+        expect(screen.getByText('4.6s')).toBeVisible()
+        expect(screen.getByRole('button', { name: 'Inspecting' }))
+            .toHaveAccessibleDescription('Activity duration: 4.6 seconds')
     })
 })
