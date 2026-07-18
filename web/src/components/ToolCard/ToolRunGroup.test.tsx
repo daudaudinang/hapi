@@ -332,6 +332,8 @@ describe('ToolRunGroup', () => {
                 <span>tail</span>
             </ToolRunGroup>
         )
+        expect(screen.getByTestId('tool-run-group')).toHaveClass('processing-surface')
+        expect(screen.getByTestId('tool-run-group')).toHaveAttribute('data-running', 'true')
         expect(screen.getByRole('button')).toHaveAttribute('aria-expanded', 'true')
 
         setMessageParts([part(block('Read')), part(block('Bash'))])

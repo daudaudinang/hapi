@@ -450,8 +450,12 @@ describe('ToolCard presentation hierarchy', () => {
         const status = screen.getByLabelText('Completed')
         const output = screen.getByRole('button', { name: 'Show output' })
         const ordered = [title, subtitle, duration, status, output]
+        const activityRow = container.querySelector('[data-tool-display="group-row"] > div')
 
         expect(row?.querySelector('button button')).toBeNull()
+        expect(activityRow).toHaveClass('activity-row', 'min-h-[37px]')
+        expect(container.querySelector('[data-tool-display="group-row"] .activity-orb')).not.toBeNull()
+        expect(container.querySelector('[data-tool-display="group-row"] .uppercase')).toBeNull()
         for (let index = 0; index < ordered.length - 1; index += 1) {
             expect(ordered[index]?.compareDocumentPosition(ordered[index + 1]!)
                 & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()

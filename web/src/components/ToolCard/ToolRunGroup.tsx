@@ -56,8 +56,12 @@ function ActivityRun(props: PropsWithChildren<{
             data-testid="tool-run-group"
             data-tool-run-group
             data-activity-group
+            data-running={running ? 'true' : 'false'}
             data-tool-run-id={props.id}
-            className="my-2 w-full max-w-[600px] min-w-0 overflow-hidden rounded-lg border border-[var(--app-border)] bg-[var(--app-secondary-bg)]"
+            className={cn(
+                'processing-surface my-2 w-full max-w-[600px] min-w-0 overflow-hidden rounded-[15px] border border-[var(--app-border)] bg-[var(--app-secondary-bg)]',
+                running && 'processing-surface--running'
+            )}
         >
             <button
                 type="button"
@@ -66,7 +70,7 @@ function ActivityRun(props: PropsWithChildren<{
                 aria-label={t('tool.group.toggleActivities', { status: statusLabel })}
                 aria-describedby={duration ? durationDescriptionId : undefined}
                 onClick={() => setOpen((value) => !value)}
-                className="flex min-h-11 w-full min-w-0 items-center gap-2 px-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]"
+                className="flex min-h-[42px] w-full min-w-0 items-center gap-2 px-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]"
             >
                 <ChevronIcon open={open} />
                 <span className="min-w-0 flex-1 text-xs font-semibold">

@@ -45,13 +45,22 @@
     --app-badge-error-border: rgba(239, 68, 68, 0.3);
 
     /* Session tool artifacts (light) */
+    --app-tool-neutral-accent: #4f58c9;
+    --app-tool-neutral-surface: rgba(79, 88, 201, 0.045);
     --app-tool-plan-accent: #7c3fc5;
     --app-tool-plan-border: rgba(124, 63, 197, 0.42);
+    --app-tool-plan-surface: rgba(124, 63, 197, 0.055);
     --app-tool-diff-accent: #168344;
     --app-tool-diff-border: rgba(22, 131, 68, 0.38);
+    --app-tool-diff-surface: rgba(22, 131, 68, 0.045);
+    --app-tool-question-accent: #0879b9;
+    --app-tool-question-border: rgba(8, 121, 185, 0.38);
+    --app-tool-question-surface: rgba(8, 121, 185, 0.05);
     --app-tool-attention-bg: rgba(166, 95, 0, 0.07);
     --app-tool-attention-border: rgba(166, 95, 0, 0.48);
     --app-tool-attention-accent: #a65f00;
+    --app-processing-edge: rgba(79, 88, 201, 0.48);
+    --app-processing-scrollbar: rgba(107, 114, 128, 0.48);
     --app-primary-action-bg: #2867df;
     --app-primary-action-bg-hover: #225fc8;
     --app-primary-action-text: #ffffff;
@@ -102,13 +111,22 @@
     --app-badge-error-border: rgba(248, 113, 113, 0.35);
 
     /* Session tool artifacts (dark) */
+    --app-tool-neutral-accent: #9aa2ff;
+    --app-tool-neutral-surface: rgba(108, 117, 255, 0.075);
     --app-tool-plan-accent: #bf5af2;
     --app-tool-plan-border: rgba(191, 90, 242, 0.42);
+    --app-tool-plan-surface: rgba(191, 90, 242, 0.075);
     --app-tool-diff-accent: #30d158;
     --app-tool-diff-border: rgba(48, 209, 88, 0.36);
+    --app-tool-diff-surface: rgba(48, 209, 88, 0.06);
+    --app-tool-question-accent: #64d2ff;
+    --app-tool-question-border: rgba(100, 210, 255, 0.34);
+    --app-tool-question-surface: rgba(100, 210, 255, 0.055);
     --app-tool-attention-bg: rgba(255, 214, 10, 0.06);
     --app-tool-attention-border: rgba(255, 214, 10, 0.42);
     --app-tool-attention-accent: #ffd60a;
+    --app-processing-edge: rgba(154, 162, 255, 0.58);
+    --app-processing-scrollbar: rgba(142, 142, 147, 0.58);
     --app-primary-action-bg: #2867df;
     --app-primary-action-bg-hover: #225fc8;
     --app-primary-action-text: #ffffff;
@@ -643,5 +661,82 @@ html[data-theme="dark"] .shiki span {
     .mermaid-preview__action,
     .mermaid-preview__content {
         transition: none;
+    }
+}
+
+.processing-surface {
+    position: relative;
+    isolation: isolate;
+    background-image: linear-gradient(
+        135deg,
+        var(--processing-surface-tint, transparent),
+        transparent 70%
+    );
+}
+
+.processing-surface--running::before {
+    content: "";
+    position: absolute;
+    z-index: 1;
+    inset: 0 16% auto;
+    height: 1px;
+    pointer-events: none;
+    background: linear-gradient(90deg, transparent, var(--app-processing-edge), transparent);
+    animation: processing-edge-breathe 2.8s ease-in-out infinite;
+}
+
+.activity-live-marker {
+    color: var(--app-tool-neutral-accent);
+}
+
+.activity-scroll-region {
+    scrollbar-width: thin;
+    scrollbar-color: var(--app-processing-scrollbar) transparent;
+    -webkit-overflow-scrolling: touch;
+}
+
+.activity-scroll-region::-webkit-scrollbar {
+    width: 7px;
+}
+
+.activity-scroll-region::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: var(--app-processing-scrollbar);
+    background-clip: padding-box;
+}
+
+.activity-row {
+    transition: background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.activity-row:hover,
+.activity-row:focus-within {
+    background: var(--app-subtle-bg);
+    box-shadow: inset 0 1px 0 var(--app-divider);
+}
+
+@keyframes processing-edge-breathe {
+    0%,
+    100% {
+        opacity: 0.34;
+        transform: scaleX(0.72);
+    }
+
+    50% {
+        opacity: 0.82;
+        transform: scaleX(1);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .processing-surface--running::before {
+        animation: none;
+    }
+
+    .activity-row,
+    .processing-card {
+        transition: none;
+        transform: none !important;
     }
 }

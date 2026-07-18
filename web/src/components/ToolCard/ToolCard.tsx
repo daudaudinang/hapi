@@ -406,14 +406,17 @@ function ToolCardInner(props: ToolCardProps) {
                 data-tool-block-id={props.block.id}
                 className="w-full min-w-0"
             >
-                <div className="flex min-h-10 w-full min-w-0 items-center gap-1 rounded-md hover:bg-[var(--app-subtle-bg)]">
+                <div className="activity-row flex min-h-[37px] w-full min-w-0 items-center gap-1 rounded-[11px]">
                     <Dialog>
                         <DialogTrigger asChild>
                             <button
                                 type="button"
-                                className="flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]"
+                                className="flex min-h-[37px] min-w-0 flex-1 items-center gap-2 rounded-[11px] px-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]"
                             >
-                                <span className="shrink-0 text-[var(--app-hint)]">
+                                <span
+                                    aria-hidden="true"
+                                    className="activity-orb grid h-[25px] w-[25px] shrink-0 place-items-center rounded-full bg-[var(--app-tool-neutral-surface)] text-[var(--app-tool-neutral-accent)]"
+                                >
                                     {presentation.icon}
                                 </span>
                                 <span className="shrink-0 text-xs font-medium">

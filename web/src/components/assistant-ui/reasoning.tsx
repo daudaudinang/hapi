@@ -92,8 +92,8 @@ export function ReasoningDisclosure(props: ReasoningDisclosureProps) {
                 aria-describedby={describedBy}
                 onClick={() => setIsOpen((value) => !value)}
                 className={cn(
-                    'cursor-pointer select-none items-center gap-1.5 rounded-md px-1 text-xs font-medium text-[var(--app-hint)] transition-colors hover:bg-[var(--app-subtle-bg)] hover:text-[var(--app-fg)] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]',
-                    groupRow ? 'flex min-h-10 w-full text-left' : 'inline-flex min-h-8'
+                    'cursor-pointer select-none items-center gap-1.5 rounded-[11px] px-2 text-xs font-medium text-[var(--app-hint)] transition-colors hover:text-[var(--app-fg)] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]',
+                    groupRow ? 'activity-row flex min-h-[37px] w-full text-left' : 'inline-flex min-h-8'
                 )}
             >
                 <ChevronIcon open={isOpen} />
