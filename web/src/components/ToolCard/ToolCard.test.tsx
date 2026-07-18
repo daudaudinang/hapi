@@ -262,15 +262,15 @@ describe('ToolCard presentation hierarchy', () => {
         expect(trigger).toHaveClass('min-h-[50px]', 'px-3', 'py-2')
     })
 
-    it('keeps pending approval context when an errored tool uses the semantic error surface', () => {
+    it('treats error as terminal and removes stale pending approval actions', () => {
         const { container } = renderTool(makeToolBlock('Write', {}, pendingPermission, {
             state: 'error'
         }))
 
         expect(container.querySelector('[data-tool-surface="error"]')).not.toBeNull()
         expect(container.querySelector('[data-tool-surface="permission"]')).toBeNull()
-        expect(screen.getByText('Permission required')).toBeInTheDocument()
-        expect(screen.getByTestId('permission-actions')).toBeInTheDocument()
+        expect(screen.queryByText('Permission required')).not.toBeInTheDocument()
+        expect(screen.queryByTestId('permission-actions')).not.toBeInTheDocument()
     })
 
     it('shows compact plan progress in the header without removing the checklist', () => {
@@ -319,8 +319,41 @@ describe('ToolCard presentation hierarchy', () => {
         const title = screen.getByText('density')
         const subtitle = screen.getByText('Choose the preferred processing-card density')
         expect(title.parentElement).toContainElement(subtitle)
-        expect(title.parentElement).toHaveClass('flex', 'items-baseline')
+        expect(title.parentElement).toHaveClass('flex', 'flex-col', 'items-start')
+        expect(title).not.toHaveClass('max-w-[55%]')
         expect(subtitle).toHaveClass('truncate')
+    })
+
+    it('uses the subtitle and duration as descriptions instead of bloating the trigger name', () => {
+        const { container } = renderTool(makeToolBlock('Bash', { command: 'bun run build:web' }, undefined, {
+            state: 'completed',
+            startedAt: 1000,
+            completedAt: 5600
+        }))
+        const trigger = container.querySelector('[data-tool-card-trigger]')
+
+        expect(trigger).toHaveAccessibleName('Terminal Completed')
+        expect(trigger).toHaveAccessibleDescription('bun run build:web Activity duration: 4.6 seconds')
+    })
+
+    it('uses exact localized timing for a running standalone card without a createdAt fallback', () => {
+        vi.useFakeTimers()
+        vi.setSystemTime(5600)
+        const running = renderTool(makeToolBlock('Bash', { command: 'pwd' }, undefined, {
+            state: 'running',
+            startedAt: 1000,
+            completedAt: null
+        }), { locale: 'vi-VN' })
+
+        expect(screen.getByText('4.6s')).toHaveAccessibleName('Thời gian hoạt động: 4,6 giây')
+        running.unmount()
+
+        renderTool(makeToolBlock('Bash', { command: 'pwd' }, undefined, {
+            state: 'running',
+            startedAt: null,
+            completedAt: null
+        }), { locale: 'vi-VN' })
+        expect(screen.queryByText(/s$/)).not.toBeInTheDocument()
     })
 
     it('keeps a singleton neutral tool inside a subtle visible surface', () => {
@@ -580,6 +613,20 @@ describe('ToolCard presentation hierarchy', () => {
             expect(ordered[index]?.compareDocumentPosition(ordered[index + 1]!)
                 & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
         }
+    })
+
+    it('marks only pending and running activity rows as current', () => {
+        const running = renderTool(makeToolBlock('Bash', { command: 'pwd' }, undefined, {
+            state: 'running',
+            completedAt: null
+        }), { displayMode: 'group-row' })
+        expect(running.container.querySelector('.activity-row')).toHaveAttribute('data-running', 'true')
+        running.unmount()
+
+        const completed = renderTool(makeToolBlock('Bash', { command: 'pwd' }), {
+            displayMode: 'group-row'
+        })
+        expect(completed.container.querySelector('.activity-row')).toHaveAttribute('data-running', 'false')
     })
 
     it('opens terminal output at full width with a 300px cap without internal truncation', () => {

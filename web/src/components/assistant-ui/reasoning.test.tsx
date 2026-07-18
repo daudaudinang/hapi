@@ -188,6 +188,32 @@ describe('ReasoningDisclosure group row', () => {
         expect(container.querySelector('button button')).toBeNull()
     })
 
+    it('marks only streaming reasoning rows as current', () => {
+        const { rerender } = render(
+            <ReasoningDisclosure
+                label="Inspecting"
+                ariaLabel="Inspecting"
+                isStreaming
+                presentation="group-row"
+            >
+                <span>Body</span>
+            </ReasoningDisclosure>
+        )
+        expect(screen.getByRole('button', { name: 'Inspecting' })).toHaveAttribute('data-running', 'true')
+
+        rerender(
+            <ReasoningDisclosure
+                label="Inspecting"
+                ariaLabel="Inspecting"
+                isStreaming={false}
+                presentation="group-row"
+            >
+                <span>Body</span>
+            </ReasoningDisclosure>
+        )
+        expect(screen.getByRole('button', { name: 'Inspecting' })).toHaveAttribute('data-running', 'false')
+    })
+
     it.each([
         ['en', 'Reasoning', 'Activity duration: 4.6 seconds'],
         ['vi-VN', 'Lập luận', 'Thời gian hoạt động: 4,6 giây'],

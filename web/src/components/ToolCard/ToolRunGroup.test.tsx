@@ -348,6 +348,41 @@ describe('ToolRunGroup', () => {
         expect(screen.getByRole('button')).toHaveAttribute('aria-expanded', 'true')
     })
 
+    it('opens once when a collapsed completed group starts running again', () => {
+        setMessageParts([part(block('Read')), part(block('Bash'))])
+        const view = render(
+            <ToolRunGroup startIndex={0} endIndex={1}>
+                <span>read-child</span>
+                <span>bash-child</span>
+            </ToolRunGroup>
+        )
+        const trigger = screen.getByRole('button')
+        expect(trigger).toHaveAttribute('aria-expanded', 'false')
+
+        setMessageParts([
+            part(block('Read', { state: 'running', completedAt: null })),
+            part(block('Bash', { state: 'running', completedAt: null }))
+        ])
+        view.rerender(
+            <ToolRunGroup startIndex={0} endIndex={1}>
+                <span>read-child</span>
+                <span>bash-child</span>
+            </ToolRunGroup>
+        )
+        expect(trigger).toHaveAttribute('aria-expanded', 'true')
+
+        fireEvent.click(trigger)
+        expect(trigger).toHaveAttribute('aria-expanded', 'false')
+
+        view.rerender(
+            <ToolRunGroup startIndex={0} endIndex={1}>
+                <span>read-child</span>
+                <span>bash-child</span>
+            </ToolRunGroup>
+        )
+        expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    })
+
     it('opens when the final generic reasoning is the running message part and stays open on completion', () => {
         const finalReasoning = reasoning('reason-final')
         setMessageParts([

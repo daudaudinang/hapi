@@ -89,6 +89,7 @@ export function ReasoningDisclosure(props: ReasoningDisclosureProps) {
         >
             <button
                 type="button"
+                data-running={groupRow ? (props.isStreaming ? 'true' : 'false') : undefined}
                 aria-expanded={isOpen}
                 aria-controls={contentId}
                 aria-label={props.ariaLabel}

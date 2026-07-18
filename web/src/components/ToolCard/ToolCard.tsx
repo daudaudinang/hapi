@@ -1,7 +1,7 @@
 import type { ToolCallBlock } from '@/chat/types'
 import type { ApiClient } from '@/api/client'
 import type { SessionMetadataSummary } from '@/types/api'
-import { memo, useEffect, useId, useMemo, useState, type ReactNode } from 'react'
+import { memo, useId, useMemo, useState, type ReactNode } from 'react'
 import { isObject, safeStringify } from '@hapi/protocol'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { CodeBlock } from '@/components/CodeBlock'
@@ -35,8 +35,6 @@ import {
     useToolRunLayout
 } from '@/components/ToolCard/toolRunContext'
 
-const ELAPSED_INTERVAL_MS = 1000
-
 const SURFACE_CLASS = {
     neutral: '[--processing-surface-tint:var(--app-tool-neutral-surface)] border-[var(--app-border)]',
     plan: '[--processing-surface-tint:var(--app-tool-plan-surface)] border-[var(--app-tool-plan-border)]',
@@ -54,27 +52,6 @@ const ORB_CLASS = {
     permission: 'bg-[var(--app-tool-attention-bg)] text-[var(--app-tool-attention-accent)]',
     error: 'bg-[var(--app-badge-error-bg)] text-[var(--app-badge-error-text)]'
 } as const
-
-function ElapsedView(props: { from: number; active: boolean }) {
-    const [now, setNow] = useState(() => Date.now())
-
-    useEffect(() => {
-        if (!props.active) return
-        const id = setInterval(() => setNow(Date.now()), ELAPSED_INTERVAL_MS)
-        return () => clearInterval(id)
-    }, [props.active])
-
-    if (!props.active) return null
-
-    const elapsed = (now - props.from) / 1000
-    if (!Number.isFinite(elapsed)) return null
-
-    return (
-        <span className="font-mono text-xs text-[var(--app-hint)]">
-            {elapsed.toFixed(1)}s
-        </span>
-    )
-}
 
 function getTaskSummaryChildren(block: ToolCallBlock): { visible: ToolCallBlock[]; remaining: number } | null {
     if (block.tool.name !== 'Task') return null
@@ -295,8 +272,7 @@ function ToolCardInner(props: ToolCardProps) {
     const { t } = useTranslation()
     const layout = useToolRunLayout()
     const displayMode = props.displayMode ?? 'card'
-    const standaloneRunning = displayMode === 'group-row'
-        && !layout.grouped
+    const standaloneRunning = !layout.grouped
         && (props.block.tool.state === 'pending' || props.block.tool.state === 'running')
     const standaloneNow = useActivityClock(standaloneRunning)
     const expansionKind = displayMode === 'group-row'
@@ -304,6 +280,12 @@ function ToolCardInner(props: ToolCardProps) {
         : null
     const [outputOpen, setOutputOpen] = useState(false)
     const outputId = useId()
+    const titleId = useId()
+    const subtitleId = useId()
+    const stateId = useId()
+    const permissionId = useId()
+    const durationId = useId()
+    const durationDescriptionId = useId()
     const presentation = useMemo(() => getToolPresentation({
         toolName: props.block.tool.name,
         input: props.block.tool.input,
@@ -332,7 +314,6 @@ function ToolCardInner(props: ToolCardProps) {
     const toolTitle = presentation.title
     const subtitle = presentation.subtitle ?? props.block.tool.description
     const taskSummary = renderTaskSummary(props.block, props.metadata, t)
-    const runningFrom = props.block.tool.startedAt ?? props.block.tool.createdAt
     const showInline = !presentation.minimal && toolName !== 'Task'
     const CompactToolView = showInline ? getToolViewComponent(toolName) : null
     const FullToolView = getToolFullViewComponent(toolName)
@@ -341,7 +322,9 @@ function ToolCardInner(props: ToolCardProps) {
     const isAskUserQuestion = isAskUserQuestionToolName(toolName)
     const isRequestUserInput = isRequestUserInputToolName(toolName)
     const isQuestionTool = isAskUserQuestion || isRequestUserInput
-    const hasPendingApproval = permission?.status === 'pending' && !isQuestionTool
+    const permissionIsStale = props.block.tool.state === 'error'
+    const hasActionablePendingPermission = permission?.status === 'pending' && !permissionIsStale
+    const hasPendingApproval = hasActionablePendingPermission && !isQuestionTool
     const surfaceTone = props.block.tool.state === 'error'
         ? 'error'
         : hasPendingApproval
@@ -354,20 +337,30 @@ function ToolCardInner(props: ToolCardProps) {
         : surfaceTone === 'diff'
             ? t('tool.reviewDiff')
             : t('tool.details')
-    const showsPermissionFooter = Boolean(permission && (
+    const showsPermissionFooter = !permissionIsStale && Boolean(permission && (
         permission.status === 'pending'
         || ((permission.status === 'denied' || permission.status === 'canceled') && Boolean(permission.reason))
     ))
     const hasBody = showInline || taskSummary !== null || showsPermissionFooter
     const stateColor = statusColorClass(props.block.tool.state)
-    const activityDurationMs = displayMode === 'group-row'
-        ? getActivityDurationMs(
-            { kind: 'tool', block: props.block },
-            layout.grouped ? layout.now : standaloneNow
-        )
-        : null
+    const activityDurationMs = getActivityDurationMs(
+        { kind: 'tool', block: props.block },
+        layout.grouped ? layout.now : standaloneNow
+    )
     const activityDuration = useFormattedActivityDuration(activityDurationMs)
     const stateLabel = t(`tool.status.${props.block.tool.state}`)
+    const durationLabel = activityDuration
+        ? t('tool.group.activityDuration', { duration: activityDuration.accessible })
+        : null
+    const triggerLabelledBy = [
+        hasPendingApproval ? permissionId : null,
+        titleId,
+        stateId
+    ].filter(Boolean).join(' ')
+    const triggerDescribedBy = [
+        subtitle ? subtitleId : null,
+        durationLabel ? durationDescriptionId : null
+    ].filter(Boolean).join(' ') || undefined
     const { suppressFocusRing, onTriggerPointerDown, onTriggerKeyDown, onTriggerBlur } = usePointerFocusRing()
     const isQuestionToolWithAnswers = Boolean(
         isQuestionTool
@@ -427,7 +420,10 @@ function ToolCardInner(props: ToolCardProps) {
                 data-tool-block-id={props.block.id}
                 className="w-full min-w-0"
             >
-                <div className="activity-row flex min-h-[37px] w-full min-w-0 items-center gap-1 rounded-[11px]">
+                <div
+                    data-running={props.block.tool.state === 'pending' || props.block.tool.state === 'running' ? 'true' : 'false'}
+                    className="activity-row flex min-h-[37px] w-full min-w-0 items-center gap-1 rounded-[11px]"
+                >
                     <Dialog>
                         <DialogTrigger asChild>
                             <button
@@ -537,19 +533,16 @@ function ToolCardInner(props: ToolCardProps) {
                     </div>
                     <div className="min-w-0">
                         {hasPendingApproval ? (
-                            <div className="text-xs font-semibold text-[var(--app-tool-attention-accent)]">
+                            <div id={permissionId} className="text-xs font-semibold text-[var(--app-tool-attention-accent)]">
                                 {t('tool.permissionRequired')}
                             </div>
                         ) : null}
-                        <div className="flex min-w-0 items-baseline gap-1">
-                            <CardTitle className={cn(
-                                'min-w-0 truncate text-sm font-medium leading-tight',
-                                subtitle ? 'max-w-[55%] shrink-0' : 'flex-1'
-                            )}>
+                        <div className="flex min-w-0 flex-col items-start gap-0.5">
+                            <CardTitle id={titleId} className="w-full min-w-0 truncate text-sm font-medium leading-tight">
                                 {toolTitle}
                             </CardTitle>
                             {subtitle ? (
-                                <CardDescription className="min-w-0 flex-1 truncate font-mono text-xs opacity-80">
+                                <CardDescription id={subtitleId} className="w-full min-w-0 truncate font-mono text-xs leading-tight opacity-80">
                                     {truncate(subtitle, 160)}
                                 </CardDescription>
                             ) : null}
@@ -569,11 +562,24 @@ function ToolCardInner(props: ToolCardProps) {
                             {planProgress.percent}% · {planProgress.completed}/{planProgress.total}
                         </span>
                     ) : null}
-                    <ElapsedView from={runningFrom} active={props.block.tool.state === 'running'} />
+                    {activityDuration && durationLabel ? (
+                        <>
+                            <span
+                                id={durationId}
+                                aria-label={durationLabel}
+                                className="shrink-0 font-mono text-[11px] text-[var(--app-hint)]"
+                            >
+                                {activityDuration.compact}
+                            </span>
+                            <span id={durationDescriptionId} className="sr-only">
+                                {durationLabel}
+                            </span>
+                        </>
+                    ) : null}
                     <span aria-hidden="true" className={stateColor}>
                         <StatusIcon state={props.block.tool.state} />
                     </span>
-                    <span className="sr-only">{stateLabel}</span>
+                    <span id={stateId} className="sr-only">{stateLabel}</span>
                     <span className={cn(
                         'text-xs font-medium',
                         surfaceTone === 'plan' && 'text-[var(--app-tool-plan-accent)]',
@@ -606,6 +612,8 @@ function ToolCardInner(props: ToolCardProps) {
                         <button
                             type="button"
                             data-tool-card-trigger
+                            aria-labelledby={triggerLabelledBy}
+                            aria-describedby={triggerDescribedBy}
                             className={cn(
                                 'min-h-[50px] w-full rounded-md px-3 py-2 text-left transition-colors hover:bg-[var(--app-subtle-bg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]',
                                 suppressFocusRing && 'focus-visible:ring-0'
@@ -648,7 +656,7 @@ function ToolCardInner(props: ToolCardProps) {
                         )
                     ) : null}
 
-                    {isAskUserQuestion && permission?.status === 'pending' ? (
+                    {showsPermissionFooter && isAskUserQuestion && hasActionablePendingPermission ? (
                         <AskUserQuestionFooter
                             api={props.api}
                             sessionId={props.sessionId}
@@ -656,7 +664,7 @@ function ToolCardInner(props: ToolCardProps) {
                             disabled={props.disabled}
                             onDone={props.onDone}
                         />
-                    ) : isRequestUserInput && permission?.status === 'pending' ? (
+                    ) : showsPermissionFooter && isRequestUserInput && hasActionablePendingPermission ? (
                         <RequestUserInputFooter
                             api={props.api}
                             sessionId={props.sessionId}
@@ -664,7 +672,7 @@ function ToolCardInner(props: ToolCardProps) {
                             disabled={props.disabled}
                             onDone={props.onDone}
                         />
-                    ) : (
+                    ) : showsPermissionFooter ? (
                         <PermissionFooter
                             api={props.api}
                             sessionId={props.sessionId}
@@ -673,7 +681,7 @@ function ToolCardInner(props: ToolCardProps) {
                             disabled={props.disabled}
                             onDone={props.onDone}
                         />
-                    )}
+                    ) : null}
                 </CardContent>
             ) : null}
         </Card>

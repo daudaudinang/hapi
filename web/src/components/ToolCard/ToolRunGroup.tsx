@@ -1,7 +1,9 @@
 import {
     Children,
     Fragment,
+    useEffect,
     useId,
+    useRef,
     useState,
     type PropsWithChildren
 } from 'react'
@@ -41,6 +43,7 @@ function ActivityRun(props: PropsWithChildren<{
     const { t } = useTranslation()
     const running = props.entries.some(isActivityRunning)
     const [open, setOpen] = useState(() => running)
+    const previousRunning = useRef(running)
     const regionId = useId()
     const durationDescriptionId = useId()
     const now = useActivityClock(running)
@@ -50,6 +53,13 @@ function ActivityRun(props: PropsWithChildren<{
         running ? 'tool.group.activitiesRunning' : 'tool.group.activitiesCompleted',
         { count: props.entries.length }
     )
+
+    useEffect(() => {
+        if (running && !previousRunning.current) {
+            setOpen(true)
+        }
+        previousRunning.current = running
+    }, [running])
 
     return (
         <div
