@@ -674,6 +674,17 @@ html[data-theme="dark"] .shiki span {
     );
 }
 
+.processing-card {
+    transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .processing-card:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 8px 24px color-mix(in srgb, var(--app-fg) 7%, transparent);
+    }
+}
+
 .processing-surface--running::before {
     content: "";
     position: absolute;

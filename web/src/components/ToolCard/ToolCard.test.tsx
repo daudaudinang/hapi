@@ -193,12 +193,73 @@ describe('ToolCard presentation hierarchy', () => {
         expect(container.querySelector('[data-tool-surface="permission"]')).not.toBeNull()
     })
 
+    it.each([
+        ['Read', 'neutral'],
+        ['mcp__server__tool', 'neutral'],
+        ['Task', 'neutral'],
+        ['Agent', 'neutral'],
+        ['Skill', 'neutral'],
+        ['update_plan', 'plan'],
+        ['CodexDiff', 'diff'],
+        ['Read', 'error'],
+        ['AskUserQuestion', 'question'],
+        ['request_user_input', 'question']
+    ] as const)('uses the premium standalone shell for %s', (name, tone) => {
+        const overrides = tone === 'error' ? { state: 'error' as const } : {}
+        const { container } = renderTool(makeToolBlock(
+            name,
+            name.includes('Question') ? { questions: [] } : {},
+            undefined,
+            overrides
+        ))
+        const card = container.querySelector(`[data-tool-surface="${tone}"]`)
+
+        expect(card).toHaveClass(
+            'processing-card',
+            'w-full',
+            'max-w-[600px]',
+            'rounded-[15px]'
+        )
+        expect(card?.querySelector('.processing-card__orb')).not.toBeNull()
+    })
+
+    it('keeps pending approval amber instead of the underlying diff tone', () => {
+        const { container } = renderTool(makeToolBlock('Write', {}, pendingPermission))
+
+        expect(container.querySelector('[data-tool-surface="permission"]')).not.toBeNull()
+        expect(container.querySelector('[data-tool-surface="diff"]')).toBeNull()
+    })
+
+    it('shows compact plan progress in the header without removing the checklist', () => {
+        renderTool(makeToolBlock('update_plan', {
+            plan: [
+                { step: 'Done', status: 'completed' },
+                { step: 'Next', status: 'pending' }
+            ]
+        }))
+
+        expect(screen.getByText('50% · 1/2')).toHaveAccessibleName('1 / 2 steps')
+        expect(screen.getByText(/Done/)).toBeInTheDocument()
+        expect(screen.getByText(/Next/)).toBeInTheDocument()
+    })
+
+    it('adds the ambient processing edge only while a standalone card is running', () => {
+        const completed = renderTool(makeToolBlock('Read'))
+        expect(completed.container.querySelector('[data-tool-surface="neutral"]'))
+            .not.toHaveClass('processing-surface--running')
+        completed.unmount()
+
+        const running = renderTool(makeToolBlock('Read', {}, undefined, { state: 'running' }))
+        expect(running.container.querySelector('[data-tool-surface="neutral"]'))
+            .toHaveClass('processing-surface--running')
+    })
+
     it.each(['AskUserQuestion', 'request_user_input'])(
         'does not mislabel pending %s as a security permission',
         (name) => {
             const { container } = renderTool(makeToolBlock(name, { questions: [] }, pendingPermission))
 
-            expect(container.querySelector('[data-tool-surface="neutral"]')).not.toBeNull()
+            expect(container.querySelector('[data-tool-surface="question"]')).not.toBeNull()
             expect(screen.queryByText('Permission required')).not.toBeInTheDocument()
         }
     )

@@ -571,7 +571,7 @@ describe('Happy assistant actual-runtime activity grouping', () => {
         const readNode = view.container.querySelector<HTMLElement>('[data-tool-block-id="late-read"]')!
         const bashNode = view.container.querySelector('[data-tool-block-id="late-bash"]')!
         expectNodesInOrder([readNode!, bashNode!])
-        expect(readNode).toHaveAttribute('data-tool-surface', 'neutral')
+        expect(readNode).toHaveAttribute('data-tool-surface', 'error')
         expect(readNode).not.toHaveAttribute('data-tool-display', 'group-row')
         fireEvent.click(within(readNode).getByRole('button', { name: /read file/i }))
         expect(screen.getByRole('dialog')).toHaveTextContent('late-error-marker')

@@ -14,6 +14,11 @@ import { RequestUserInputFooter } from '@/components/ToolCard/RequestUserInputFo
 import { isAskUserQuestionToolName } from '@/components/ToolCard/askUserQuestion'
 import { isRequestUserInputToolName } from '@/components/ToolCard/requestUserInput'
 import { getToolPresentation } from '@/components/ToolCard/knownTools'
+import {
+    extractTodoChecklist,
+    extractUpdatePlanChecklist,
+    getChecklistProgress
+} from '@/components/ToolCard/checklist'
 import { getToolFullViewComponent, getToolViewComponent } from '@/components/ToolCard/views/_all'
 import { getToolResultViewComponent } from '@/components/ToolCard/views/_results'
 import { formatTaskChildLabel, TaskStateIcon } from '@/components/ToolCard/helpers'
@@ -33,17 +38,21 @@ import {
 const ELAPSED_INTERVAL_MS = 1000
 
 const SURFACE_CLASS = {
-    neutral: 'border-[var(--app-border)] bg-[var(--app-secondary-bg)] shadow-none',
-    plan: 'border-[var(--app-tool-plan-border)] bg-[var(--app-secondary-bg)]',
-    diff: 'border-[var(--app-tool-diff-border)] bg-[var(--app-secondary-bg)]',
-    permission: 'border-[var(--app-tool-attention-border)] bg-[var(--app-tool-attention-bg)]'
+    neutral: '[--processing-surface-tint:var(--app-tool-neutral-surface)] border-[var(--app-border)]',
+    plan: '[--processing-surface-tint:var(--app-tool-plan-surface)] border-[var(--app-tool-plan-border)]',
+    diff: '[--processing-surface-tint:var(--app-tool-diff-surface)] border-[var(--app-tool-diff-border)]',
+    question: '[--processing-surface-tint:var(--app-tool-question-surface)] border-[var(--app-tool-question-border)]',
+    permission: '[--processing-surface-tint:var(--app-tool-attention-bg)] border-[var(--app-tool-attention-border)]',
+    error: '[--processing-surface-tint:var(--app-badge-error-bg)] border-[var(--app-badge-error-border)]'
 } as const
 
-const ICON_CLASS = {
-    neutral: 'h-3.5 w-3.5 text-[var(--app-hint)]',
-    plan: 'h-7 w-7 rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-tool-plan-accent)]',
-    diff: 'h-7 w-7 rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-tool-diff-accent)]',
-    permission: 'h-7 w-7 rounded-md bg-[var(--app-subtle-bg)] text-[var(--app-tool-attention-accent)]'
+const ORB_CLASS = {
+    neutral: 'bg-[var(--app-tool-neutral-surface)] text-[var(--app-tool-neutral-accent)]',
+    plan: 'bg-[var(--app-tool-plan-surface)] text-[var(--app-tool-plan-accent)]',
+    diff: 'bg-[var(--app-tool-diff-surface)] text-[var(--app-tool-diff-accent)]',
+    question: 'bg-[var(--app-tool-question-surface)] text-[var(--app-tool-question-accent)]',
+    permission: 'bg-[var(--app-tool-attention-bg)] text-[var(--app-tool-attention-accent)]',
+    error: 'bg-[var(--app-badge-error-bg)] text-[var(--app-badge-error-text)]'
 } as const
 
 function ElapsedView(props: { from: number; active: boolean }) {
@@ -314,6 +323,12 @@ function ToolCardInner(props: ToolCardProps) {
     ])
 
     const toolName = props.block.tool.name
+    const planItems = toolName === 'update_plan'
+        ? extractUpdatePlanChecklist(props.block.tool.input, props.block.tool.result)
+        : toolName === 'TodoWrite'
+            ? extractTodoChecklist(props.block.tool.input, props.block.tool.result)
+            : []
+    const planProgress = planItems.length > 0 ? getChecklistProgress(planItems) : null
     const toolTitle = presentation.title
     const subtitle = presentation.subtitle ?? props.block.tool.description
     const taskSummary = renderTaskSummary(props.block, props.metadata, t)
@@ -327,7 +342,13 @@ function ToolCardInner(props: ToolCardProps) {
     const isRequestUserInput = isRequestUserInputToolName(toolName)
     const isQuestionTool = isAskUserQuestion || isRequestUserInput
     const hasPendingApproval = permission?.status === 'pending' && !isQuestionTool
-    const surfaceTone = hasPendingApproval ? 'permission' : presentation.tone
+    const surfaceTone = props.block.tool.state === 'error'
+        ? 'error'
+        : hasPendingApproval
+            ? 'permission'
+            : isQuestionTool
+                ? 'question'
+                : presentation.tone
     const actionLabel = surfaceTone === 'plan'
         ? t('tool.openPlan')
         : surfaceTone === 'diff'
@@ -502,8 +523,8 @@ function ToolCardInner(props: ToolCardProps) {
             <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0 flex items-center gap-2">
                     <div className={cn(
-                        'shrink-0 flex items-center justify-center leading-none',
-                        ICON_CLASS[surfaceTone]
+                        'processing-card__orb grid h-[31px] w-[31px] shrink-0 place-items-center rounded-full leading-none',
+                        ORB_CLASS[surfaceTone]
                     )}>
                         {hasPendingApproval ? (
                             <span aria-hidden="true">
@@ -524,6 +545,17 @@ function ToolCardInner(props: ToolCardProps) {
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
+                    {planProgress ? (
+                        <span
+                            aria-label={t('tool.stepsProgress', {
+                                completed: planProgress.completed,
+                                total: planProgress.total
+                            })}
+                            className="shrink-0 font-mono text-[11px] text-[var(--app-tool-plan-accent)]"
+                        >
+                            {planProgress.percent}% · {planProgress.completed}/{planProgress.total}
+                        </span>
+                    ) : null}
                     <ElapsedView from={runningFrom} active={props.block.tool.state === 'running'} />
                     <span className={stateColor}>
                         <StatusIcon state={props.block.tool.state} />
@@ -532,7 +564,7 @@ function ToolCardInner(props: ToolCardProps) {
                         'text-xs font-medium',
                         surfaceTone === 'plan' && 'text-[var(--app-tool-plan-accent)]',
                         surfaceTone === 'diff' && 'text-[var(--app-tool-diff-accent)]',
-                        (surfaceTone === 'neutral' || surfaceTone === 'permission') && 'sr-only'
+                        surfaceTone !== 'plan' && surfaceTone !== 'diff' && 'sr-only'
                     )}>
                         {actionLabel}
                     </span>
@@ -554,9 +586,13 @@ function ToolCardInner(props: ToolCardProps) {
         <Card
             data-tool-surface={surfaceTone}
             data-tool-block-id={props.block.id}
-            className={cn('overflow-hidden border', SURFACE_CLASS[surfaceTone])}
+            className={cn(
+                'processing-card processing-surface w-full max-w-[600px] overflow-hidden rounded-[15px] border bg-[var(--app-secondary-bg)] shadow-none',
+                props.block.tool.state === 'running' && 'processing-surface--running',
+                SURFACE_CLASS[surfaceTone]
+            )}
         >
-            <CardHeader className="p-3 space-y-0">
+            <CardHeader className="px-3 py-2.5 space-y-0">
                 <Dialog>
                     <DialogTrigger asChild>
                         <button

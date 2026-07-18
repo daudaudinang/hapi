@@ -161,6 +161,8 @@ describe('PermissionFooter', () => {
         renderFooter(makeTool('Write', { file_path: '/repo/a.ts' }))
 
         expect(screen.getByRole('button', { name: 'Allow' })).toHaveClass(
+            'rounded-full',
+            'min-h-10',
             'bg-[var(--app-primary-action-bg)]',
             'text-[var(--app-primary-action-text)]'
         )

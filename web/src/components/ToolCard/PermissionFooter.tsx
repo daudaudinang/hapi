@@ -61,7 +61,7 @@ function PermissionRowButton(props: {
     disabled: boolean
     onClick: () => void
 }) {
-    const base = 'inline-flex min-h-9 min-w-[8rem] flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-center text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]'
+    const base = 'inline-flex min-h-10 min-w-[7rem] flex-1 items-center justify-center gap-2 rounded-full px-3.5 py-1.5 text-center text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]'
     const tone = props.tone === 'allow'
         ? 'border border-[var(--app-primary-action-bg)] bg-[var(--app-primary-action-bg)] text-[var(--app-primary-action-text)] hover:bg-[var(--app-primary-action-bg-hover)]'
         : props.tone === 'deny'
@@ -210,7 +210,7 @@ export function PermissionFooter(props: {
                 </div>
             ) : null}
 
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-2.5 flex flex-wrap gap-1.5">
                 {codex ? (
                     <>
                         <PermissionRowButton
