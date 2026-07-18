@@ -101,6 +101,7 @@ describe('ReasoningMessagePart', () => {
         ))
 
         expect(container.querySelectorAll('[data-hapi-reasoning]')).toHaveLength(1)
+        expect(container.querySelector('[data-hapi-reasoning]')).toHaveClass('py-1')
         const toggle = screen.getByRole('button', { name: 'Toggle reasoning' })
         fireEvent.click(toggle)
         expect(toggle).toHaveAttribute('aria-expanded', 'true')
@@ -117,6 +118,7 @@ describe('ReasoningMessagePart', () => {
 
         const toggle = screen.getByRole('button', { name: 'Toggle reasoning' })
         expect(toggle).toHaveClass('w-full')
+        expect(container.querySelector('[data-hapi-reasoning]')).not.toHaveClass('py-1')
         expect(container.querySelector('[data-reasoning-layout="group-row"]')).not.toHaveClass('border')
         expect(screen.getByRole('status', { name: 'Completed' })).toBeInTheDocument()
         expect(screen.getByText('Completed')).toHaveClass('sr-only')

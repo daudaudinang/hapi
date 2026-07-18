@@ -66,6 +66,7 @@ describe('ReasoningGroup', () => {
 
         const trigger = screen.getByRole('button', { name: /reasoning/i })
         expect(trigger).toHaveAttribute('aria-expanded', 'false')
+        expect(container.querySelector('[data-reasoning-layout="standalone"]')).toHaveClass('my-1')
         expect(trigger).not.toHaveClass('w-full', 'border', 'bg-[var(--app-bg)]')
         expect(container.querySelector('[data-reasoning-body]')).not.toHaveClass('border-l-2')
     })
@@ -177,6 +178,7 @@ describe('ReasoningDisclosure group row', () => {
         const duration = trigger.querySelector('.font-mono')
         const status = screen.getByRole('status', { name: 'Completed' })
         expect(trigger).toHaveClass('activity-row', 'min-h-[37px]', 'w-full')
+        expect(container.querySelector('[data-reasoning-layout="group-row"]')).not.toHaveClass('my-1')
         expect(trigger).not.toHaveClass('uppercase')
         expect(container.querySelector('[data-reasoning-layout="group-row"]')).not.toHaveClass('border')
         expect(trigger).toHaveAccessibleDescription('Activity duration: 4.6s')

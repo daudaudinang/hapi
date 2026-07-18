@@ -183,7 +183,7 @@ export function HappyToolMessage(props: ToolCallMessagePartProps) {
         const resultText = hasResult ? safeStringify(props.result) : ''
 
         return (
-            <div className="py-1 min-w-0 max-w-full overflow-x-hidden">
+            <div className={cn(!grouped && 'py-1', 'min-w-0 max-w-full overflow-x-hidden')}>
                 <div className="rounded-xl bg-[var(--app-secondary-bg)] p-3 shadow-sm">
                     <div className="flex items-center gap-2 text-xs">
                         <div className="font-mono text-[var(--app-hint)]">
@@ -235,7 +235,7 @@ export function HappyToolMessage(props: ToolCallMessagePartProps) {
             <div
                 data-codex-reasoning
                 data-tool-block-id={block.id}
-                className="py-1 min-w-0 max-w-full overflow-x-hidden"
+                className={cn(!grouped && 'py-1', 'min-w-0 max-w-full overflow-x-hidden')}
             >
                 <ReasoningDisclosure
                     label={presentation.title}
@@ -272,7 +272,8 @@ export function HappyToolMessage(props: ToolCallMessagePartProps) {
         <div
             data-tool-singleton-compact={standaloneCompact ? '' : undefined}
             className={cn(
-                'py-1 min-w-0 max-w-full overflow-x-hidden',
+                !grouped && 'py-1',
+                'min-w-0 max-w-full overflow-x-hidden',
                 standaloneCompact && 'w-full max-w-[600px]'
             )}
         >

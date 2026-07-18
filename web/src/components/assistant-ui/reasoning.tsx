@@ -82,7 +82,10 @@ export function ReasoningDisclosure(props: ReasoningDisclosureProps) {
     return (
         <div
             data-reasoning-layout={groupRow ? 'group-row' : 'standalone'}
-            className={cn('aui-reasoning-group my-1', groupRow && 'w-full')}
+            className={cn(
+                'aui-reasoning-group',
+                groupRow ? 'w-full' : 'my-1'
+            )}
         >
             <button
                 type="button"

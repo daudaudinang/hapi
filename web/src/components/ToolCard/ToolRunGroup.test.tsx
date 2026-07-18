@@ -613,6 +613,35 @@ describe('HappyToolMessage group layout', () => {
             )
     })
 
+    it('removes outer row padding only for grouped tool and Codex reasoning rows', () => {
+        const toolProps = toolMessageProps(block('Read'))
+        const standaloneTool = render(<HappyToolMessage {...toolProps} />)
+        expect(screen.getByTestId('tool-card').parentElement).toHaveClass('py-1')
+        standaloneTool.unmount()
+
+        render(
+            <ToolRunLayoutProvider now={1000}>
+                <HappyToolMessage {...toolProps} />
+            </ToolRunLayoutProvider>
+        )
+        expect(screen.getByTestId('tool-card').parentElement).not.toHaveClass('py-1')
+        cleanup()
+
+        const reasoningProps = toolMessageProps(block('CodexReasoning'))
+        const standaloneReasoning = render(<HappyToolMessage {...reasoningProps} />)
+        expect(standaloneReasoning.container.querySelector('[data-codex-reasoning]'))
+            .toHaveClass('py-1')
+        standaloneReasoning.unmount()
+
+        const groupedReasoning = render(
+            <ToolRunLayoutProvider now={1000}>
+                <HappyToolMessage {...reasoningProps} />
+            </ToolRunLayoutProvider>
+        )
+        expect(groupedReasoning.container.querySelector('[data-codex-reasoning]'))
+            .not.toHaveClass('py-1')
+    })
+
     it('shows exact duration for standalone Codex reasoning without a group wrapper', () => {
         const completed = block('CodexReasoning', {
             state: 'completed',

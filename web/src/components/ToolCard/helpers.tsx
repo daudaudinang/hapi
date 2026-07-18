@@ -40,5 +40,5 @@ export function TaskStateIcon(props: { state: ToolCallBlock['tool']['state'] }):
     if (props.state === 'pending') {
         return <span className="text-amber-600">🔐</span>
     }
-    return <span className="text-amber-600 animate-pulse">●</span>
+    return <span className="text-amber-600 animate-pulse motion-reduce:animate-none">●</span>
 }

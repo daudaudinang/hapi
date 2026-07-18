@@ -5,6 +5,7 @@ import { MarkdownRenderer } from '@/components/MarkdownRenderer'
 import { useTranslation } from '@/lib/use-translation'
 import { isAgentReasoningBlock, reasoningToolCallId } from '@/lib/reasoningPart'
 import { useToolRunLayout } from '@/components/ToolCard/toolRunContext'
+import { cn } from '@/lib/utils'
 
 export function ReasoningMessagePart(props: ToolCallMessagePartProps) {
     const { t } = useTranslation()
@@ -22,7 +23,10 @@ export function ReasoningMessagePart(props: ToolCallMessagePartProps) {
         && finalPart.toolCallId === props.toolCallId
 
     return (
-        <div data-hapi-reasoning className="py-1 min-w-0 max-w-full overflow-x-hidden">
+        <div
+            data-hapi-reasoning
+            className={cn(!layout.grouped && 'py-1', 'min-w-0 max-w-full overflow-x-hidden')}
+        >
             <ReasoningDisclosure
                 label={t('tool.title.reasoning')}
                 ariaLabel={isStreaming ? t('reasoning.streaming') : t('reasoning.toggle')}

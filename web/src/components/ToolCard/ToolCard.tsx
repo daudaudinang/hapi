@@ -538,9 +538,19 @@ function ToolCardInner(props: ToolCardProps) {
                                 {t('tool.permissionRequired')}
                             </div>
                         ) : null}
-                        <CardTitle className="min-w-0 text-sm font-medium leading-tight break-words">
-                            {toolTitle}
-                        </CardTitle>
+                        <div className="flex min-w-0 items-baseline gap-1">
+                            <CardTitle className={cn(
+                                'min-w-0 truncate text-sm font-medium leading-tight',
+                                subtitle ? 'max-w-[55%] shrink-0' : 'flex-1'
+                            )}>
+                                {toolTitle}
+                            </CardTitle>
+                            {subtitle ? (
+                                <CardDescription className="min-w-0 flex-1 truncate font-mono text-xs opacity-80">
+                                    {truncate(subtitle, 160)}
+                                </CardDescription>
+                            ) : null}
+                        </div>
                     </div>
                 </div>
 
@@ -573,12 +583,6 @@ function ToolCardInner(props: ToolCardProps) {
                     </span>
                 </div>
             </div>
-
-            {subtitle ? (
-                <CardDescription className="font-mono text-xs break-all opacity-80">
-                    {truncate(subtitle, 160)}
-                </CardDescription>
-            ) : null}
         </div>
     )
 

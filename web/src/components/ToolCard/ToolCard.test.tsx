@@ -287,6 +287,22 @@ describe('ToolCard presentation hierarchy', () => {
         }
     )
 
+    it('keeps a question subtitle inside the compact header copy stack', () => {
+        renderTool(makeToolBlock('request_user_input', {
+            questions: [{
+                id: 'density',
+                question: 'Choose the preferred processing-card density',
+                options: []
+            }]
+        }))
+
+        const title = screen.getByText('density')
+        const subtitle = screen.getByText('Choose the preferred processing-card density')
+        expect(title.parentElement).toContainElement(subtitle)
+        expect(title.parentElement).toHaveClass('flex', 'items-baseline')
+        expect(subtitle).toHaveClass('truncate')
+    })
+
     it('keeps a singleton neutral tool inside a subtle visible surface', () => {
         const { container } = renderTool(makeToolBlock('Read'))
         const card = container.querySelector('[data-tool-surface="neutral"]')
