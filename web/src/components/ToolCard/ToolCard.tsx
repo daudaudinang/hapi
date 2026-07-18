@@ -522,10 +522,13 @@ function ToolCardInner(props: ToolCardProps) {
         <div className="flex flex-col gap-1">
             <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0 flex items-center gap-2">
-                    <div className={cn(
-                        'processing-card__orb grid h-[31px] w-[31px] shrink-0 place-items-center rounded-full leading-none',
-                        ORB_CLASS[surfaceTone]
-                    )}>
+                    <div
+                        aria-hidden="true"
+                        className={cn(
+                            'processing-card__orb grid h-[31px] w-[31px] shrink-0 place-items-center rounded-full leading-none',
+                            ORB_CLASS[surfaceTone]
+                        )}
+                    >
                         {hasPendingApproval ? (
                             <span aria-hidden="true">
                                 <LockIcon className="h-3.5 w-3.5" />
@@ -567,9 +570,10 @@ function ToolCardInner(props: ToolCardProps) {
                         </span>
                     ) : null}
                     <ElapsedView from={runningFrom} active={props.block.tool.state === 'running'} />
-                    <span className={stateColor}>
+                    <span aria-hidden="true" className={stateColor}>
                         <StatusIcon state={props.block.tool.state} />
                     </span>
+                    <span className="sr-only">{stateLabel}</span>
                     <span className={cn(
                         'text-xs font-medium',
                         surfaceTone === 'plan' && 'text-[var(--app-tool-plan-accent)]',

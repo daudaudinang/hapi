@@ -220,8 +220,28 @@ describe('ToolCard presentation hierarchy', () => {
             'max-w-[600px]',
             'rounded-[15px]'
         )
-        expect(card?.querySelector('.processing-card__orb')).not.toBeNull()
+        expect(card?.querySelector('.processing-card__orb')).toHaveAttribute('aria-hidden', 'true')
     })
+
+    it.each([
+        ['completed', 'en', 'Completed'],
+        ['running', 'en', 'Running'],
+        ['error', 'en', 'Error'],
+        ['completed', 'vi-VN', 'Đã hoàn tất'],
+        ['running', 'vi-VN', 'Đang chạy'],
+        ['error', 'vi-VN', 'Lỗi']
+    ] as const)(
+        'includes the localized %s state in the standalone trigger name for %s',
+        (state, locale, stateLabel) => {
+            const { container } = renderTool(
+                makeToolBlock('Read', {}, undefined, { state }),
+                { locale }
+            )
+
+            expect(container.querySelector('[data-tool-card-trigger]'))
+                .toHaveAccessibleName(new RegExp(stateLabel))
+        }
+    )
 
     it('keeps pending approval amber instead of the underlying diff tone', () => {
         const { container } = renderTool(makeToolBlock('Write', {}, pendingPermission))
