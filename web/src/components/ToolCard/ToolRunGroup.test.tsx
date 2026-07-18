@@ -343,6 +343,8 @@ describe('ToolRunGroup', () => {
                 <span>tail</span>
             </ToolRunGroup>
         )
+        expect(screen.getByTestId('tool-run-group')).toHaveAttribute('data-running', 'false')
+        expect(screen.getByTestId('tool-run-group')).not.toHaveClass('processing-surface--running')
         expect(screen.getByRole('button')).toHaveAttribute('aria-expanded', 'true')
     })
 
