@@ -44,7 +44,7 @@ function ActivityRun(props: PropsWithChildren<{
     const regionId = useId()
     const durationDescriptionId = useId()
     const now = useActivityClock(running)
-    const durationMs = getActivityGroupDurationMs(props.entries)
+    const durationMs = getActivityGroupDurationMs(props.entries, now)
     const duration = useFormattedActivityDuration(durationMs)
     const statusLabel = t(
         running ? 'tool.group.activitiesRunning' : 'tool.group.activitiesCompleted',
@@ -69,7 +69,14 @@ function ActivityRun(props: PropsWithChildren<{
                 className="flex min-h-11 w-full min-w-0 items-center gap-2 px-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]"
             >
                 <ChevronIcon open={open} />
-                <span className="min-w-0 flex-1 text-xs font-semibold">{statusLabel}</span>
+                <span className="min-w-0 flex-1 text-xs font-semibold">
+                    {statusLabel}
+                    {running ? (
+                        <span aria-hidden="true" className="activity-live-marker ml-1.5 font-normal">
+                            · {t('tool.group.live')}
+                        </span>
+                    ) : null}
+                </span>
                 {duration ? (
                     <>
                         <span
@@ -87,7 +94,11 @@ function ActivityRun(props: PropsWithChildren<{
             <div
                 id={regionId}
                 hidden={!open}
-                className="min-w-0 border-t border-[var(--app-border)] p-2"
+                data-activity-scroll-region
+                role="region"
+                aria-label={statusLabel}
+                tabIndex={0}
+                className="activity-scroll-region min-w-0 max-h-[min(420px,55vh)] overflow-y-auto overscroll-contain border-t border-[var(--app-border)] p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-link)]"
             >
                 <ToolRunLayoutProvider now={now}>{props.children}</ToolRunLayoutProvider>
             </div>

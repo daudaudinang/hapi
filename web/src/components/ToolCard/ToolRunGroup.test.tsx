@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ToolCallMessagePartProps } from '@assistant-ui/react'
 import type { AgentReasoningBlock, ChatBlock, ToolCallBlock } from '@/chat/types'
@@ -387,6 +387,125 @@ describe('ToolRunGroup', () => {
             .toHaveAccessibleDescription(
                 'tool.group.activityDuration:{"duration":"tool.duration.seconds:{\\"duration\\":\\"4.0\\"}"}'
             )
+    })
+
+    it('shows a live group total, advances each second, and does not reset on append', () => {
+        vi.useFakeTimers()
+        vi.setSystemTime(61000)
+        const first = block('Read', { startedAt: 1000, completedAt: 2000 })
+        const running = block('Bash', { state: 'running', startedAt: 2500, completedAt: null })
+        setMessageParts([part(first), part(running)])
+        const view = render(
+            <ToolRunGroup startIndex={0} endIndex={1}>
+                <span>read</span><span>bash</span>
+            </ToolRunGroup>
+        )
+
+        expect(screen.getByRole('button')).toHaveTextContent('1m 00s')
+        expect(screen.getByRole('button')).toHaveTextContent('tool.group.live:')
+        act(() => vi.advanceTimersByTime(1000))
+        expect(screen.getByRole('button')).toHaveTextContent('1m 01s')
+
+        setMessageParts([part(first), part(block('Grep')), part(running)])
+        view.rerender(
+            <ToolRunGroup startIndex={0} endIndex={2}>
+                <span>read</span><span>grep</span><span>bash</span>
+            </ToolRunGroup>
+        )
+        expect(screen.getByRole('button')).toHaveTextContent('1m 01s')
+    })
+
+    it('freezes the total when the running group completes', () => {
+        vi.useFakeTimers()
+        vi.setSystemTime(5000)
+        const first = block('Read', { startedAt: 1000, completedAt: 2000 })
+        const running = block('Bash', { state: 'running', startedAt: 2500, completedAt: null })
+        setMessageParts([part(first), part(running)])
+        const view = render(
+            <ToolRunGroup startIndex={0} endIndex={1}>
+                <span>read</span><span>bash</span>
+            </ToolRunGroup>
+        )
+
+        setMessageParts([part(first), part(block('Bash', {
+            startedAt: 2500,
+            completedAt: 7500
+        }))])
+        view.rerender(
+            <ToolRunGroup startIndex={0} endIndex={1}>
+                <span>read</span><span>bash</span>
+            </ToolRunGroup>
+        )
+        expect(screen.getByRole('button')).toHaveTextContent('6.5s')
+        expect(screen.getByRole('button')).not.toHaveTextContent('tool.group.live:')
+        act(() => vi.advanceTimersByTime(3000))
+        expect(screen.getByRole('button')).toHaveTextContent('6.5s')
+    })
+
+    it('derives elapsed from timestamps after prepend and remount instead of resetting', () => {
+        vi.useFakeTimers()
+        vi.setSystemTime(61000)
+        const first = block('Read', { startedAt: 1000, completedAt: 2000 })
+        const running = block('Bash', { state: 'running', startedAt: 2500, completedAt: null })
+        setMessageParts([part(first), part(running)])
+        const view = render(
+            <ToolRunGroup startIndex={0} endIndex={1}>
+                <span>read</span><span>bash</span>
+            </ToolRunGroup>
+        )
+        expect(screen.getByRole('button')).toHaveTextContent('1m 00s')
+
+        setMessageParts([{ type: 'text' }, part(first), part(running)])
+        view.rerender(
+            <ToolRunGroup startIndex={1} endIndex={2}>
+                <span>read</span><span>bash</span>
+            </ToolRunGroup>
+        )
+        expect(screen.getByRole('button')).toHaveTextContent('1m 00s')
+
+        view.unmount()
+        vi.setSystemTime(71000)
+        render(
+            <ToolRunGroup startIndex={1} endIndex={2}>
+                <span>read</span><span>bash</span>
+            </ToolRunGroup>
+        )
+        expect(screen.getByRole('button')).toHaveTextContent('1m 10s')
+    })
+
+    it('keeps the header outside a named scroll region and preserves 46 rows in order', () => {
+        const tools = Array.from({ length: 46 }, (_, index) => {
+            const value = block(index % 2 === 0 ? 'Read' : 'Bash')
+            return {
+                ...value,
+                id: `activity-${index}`,
+                tool: { ...value.tool, id: `tool-${index}` }
+            }
+        })
+        setMessageParts(tools.map(part))
+        const { container } = render(
+            <ToolRunGroup startIndex={0} endIndex={45}>
+                {tools.map((tool, index) => (
+                    <span key={tool.id} data-activity-id={tool.id}>activity-{index}</span>
+                ))}
+            </ToolRunGroup>
+        )
+
+        const group = screen.getByTestId('tool-run-group')
+        const header = screen.getByRole('button')
+        const scroller = container.querySelector('[data-activity-scroll-region]')
+        expect(scroller).toHaveClass(
+            'max-h-[min(420px,55vh)]',
+            'overflow-y-auto',
+            'overscroll-contain'
+        )
+        expect(scroller?.contains(header)).toBe(false)
+        expect(group.querySelector('[aria-live]')).toBeNull()
+        expect(group).toHaveClass('max-w-[600px]')
+        expect(container.querySelectorAll('[data-activity-id]')).toHaveLength(46)
+        expect(Array.from(container.querySelectorAll('[data-activity-id]')).map((node) =>
+            node.getAttribute('data-activity-id')
+        )).toEqual(tools.map((tool) => tool.id))
     })
 
     it('renders a singleton without a group wrapper', () => {
