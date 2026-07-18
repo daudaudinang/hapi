@@ -381,3 +381,11 @@ Confirm `git diff --name-only main...HEAD` contains only `web/` presentation/tes
 git add web/src/components/AssistantChat/messages/AssistantMessage.integration.test.tsx
 git commit -m "test(web): verify activity grouping stream fidelity"
 ```
+
+## Review Findings
+
+- [ ] [Review][Patch] Accessible duration still exposes compact English text instead of locale-aware spoken duration [web/src/components/ToolCard/ToolRunGroup.tsx:92]
+- [ ] [Review][Patch] Allowlisted singleton tools and standalone CodexReasoning omit exact per-activity duration [web/src/components/AssistantChat/messages/ToolMessage.tsx:219]
+- [ ] [Review][Patch] Group total incorrectly requires last.startedAt instead of using only first.startedAt and last.completedAt [web/src/components/ToolCard/toolRunModel.ts:234]
+- [ ] [Review][Patch] Expanded reasoning longer than 5000px is clipped, violating lossless display [web/src/components/assistant-ui/reasoning.tsx:131]
+- [ ] [Review][Patch] Actual-runtime coverage still needs the pseudo-reasoning stream/append/completion lifecycle and multi-tick duration freeze cases [web/src/components/AssistantChat/messages/AssistantMessage.integration.test.tsx:496]
