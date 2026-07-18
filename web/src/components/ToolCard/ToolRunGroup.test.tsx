@@ -285,11 +285,28 @@ describe('ToolRunGroup', () => {
             </ToolRunGroup>
         )
         const trigger = screen.getByRole('button')
+        const scroller = view.container.querySelector<HTMLElement>('[data-activity-scroll-region]')
+        expect(scroller).not.toBeNull()
+        if (!scroller) throw new Error('Expected activity scroll region')
+        const readChild = screen.getByText('read-child')
         expect(trigger).toHaveAttribute('aria-expanded', 'false')
-        expect(screen.getByText('read-child')).toBeInTheDocument()
+        expect(scroller).toHaveAttribute('hidden')
+        expect(scroller).toContainElement(readChild)
 
         fireEvent.click(trigger)
         expect(trigger).toHaveAttribute('aria-expanded', 'true')
+        expect(scroller).not.toHaveAttribute('hidden')
+        expect(screen.getByText('read-child')).toBe(readChild)
+
+        fireEvent.click(trigger)
+        expect(trigger).toHaveAttribute('aria-expanded', 'false')
+        expect(scroller).toHaveAttribute('hidden')
+        expect(screen.getByText('read-child')).toBe(readChild)
+
+        fireEvent.click(trigger)
+        expect(trigger).toHaveAttribute('aria-expanded', 'true')
+        expect(scroller).not.toHaveAttribute('hidden')
+        expect(screen.getByText('read-child')).toBe(readChild)
 
         setMessageParts([
             part(block('Read', { state: 'running', completedAt: null })),
@@ -426,6 +443,7 @@ describe('ToolRunGroup', () => {
                 <span>read</span><span>bash</span>
             </ToolRunGroup>
         )
+        expect(vi.getTimerCount()).toBe(1)
 
         setMessageParts([part(first), part(block('Bash', {
             startedAt: 2500,
@@ -436,10 +454,22 @@ describe('ToolRunGroup', () => {
                 <span>read</span><span>bash</span>
             </ToolRunGroup>
         )
+        expect(vi.getTimerCount()).toBe(0)
         expect(screen.getByRole('button')).toHaveTextContent('6.5s')
         expect(screen.getByRole('button')).not.toHaveTextContent('tool.group.live:')
         act(() => vi.advanceTimersByTime(3000))
         expect(screen.getByRole('button')).toHaveTextContent('6.5s')
+
+        view.unmount()
+        setMessageParts([part(first), part(running)])
+        const runningView = render(
+            <ToolRunGroup startIndex={0} endIndex={1}>
+                <span>read</span><span>bash</span>
+            </ToolRunGroup>
+        )
+        expect(vi.getTimerCount()).toBe(1)
+        runningView.unmount()
+        expect(vi.getTimerCount()).toBe(0)
     })
 
     it('derives elapsed from timestamps after prepend and remount instead of resetting', () => {
@@ -493,17 +523,20 @@ describe('ToolRunGroup', () => {
 
         const group = screen.getByTestId('tool-run-group')
         const header = screen.getByRole('button')
-        const scroller = container.querySelector('[data-activity-scroll-region]')
+        const scroller = container.querySelector<HTMLElement>('[data-activity-scroll-region]')
+        expect(scroller).not.toBeNull()
+        if (!scroller) throw new Error('Expected activity scroll region')
         expect(scroller).toHaveClass(
             'max-h-[min(420px,55vh)]',
             'overflow-y-auto',
             'overscroll-contain'
         )
-        expect(scroller?.contains(header)).toBe(false)
+        expect(scroller.contains(header)).toBe(false)
         expect(group.querySelector('[aria-live]')).toBeNull()
         expect(group).toHaveClass('max-w-[600px]')
-        expect(container.querySelectorAll('[data-activity-id]')).toHaveLength(46)
-        expect(Array.from(container.querySelectorAll('[data-activity-id]')).map((node) =>
+        const activityRows = scroller.querySelectorAll('[data-activity-id]')
+        expect(activityRows).toHaveLength(46)
+        expect(Array.from(activityRows).map((node) =>
             node.getAttribute('data-activity-id')
         )).toEqual(tools.map((tool) => tool.id))
     })
