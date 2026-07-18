@@ -1,7 +1,7 @@
 # Premium Processing Cards — Quiet Intelligence Design
 
 **Ngày:** 2026-07-18  
-**Trạng thái:** Đã duyệt trực quan, chờ duyệt spec viết  
+**Trạng thái:** Đã duyệt trực quan và duyệt spec viết
 **Mockup chuẩn:** `docs/superpowers/artifacts/2026-07-18-premium-processing-cards-mockup.html`
 
 ## 1. Mục tiêu
