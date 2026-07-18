@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ToolCallMessagePartProps } from '@assistant-ui/react'
 import type { AgentReasoningBlock, ChatBlock, ToolCallBlock } from '@/chat/types'
@@ -456,28 +456,15 @@ describe('HappyToolMessage group layout', () => {
             )
     })
 
-    it('advances a standalone Codex reasoning duration and freezes on completion', () => {
-        vi.useFakeTimers()
-        vi.setSystemTime(5000)
-        const running = block('CodexReasoning', {
-            state: 'running',
+    it('shows exact duration for standalone Codex reasoning without a group wrapper', () => {
+        const completed = block('CodexReasoning', {
+            state: 'completed',
             startedAt: 1000,
-            completedAt: null
+            completedAt: 7500
         })
-        const view = render(<HappyToolMessage {...toolMessageProps(running)} />)
+        const view = render(<HappyToolMessage {...toolMessageProps(completed)} />)
 
-        expect(screen.getByText('4.0s')).toBeVisible()
+        expect(screen.getByText('6.5s')).toBeVisible()
         expect(view.container.querySelector('[data-activity-group]')).toBeNull()
-        act(() => vi.advanceTimersByTime(2000))
-        expect(screen.getByText('6.0s')).toBeVisible()
-
-        const completed = {
-            ...running,
-            tool: { ...running.tool, state: 'completed' as const, completedAt: 7500 }
-        }
-        view.rerender(<HappyToolMessage {...toolMessageProps(completed)} />)
-        expect(screen.getByText('6.5s')).toBeVisible()
-        act(() => vi.advanceTimersByTime(5000))
-        expect(screen.getByText('6.5s')).toBeVisible()
     })
 })

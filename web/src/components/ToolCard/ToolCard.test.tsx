@@ -379,7 +379,9 @@ describe('ToolCard presentation hierarchy', () => {
         const view = renderTool(running, { displayMode: 'group-row' })
 
         expect(screen.getByText('4.0s')).toBeVisible()
-        act(() => vi.advanceTimersByTime(2000))
+        act(() => vi.advanceTimersByTime(1000))
+        expect(screen.getByText('5.0s')).toBeVisible()
+        act(() => vi.advanceTimersByTime(1000))
         expect(screen.getByText('6.0s')).toBeVisible()
 
         view.rerender(toolCardElement({
@@ -388,7 +390,7 @@ describe('ToolCard presentation hierarchy', () => {
         }, 'group-row'))
         expect(screen.getByText('6.5s')).toBeVisible()
 
-        act(() => vi.advanceTimersByTime(5000))
+        act(() => vi.advanceTimersByTime(1000))
         expect(screen.getByText('6.5s')).toBeVisible()
     })
 

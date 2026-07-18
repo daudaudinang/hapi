@@ -15,7 +15,26 @@ import { HappySystemMessage } from '@/components/AssistantChat/messages/SystemMe
 import { HappyUserMessage } from '@/components/AssistantChat/messages/UserMessage'
 import { I18nProvider } from '@/lib/i18n-context'
 import { useHappyRuntime } from '@/lib/assistant-runtime'
-import { REASONING_TOOL_NAME, reasoningToolCallId } from '@/lib/reasoningPart'
+import {
+    isAgentReasoningBlock,
+    REASONING_TOOL_NAME,
+    reasoningToolCallId
+} from '@/lib/reasoningPart'
+
+const reasoningPartCapture = vi.hoisted(() => ({
+    props: [] as ToolCallMessagePartProps[]
+}))
+
+vi.mock('@/components/AssistantChat/messages/ReasoningMessagePart', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@/components/AssistantChat/messages/ReasoningMessagePart')>()
+    return {
+        ...actual,
+        ReasoningMessagePart: (props: ToolCallMessagePartProps) => {
+            reasoningPartCapture.props.push(props)
+            return <actual.ReasoningMessagePart {...props} />
+        }
+    }
+})
 
 const api = {
     updateTeamMentionStatus: vi.fn().mockResolvedValue(undefined)
@@ -200,6 +219,14 @@ function expectNodesInOrder(nodes: readonly Element[]) {
                 & Node.DOCUMENT_POSITION_FOLLOWING
         ).toBeTruthy()
     }
+}
+
+function expectCapturedReasoningToolCallId(blockId: string) {
+    const capturedIds = reasoningPartCapture.props
+        .filter((props) => isAgentReasoningBlock(props.artifact) && props.artifact.id === blockId)
+        .map((props) => props.toolCallId)
+    expect(capturedIds.length).toBeGreaterThan(0)
+    expect(new Set(capturedIds)).toEqual(new Set([reasoningToolCallId(blockId)]))
 }
 
 afterEach(cleanup)
@@ -670,7 +697,9 @@ describe('Happy assistant actual-runtime activity grouping', () => {
             createdAt: 10,
             text: 'lifecycle-reasoning-marker'
         }
+        reasoningPartCapture.props = []
         const view = render(<RuntimeHarness blocks={[reasoning]} thinking />)
+        expectCapturedReasoningToolCallId('lifecycle-reasoning')
         expect(view.container.querySelectorAll('[data-hapi-reasoning]')).toHaveLength(1)
         expect(screen.getByRole('button', { name: 'Reasoning in progress' })).toBeInTheDocument()
 
@@ -679,8 +708,12 @@ describe('Happy assistant actual-runtime activity grouping', () => {
             completedAt: null,
             result: { stdout: 'lifecycle-terminal-marker', stderr: '', exitCode: null }
         })
+        reasoningPartCapture.props = []
         view.rerender(<RuntimeHarness blocks={[reasoning, terminal]} thinking />)
-        await waitFor(() => expect(toolIds(view.container)).toEqual(['lifecycle-terminal']))
+        await waitFor(() => {
+            expect(toolIds(view.container)).toEqual(['lifecycle-terminal'])
+            expectCapturedReasoningToolCallId('lifecycle-reasoning')
+        })
         const reasoningNode = view.container.querySelector<HTMLElement>('[data-hapi-reasoning]')!
         const terminalNode = view.container.querySelector<HTMLElement>(
             '[data-tool-block-id="lifecycle-terminal"]'
@@ -697,9 +730,11 @@ describe('Happy assistant actual-runtime activity grouping', () => {
             ...terminal,
             tool: { ...terminal.tool, state: 'completed' as const, completedAt: 3000 }
         }
+        reasoningPartCapture.props = []
         view.rerender(<RuntimeHarness blocks={[reasoning, completedTerminal]} />)
         await waitFor(() => {
             expect(toolIds(view.container)).toEqual(['lifecycle-terminal'])
+            expectCapturedReasoningToolCallId('lifecycle-reasoning')
             expect(screen.queryByRole('button', { name: 'Reasoning in progress' })).not.toBeInTheDocument()
         })
 
@@ -707,11 +742,15 @@ describe('Happy assistant actual-runtime activity grouping', () => {
             kind: 'agent-text', id: 'lifecycle-older', localId: null, createdAt: 1,
             text: 'lifecycle-older-marker'
         }
+        reasoningPartCapture.props = []
         view.rerender(<RuntimeHarness blocks={[older, reasoning, completedTerminal]} />)
-        await waitFor(() => expectTextMarkersOnceInOrder(view.container, [
-            'lifecycle-older-marker',
-            'lifecycle-reasoning-marker'
-        ]))
+        await waitFor(() => {
+            expectTextMarkersOnceInOrder(view.container, [
+                'lifecycle-older-marker',
+                'lifecycle-reasoning-marker'
+            ])
+            expectCapturedReasoningToolCallId('lifecycle-reasoning')
+        })
         expect(toolIds(view.container)).toEqual(['lifecycle-terminal'])
         expectNodesInOrder([
             screen.getByText('lifecycle-older-marker'),
@@ -720,7 +759,9 @@ describe('Happy assistant actual-runtime activity grouping', () => {
         ])
 
         view.unmount()
+        reasoningPartCapture.props = []
         const remounted = render(<RuntimeHarness blocks={[older, reasoning, completedTerminal]} />)
+        expectCapturedReasoningToolCallId('lifecycle-reasoning')
         expectTextMarkersOnceInOrder(remounted.container, [
             'lifecycle-older-marker',
             'lifecycle-reasoning-marker'
