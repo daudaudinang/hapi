@@ -232,18 +232,26 @@ export function getActivityDurationMs(entry: ActivityEntry, now: number): number
     return Number.isFinite(duration) && duration >= 0 ? duration : null
 }
 
-export function getActivityGroupDurationMs(entries: readonly ActivityEntry[]): number | null {
-    if (entries.length === 0 || entries.some(isActivityRunning)) return null
+export function getActivityGroupDurationMs(
+    entries: readonly ActivityEntry[],
+    now: number
+): number | null {
+    if (entries.length === 0) return null
 
     const first = entries[0]
-    const last = entries[entries.length - 1]
-    if (first?.kind !== 'tool' || last?.kind !== 'tool') return null
+    if (first?.kind !== 'tool') return null
 
     const start = first.block.tool.startedAt
-    const end = last.block.tool.completedAt
-    if (!isExactTimestamp(start) || !isExactTimestamp(end)) {
-        return null
-    }
+    if (!isExactTimestamp(start)) return null
+
+    const running = entries.some(isActivityRunning)
+    const last = entries[entries.length - 1]
+    const end = running
+        ? now
+        : last?.kind === 'tool'
+            ? last.block.tool.completedAt
+            : null
+    if (!isExactTimestamp(end)) return null
 
     const duration = end - start
     return Number.isFinite(duration) && duration >= 0 ? duration : null
@@ -251,13 +259,24 @@ export function getActivityGroupDurationMs(entries: readonly ActivityEntry[]): n
 
 export function formatActivityDuration(durationMs: number): string {
     if (durationMs > 0 && durationMs < 100) return '<0.1s'
-    return `${(durationMs / 1000).toFixed(1)}s`
+    if (durationMs < 60000) return `${(Math.floor(durationMs / 100) / 10).toFixed(1)}s`
+
+    const totalSeconds = Math.floor(durationMs / 1000)
+    if (durationMs < 3600000) {
+        const minutes = Math.floor(totalSeconds / 60)
+        const seconds = totalSeconds % 60
+        return `${minutes}m ${String(seconds).padStart(2, '0')}s`
+    }
+
+    const hours = Math.floor(totalSeconds / 3600)
+    const minutes = Math.floor((totalSeconds % 3600) / 60)
+    return `${hours}h ${String(minutes).padStart(2, '0')}m`
 }
 
 export function formatActivityDurationValue(durationMs: number, locale: Locale): string {
     const seconds = durationMs > 0 && durationMs < 100
         ? 0.1
-        : durationMs / 1000
+        : Math.floor(durationMs / 100) / 10
     return new Intl.NumberFormat(locale, {
         minimumFractionDigits: 1,
         maximumFractionDigits: 1

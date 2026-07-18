@@ -410,57 +410,45 @@ describe('activity timing', () => {
         expect(isActivityRunning(reasoningEntry())).toBe(false)
     })
 
-    it('uses only the first start and last completion for the group total', () => {
-        expect(getActivityGroupDurationMs([
+    it('uses now minus the first exact start while any group entry is running', () => {
+        const entries = [
             toolEntry('Read', { startedAt: 1000, completedAt: 2000 }),
-            toolEntry('Grep', { startedAt: 500, completedAt: 6000 }),
-            toolEntry('Bash', { startedAt: 2500, completedAt: 4000 })
-        ])).toBe(3000)
+            toolEntry('Bash', { state: 'running', startedAt: 2500, completedAt: null })
+        ]
+
+        expect(getActivityGroupDurationMs(entries, 61000)).toBe(60000)
     })
 
-    it('ignores the last start even when its completion predates that timestamp', () => {
+    it('does not reset the running elapsed when another activity is appended', () => {
+        const first = toolEntry('Read', { startedAt: 1000, completedAt: 2000 })
+        const running = toolEntry('Bash', { state: 'running', startedAt: 2500, completedAt: null })
+
+        expect(getActivityGroupDurationMs([first, running], 11000)).toBe(10000)
         expect(getActivityGroupDurationMs([
-            toolEntry('Read', { startedAt: 1000, completedAt: 2000 }),
-            toolEntry('Bash', { startedAt: 5000, completedAt: 4000 })
-        ])).toBe(3000)
+            first,
+            toolEntry('Grep', { startedAt: 6000, completedAt: 7000 }),
+            running
+        ], 12000)).toBe(11000)
     })
 
-    it('does not require a start timestamp on the last group activity', () => {
+    it('freezes a completed group at last completion minus first start', () => {
         expect(getActivityGroupDurationMs([
             toolEntry('Read', { startedAt: 1000, completedAt: 2000 }),
-            toolEntry('Bash', { startedAt: null, completedAt: 4000 })
-        ])).toBe(3000)
+            toolEntry('Bash', { startedAt: 2500, completedAt: 6500 })
+        ], 999999)).toBe(5500)
     })
 
-    it('allows generic reasoning in the middle of exact tool boundaries', () => {
-        expect(getActivityGroupDurationMs([
-            toolEntry('Read', { startedAt: 1000, completedAt: 2000 }),
-            reasoningEntry(),
-            toolEntry('Bash', { startedAt: 2500, completedAt: 4000 })
-        ])).toBe(3000)
-    })
-
-    it('hides the group total when generic reasoning is either boundary', () => {
-        expect(getActivityGroupDurationMs([
-            reasoningEntry(),
-            toolEntry('Read', { startedAt: 1000, completedAt: 2000 })
-        ])).toBeNull()
-        expect(getActivityGroupDurationMs([
-            toolEntry('Read', { startedAt: 1000, completedAt: 2000 }),
-            reasoningEntry()
-        ])).toBeNull()
-    })
-
-    it('hides the group total while any activity is running', () => {
-        expect(getActivityGroupDurationMs([
-            toolEntry('Read', { startedAt: 1000, completedAt: 2000 }),
-            toolEntry('Bash', { state: 'running', startedAt: 2000, completedAt: null })
-        ])).toBeNull()
-        expect(getActivityGroupDurationMs([
-            toolEntry('Read', { startedAt: 1000, completedAt: 2000 }),
-            reasoningEntry({ isStreaming: true }),
-            toolEntry('Bash', { startedAt: 2000, completedAt: 3000 })
-        ])).toBeNull()
+    it.each([
+        [[], 5000],
+        [[reasoningEntry(), toolEntry('Read')], 5000],
+        [[toolEntry('Read', { startedAt: null }), toolEntry('Bash')], 5000],
+        [[toolEntry('Read'), reasoningEntry()], 5000],
+        [[toolEntry('Read'), toolEntry('Bash', { completedAt: null })], 5000],
+        [[toolEntry('Read', { startedAt: Number.NaN }), toolEntry('Bash')], 5000],
+        [[toolEntry('Read', { startedAt: 6000 }), toolEntry('Bash', { state: 'running' })], 5000],
+        [[toolEntry('Read', { startedAt: 6000 }), toolEntry('Bash', { completedAt: 5000 })], 9000]
+    ])('hides a group total when exact boundary timing is unavailable: %#', (entries, now) => {
+        expect(getActivityGroupDurationMs(entries as ActivityEntry[], now)).toBeNull()
     })
 
     it.each([
@@ -473,29 +461,24 @@ describe('activity timing', () => {
         expect(getActivityDurationMs(toolEntry('Read', options), 4000)).toBeNull()
     })
 
-    it('hides invalid running duration and invalid group boundaries', () => {
+    it('hides invalid running duration', () => {
         expect(getActivityDurationMs(toolEntry('Read', {
             state: 'running',
             startedAt: 1000,
             completedAt: null
         }), Number.NaN)).toBeNull()
-        expect(getActivityGroupDurationMs([])).toBeNull()
-        expect(getActivityGroupDurationMs([
-            toolEntry('Read', { startedAt: null, completedAt: 2000 }),
-            toolEntry('Bash', { startedAt: 2000, completedAt: 3000 })
-        ])).toBeNull()
-        expect(getActivityGroupDurationMs([
-            toolEntry('Read', { startedAt: 3000, completedAt: 3500 }),
-            toolEntry('Bash', { startedAt: 1000, completedAt: 2000 })
-        ])).toBeNull()
     })
 
     it.each([
-        [0, '0.0s'],
-        [1, '<0.1s'],
-        [99, '<0.1s'],
-        [700, '0.7s'],
-        [12400, '12.4s']
+        [50, '<0.1s'],
+        [4600, '4.6s'],
+        [59949, '59.9s'],
+        [59999, '59.9s'],
+        [60000, '1m 00s'],
+        [1264000, '21m 04s'],
+        [3599999, '59m 59s'],
+        [3600000, '1h 00m'],
+        [3900000, '1h 05m']
     ])('formats %dms as %s', (durationMs, expected) => {
         expect(formatActivityDuration(durationMs)).toBe(expected)
     })
