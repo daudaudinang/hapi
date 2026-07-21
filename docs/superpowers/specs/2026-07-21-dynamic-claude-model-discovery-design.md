@@ -1,7 +1,7 @@
 # Dynamic Claude Model Discovery Design
 
 **Ngày:** 2026-07-21
-**Trạng thái:** Đã cập nhật theo BMAD review; chờ user duyệt bản cuối
+**Trạng thái:** Đã được user duyệt để triển khai
 **Mục tiêu:** HAPI hiển thị model Claude do Anthropic-compatible gateway đang hoạt động cung cấp, qua một Model Catalog có thể tái sử dụng cho agent khác và luôn fallback an toàn.
 
 ## 1. Phạm vi đã chốt
