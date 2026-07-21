@@ -1,139 +1,159 @@
 # Dynamic Claude Model Discovery Design
 
-**Ngày:** 2026-07-21  
-**Trạng thái:** Chờ user duyệt đặc tả  
-**Mục tiêu:** HAPI hiển thị danh sách model Claude theo Anthropic-compatible provider đang hoạt động, tương tự luồng Codex, nhưng giữ fallback an toàn khi provider không hỗ trợ khám phá model.
+**Ngày:** 2026-07-21
+**Trạng thái:** Đã cập nhật theo BMAD review; chờ user duyệt bản cuối
+**Mục tiêu:** HAPI hiển thị model Claude do Anthropic-compatible gateway đang hoạt động cung cấp, qua một Model Catalog có thể tái sử dụng cho agent khác và luôn fallback an toàn.
 
-## 1. Quyết định đã chốt
+## 1. Phạm vi đã chốt
 
-- Hỗ trợ tải động cho gateway dùng `ANTHROPIC_BASE_URL` và Anthropic trực tiếp khi có `ANTHROPIC_API_KEY`.
-- Credential chỉ được dùng trong tiến trình CLI trên máy người dùng; Hub và Web chỉ nhận metadata model đã làm sạch.
-- OAuth/claude.ai subscription và các provider cloud như Bedrock, Vertex, Foundry chưa có cơ chế chung trong phạm vi này; tiếp tục dùng preset hiện tại.
-- Khi khám phá thất bại, không chặn tạo hoặc sử dụng phiên Claude; giao diện dùng danh sách mặc định và hiển thị cảnh báo nhẹ.
+- MVP chỉ hỗ trợ gateway dùng `ANTHROPIC_BASE_URL` và Anthropic Messages API.
+- Chỉ khám phá model khi `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1`.
+- Không khám phá khi `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` hoặc có `CLAUDE_CODE_USE_*` provider cloud đang bật.
+- Hỗ trợ credential tĩnh từ `ANTHROPIC_AUTH_TOKEN` hoặc `ANTHROPIC_API_KEY`.
+- OAuth/claude.ai, `apiKeyHelper`, Bedrock, Vertex, Foundry và Claude Platform on AWS nằm ngoài MVP; dùng fallback.
+- Credential chỉ tồn tại trong CLI trên máy người dùng; Hub/Web không nhận URL, header hoặc token.
+- User chấp nhận rủi ro còn lại: gateway/API có thể thay đổi, danh sách có thể khác quyền thực thi thực tế, và provider ngoài MVP không được tải động.
 
-## 2. Các phương án đã cân nhắc
+## 2. Kiến trúc generic vừa đủ
 
-### A. CLI HAPI gọi trực tiếp Models API — chọn
+Không tạo chuỗi `listClaudeModels` riêng xuyên suốt mọi tầng. Tạo contract chung:
 
-CLI xác định endpoint và credential từ môi trường đang chạy, gọi `GET /v1/models`, chuẩn hóa kết quả rồi trả qua RPC hiện có.
+```ts
+type AgentModelDescriptor = {
+    id: string
+    displayName: string
+}
 
-- Ưu: hoạt động độc lập với phiên bản Claude Code; cùng ranh giới bảo mật với Codex; dễ kiểm thử; dùng được ở màn tạo phiên trước khi Claude khởi động.
-- Nhược: HAPI phải duy trì logic request tương thích gateway.
+type AgentModelCatalogResult = {
+    status: 'dynamic' | 'fallback' | 'unsupported' | 'failed'
+    models: AgentModelDescriptor[]
+    source: string
+    error?: string
+}
 
-### B. Đọc cache nội bộ của Claude Code
+type AgentModelCatalogRequest = {
+    agent: AgentFlavor
+}
+```
 
-Đọc `~/.claude/cache/gateway-models.json` do Claude Code tạo.
+CLI dùng adapter registry:
 
-- Ưu: không tự xử lý credential hoặc request.
-- Nhược: yêu cầu Claude Code `2.1.129+`, cần bật discovery, cache có thể cũ/chưa tồn tại, và định dạng file nội bộ không phải contract ổn định.
+```text
+Agent Model Catalog
+├── Claude gateway adapter      ← triển khai trong MVP
+├── Static preset adapter       ← fallback
+├── Codex adapter               ← chưa migrate trong MVP
+└── OpenCode adapter            ← chưa migrate trong MVP
+```
 
-### C. Chỉ cho cấu hình preset thủ công
+Codex/OpenCode giữ API hiện tại để tránh refactor lan rộng. Contract và registry mới phải cho phép migrate sau mà không đổi UI contract thêm lần nữa.
 
-Giữ danh sách tĩnh nhưng cho người dùng thêm model trong HAPI config.
-
-- Ưu: đơn giản.
-- Nhược: không đạt mục tiêu cập nhật theo provider; vẫn cần bảo trì thủ công.
+Model Catalog luôn trả một danh sách dùng được. Khi adapter động trả `unsupported` hoặc `failed`, registry chèn preset từ static adapter nhưng giữ nguyên status để Web quyết định có hiện cảnh báo hay không.
 
 ## 3. Luồng hệ thống
 
-### Màn tạo phiên
-
 ```text
-Web chọn machine + Claude
-→ Hub gọi RPC listClaudeModels trên machine
-→ CLI phát hiện provider hỗ trợ
-→ CLI gọi GET /v1/models?limit=1000
-→ CLI trả danh sách { id, displayName }
-→ Web ghép Default + danh sách động
-→ Nếu không hỗ trợ/lỗi: Web dùng preset Claude hiện tại
+Web yêu cầu model theo agent + machine/session
+→ Hub chuyển RPC listAgentModels
+→ CLI chọn adapter theo agent và runtime context
+→ Claude adapter kiểm tra policy/provider/credential
+→ GET {ANTHROPIC_BASE_URL}/v1/models?limit=1000
+→ Chuẩn hóa thành AgentModelCatalogResult
+→ Hub/Web chỉ nhận metadata model đã làm sạch
+→ Nếu unsupported/failed: registry trả preset Claude cùng status tương ứng
 ```
 
-### Phiên đang hoạt động
+- Phiên đang hoạt động dùng môi trường của session.
+- Màn tạo phiên dùng môi trường của machine runner.
+- Phiên đã dừng dùng snapshot metadata đã cache; không phát sinh network request.
 
-```text
-Web mở cài đặt model
-→ Hub gọi RPC listClaudeModels trên session
-→ CLI dùng đúng môi trường của session
-→ Kết quả được hiển thị và cache vào metadata session
-```
+## 4. Điều kiện chạy Claude gateway adapter
 
-Phiên đã dừng chỉ đọc snapshot đã cache. Nếu không có snapshot, dùng preset hiện tại.
+Adapter chỉ gọi network khi tất cả điều kiện đúng:
 
-## 4. Phát hiện provider
+1. `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY` bằng chuỗi `1`.
+2. `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` không bằng `1`.
+3. Không có biến bắt đầu bằng `CLAUDE_CODE_USE_` mang giá trị `1` hoặc `true` không phân biệt hoa thường.
+4. `ANTHROPIC_BASE_URL` là URL `http:` hoặc `https:` hợp lệ, không trỏ tới `api.anthropic.com`.
+5. Có `ANTHROPIC_AUTH_TOKEN` hoặc `ANTHROPIC_API_KEY`.
 
-CLI tạo một kết quả nội bộ gồm `supported`, `baseUrl`, `headers` và `source`.
+Nếu thiếu điều kiện, trả `unsupported`, không hiện lỗi và dùng fallback.
 
-Thứ tự:
+MVP chỉ đọc môi trường thực tế của tiến trình HAPI/session. Provider chỉ khai báo bên trong Claude settings nhưng không có trong môi trường HAPI được coi là `unsupported`; không đoán cấu hình ngầm của Claude.
 
-1. Nếu có biến `CLAUDE_CODE_USE_*` mang giá trị bật, trả `supported: false`; provider cloud nằm ngoài phạm vi.
-2. Nếu có `ANTHROPIC_BASE_URL`, dùng URL đó.
-3. Nếu không có base URL nhưng có `ANTHROPIC_API_KEY`, dùng `https://api.anthropic.com`.
-4. Nếu không có credential được hỗ trợ, trả `supported: false` và dùng fallback.
+## 5. Request, bảo mật và chuẩn hóa
 
-Credential:
+- Ghép endpoint bằng URL API; base URL kết thúc bằng `/v1` không được tạo `/v1/v1/models`.
+- Query `limit=1000`; timeout 3 giây; cấm redirect.
+- `ANTHROPIC_AUTH_TOKEN` dùng `Authorization: Bearer`; nếu không có thì dùng `ANTHROPIC_API_KEY` qua `x-api-key`.
+- Gửi `anthropic-version: 2023-06-01`.
+- Parse `ANTHROPIC_CUSTOM_HEADERS` theo từng dòng `Name: Value`; từ chối tên/value chứa control character.
+- Custom header không được ghi đè `authorization`, `x-api-key`, `anthropic-version`, `host` hoặc `content-length`, so sánh không phân biệt hoa thường.
+- Không log HTTP client error object/config. Log chỉ gồm status code, error category và hostname đã bỏ userinfo/query.
+- Response chỉ giữ `id`, `display_name`/`displayName`; bỏ record sai, loại ID trùng và giữ thứ tự.
+- Chỉ nhận ID bắt đầu bằng `claude` hoặc `anthropic`, khớp hành vi discovery chính thức của Claude Code.
 
-- `ANTHROPIC_AUTH_TOKEN` → `Authorization: Bearer ...` cho gateway.
-- Nếu không có auth token, `ANTHROPIC_API_KEY` → `x-api-key: ...`.
-- Luôn gửi `anthropic-version: 2023-06-01`.
-- Parse `ANTHROPIC_CUSTOM_HEADERS` theo từng dòng `Name: Value`; header credential do HAPI chọn không được phép bị custom header ghi đè.
-- Không dùng hoặc gửi `CLAUDE_CODE_OAUTH_TOKEN` trong discovery.
+## 6. Chính sách model và cache
 
-## 5. Giao thức và chuẩn hóa
+- Một policy resolver riêng đọc các nguồn settings Claude mà HAPI truy cập được theo đúng thứ tự ưu tiên user/project/local/managed; nếu kết quả hiệu lực có `availableModels`, catalog động phải giao với allowlist đó.
+- Nếu phát hiện managed settings có `availableModels` nhưng không đọc/parse chắc chắn được, trả `unsupported` thay vì bỏ qua chính sách.
+- Cache machine/session gồm model list, `cachedAt` và provider fingerprint không chứa secret.
+- Fingerprint chỉ dùng protocol + hostname + path base URL; không chứa credential hoặc query.
+- Cache của provider khác không được tái sử dụng.
+- `Default` luôn đứng đầu; model hiện tại được giữ lại nếu không nằm trong catalog để tránh mất trạng thái.
 
-- Endpoint: `{baseUrl không có dấu / cuối}/v1/models?limit=1000`.
-- Timeout: 3 giây.
-- Không theo redirect để tránh rò credential sang host khác.
-- Chấp nhận `data` là mảng; mỗi phần tử cần `id` không rỗng.
-- `displayName` lấy từ `display_name`, sau đó `displayName`, cuối cùng dùng `id`.
-- Loại bản ghi sai định dạng và loại ID trùng, giữ thứ tự provider trả về.
-- Không tự giới hạn prefix model ở HAPI. Gateway đang hoạt động là nguồn sự thật; việc model có chạy được sẽ do provider xác nhận khi tạo request.
-- Response RPC/API chỉ chứa `id`, `displayName`, `source`; tuyệt đối không chứa URL có credential, header hoặc token.
+## 7. Hành vi Web
 
-## 6. Giao diện và fallback
+- `dynamic`: hiển thị danh sách gateway từ catalog.
+- `fallback` hoặc `unsupported`: hiển thị danh sách preset do catalog trả về, không cảnh báo.
+- `failed`: hiển thị preset do catalog trả về, cảnh báo nhẹ, không disable form hoặc composer.
+- Nếu REST/RPC hỏng trước khi nhận được catalog, Web mới dùng `CLAUDE_MODEL_PRESETS` trong shared làm fallback cuối cùng.
+- Không polling; cache ngắn và refetch khi query được mount lại sau thời gian stale.
+- Dùng hook chung `useAgentModels`; không thêm `useClaudeModels` làm contract lâu dài.
 
-- `Default` luôn đứng đầu.
-- Khi có kết quả động, hiển thị model động; nếu model hiện tại không nằm trong danh sách, chèn model hiện tại để không làm mất trạng thái phiên.
-- Khi provider không hỗ trợ discovery, dùng `CLAUDE_MODEL_PRESETS` hiện tại và không hiện lỗi.
-- Khi provider có hỗ trợ nhưng request thất bại, dùng preset và hiện cảnh báo tải model thất bại; người dùng vẫn tạo/gửi phiên được.
-- Không polling. Query có cache ngắn tương tự Codex và làm mới khi mở lại màn hình sau thời gian stale.
+## 8. Ranh giới thay đổi
 
-## 7. Ranh giới module
-
-| Khối | Trách nhiệm |
+| Khối | Thay đổi |
 |---|---|
-| `cli/src/modules/common/claudeModels.ts` | Phát hiện provider, tạo request, chuẩn hóa model |
-| `cli/src/modules/common/handlers/claudeModels.ts` | RPC `listClaudeModels` và chuyển lỗi thành response an toàn |
-| `hub/src/sync/rpcGateway.ts`, `syncEngine.ts` | Chuyển RPC machine/session và cache snapshot |
-| `hub/src/web/routes/machines.ts`, `sessions.ts` | REST endpoint cho Web |
-| `shared/src/schemas.ts` | Schema metadata cache Claude |
-| `web/src/hooks/queries/useClaudeModels.ts` | Query machine/session, trạng thái dynamic/fallback/error |
-| `web/src/components/NewSession/*` | Danh sách model khi tạo phiên |
-| `web/src/components/SessionChat.tsx`, `TeamChatRightPanel.tsx` | Danh sách model trong phiên |
+| `cli/src/modules/common/agentModels/` | Contract, registry, fallback và Claude gateway adapter |
+| `cli/src/modules/common/handlers/` | RPC generic `listAgentModels` |
+| `hub/src/sync/` | Chuyển RPC, cache snapshot và fingerprint |
+| `hub/src/web/routes/` | REST machine/session nhận query `agent` |
+| `shared/src/` | Kiểu/schema Model Catalog và cache |
+| `web/src/hooks/queries/` | Hook generic `useAgentModels` |
+| `web/src/components/` | New Session, Session Chat và Team Chat dùng catalog chung |
 
-## 8. Kiểm thử tối thiểu
+Không thay đổi endpoint hoặc logic discovery hiện tại của Codex/OpenCode trong MVP.
 
-1. **Gateway bearer token:** base URL và auth token hợp lệ → gọi đúng endpoint/header, trả model động, không lộ token trong response.
-2. **Anthropic API key:** không có base URL nhưng có API key → gọi `api.anthropic.com/v1/models` bằng `x-api-key`.
-3. **Fallback an toàn:** OAuth-only, cloud provider, HTTP lỗi, timeout, redirect hoặc payload sai → không chặn sử dụng Claude; trả trạng thái để Web dùng preset.
-4. **Chuẩn hóa:** bỏ record sai, loại ID trùng, giữ display name và thứ tự.
-5. **Luồng Web:** model động xuất hiện; lỗi discovery vẫn hiển thị preset và form không bị disable.
-6. **Bảo mật:** Hub/Web response và log không chứa credential hoặc custom header value.
+## 9. Kiểm thử tối thiểu
 
-Tất cả logic mới đi theo TDD: test thất bại trước, implementation tối thiểu sau.
+1. Chỉ gọi gateway khi discovery bật và mọi policy gate hợp lệ.
+2. Disable traffic, cloud provider, OAuth-only và apiKeyHelper-only → `unsupported`, không gọi network.
+3. Bearer/API key/custom header đúng; response/log/RPC không chứa secret.
+4. Timeout, redirect, HTTP lỗi và payload sai → `failed`; UI fallback nhưng không bị khóa.
+5. URL `/v1`, header control character, duplicate model và prefix sai được xử lý đúng.
+6. `availableModels` giới hạn catalog; managed policy không đọc chắc chắn → không discovery.
+7. Provider fingerprint đổi → cache cũ không được dùng.
+8. Machine, active session và inactive session dùng đúng nguồn dữ liệu.
+9. Codex/OpenCode không đổi hành vi.
 
-## 9. Phạm vi dự kiến không thay đổi
+Mọi logic mới đi theo TDD: test phải thất bại đúng nguyên nhân trước khi có production code.
 
-- Không thay đổi cách Claude thực thi request hoặc đổi model giữa các lượt.
-- Không thay đổi auth/login Claude.
-- Không thêm hỗ trợ discovery riêng cho Bedrock, Vertex, Foundry hoặc Claude Platform on AWS.
-- Không thay đổi dynamic discovery của Codex/OpenCode.
-- Không yêu cầu nâng phiên bản Claude Code tối thiểu vì HAPI tự gọi Models API.
+## 10. Rủi ro còn lại đã chấp nhận
 
-## 10. Khôi phục
+- Gateway có thể quảng cáo model nhưng từ chối lúc chạy.
+- Gateway/Anthropic có thể đổi contract hoặc trả payload không chuẩn.
+- Cấu hình chỉ tồn tại trong Claude settings có thể không được HAPI nhận diện.
+- OAuth và cloud provider tiếp tục dùng preset tĩnh.
+- Model list có thể cũ trong thời gian cache ngắn.
 
-Thay đổi chỉ bổ sung đường đọc metadata. Có thể rollback toàn bộ code và endpoint mới mà không migration dữ liệu. Cache metadata là tùy chọn; bản cũ bỏ qua trường không biết. Nếu dynamic discovery gây sự cố, fallback preset vẫn giữ luồng tạo và sử dụng phiên Claude.
+Các trường hợp trên đều kết thúc bằng fallback; không làm mất dữ liệu, thay đổi auth hoặc chặn phiên Claude.
 
-## 11. Nguồn tham chiếu
+## 11. Khôi phục
+
+Thay đổi chỉ đọc metadata, không migration database và không đổi luồng gửi prompt. Có thể rollback contract/adapter/endpoint mới; cache metadata tùy chọn sẽ bị bản cũ bỏ qua. Preset Claude hiện tại luôn là đường dự phòng.
+
+## 12. Nguồn tham chiếu
 
 - Claude Code gateway model discovery: <https://code.claude.com/docs/en/llm-gateway-protocol#model-discovery>
 - Anthropic Models API: <https://platform.claude.com/docs/en/api/models/list>
