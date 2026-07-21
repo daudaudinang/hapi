@@ -137,6 +137,7 @@ export default {
   'newSession.effort': 'Cường độ',
   'newSession.model.optional': 'tuỳ chọn',
   'newSession.model.loadFailed': 'Không thể tải danh sách mô hình Codex',
+  'newSession.agentModelsLoadFailed': 'Không thể tải danh sách mô hình từ nhà cung cấp',
   'newSession.reasoningEffort': 'Cường độ suy luận',
   'newSession.yolo': 'Chế độ YOLO',
   'newSession.yolo.title': 'Bỏ qua phê duyệt và sandbox',
@@ -157,6 +158,7 @@ export default {
   'session.directoryMissingSimpleConfirm': 'Thư mục không tồn tại. Nhấn lại để tự động tạo.',
   'session.directoryMissingWorktree': 'Phiên worktree yêu cầu thư mục repo đã tồn tại.',
   'session.codexModelsLoadFailed': 'Không thể tải danh sách mô hình Codex',
+  'session.agentModelsLoadFailed': 'Không thể tải danh sách mô hình từ nhà cung cấp',
   'session.createAndCreateDirectory': 'Tạo phiên và tạo thư mục',
 
   // Machine

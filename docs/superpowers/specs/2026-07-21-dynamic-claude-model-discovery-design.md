@@ -48,7 +48,7 @@ Agent Model Catalog
 
 Codex/OpenCode giữ API hiện tại để tránh refactor lan rộng. Contract và registry mới phải cho phép migrate sau mà không đổi UI contract thêm lần nữa.
 
-Model Catalog luôn trả một danh sách dùng được. Khi adapter động trả `unsupported` hoặc `failed`, registry chèn preset từ static adapter nhưng giữ nguyên status để Web quyết định có hiện cảnh báo hay không.
+Model Catalog ưu tiên trả preset đã lọc theo policy khi adapter động `unsupported` hoặc `failed`, đồng thời giữ nguyên status để Web quyết định có hiện cảnh báo hay không. Nếu policy quản trị không thể đọc chắc chắn hoặc allowlist rỗng, catalog không trả model đặt tên; lựa chọn `Default` ở UI vẫn dùng được và không vượt policy.
 
 ## 3. Luồng hệ thống
 
@@ -64,7 +64,7 @@ Web yêu cầu model theo agent + machine/session
 ```
 
 - Phiên đang hoạt động dùng môi trường của session.
-- Màn tạo phiên dùng môi trường của machine runner.
+- Màn tạo phiên dùng môi trường của machine runner và gửi thư mục dự án đang chọn để đọc đúng project/local settings.
 - Phiên đã dừng dùng snapshot metadata đã cache; không phát sinh network request.
 
 ## 4. Điều kiện chạy Claude gateway adapter
@@ -97,16 +97,14 @@ MVP chỉ đọc môi trường thực tế của tiến trình HAPI/session. Pr
 
 - Một policy resolver riêng đọc các nguồn settings Claude mà HAPI truy cập được theo đúng thứ tự ưu tiên user/project/local/managed; nếu kết quả hiệu lực có `availableModels`, catalog động phải giao với allowlist đó.
 - Nếu phát hiện managed settings có `availableModels` nhưng không đọc/parse chắc chắn được, trả `unsupported` thay vì bỏ qua chính sách.
-- Cache machine/session gồm model list, `cachedAt` và provider fingerprint không chứa secret.
-- Fingerprint chỉ dùng protocol + hostname + path base URL; không chứa credential hoặc query.
-- Cache của provider khác không được tái sử dụng.
+- Cache session chỉ gồm model list đã làm sạch, source và `cachedAt`; kết quả tạm thời `failed`/`unsupported` không ghi đè snapshot tốt gần nhất.
 - `Default` luôn đứng đầu; model hiện tại được giữ lại nếu không nằm trong catalog để tránh mất trạng thái.
 
 ## 7. Hành vi Web
 
 - `dynamic`: hiển thị danh sách gateway từ catalog.
-- `fallback` hoặc `unsupported`: hiển thị danh sách preset do catalog trả về, không cảnh báo.
-- `failed`: hiển thị preset do catalog trả về, cảnh báo nhẹ, không disable form hoặc composer.
+- `fallback` hoặc `unsupported`: hiển thị danh sách policy-safe do catalog trả về, không cảnh báo.
+- `failed`: hiển thị danh sách policy-safe do catalog trả về, cảnh báo nhẹ; chỉ khóa đổi model trong lúc request còn đang tải.
 - Nếu REST/RPC hỏng trước khi nhận được catalog, Web mới dùng `CLAUDE_MODEL_PRESETS` trong shared làm fallback cuối cùng.
 - Không polling; cache ngắn và refetch khi query được mount lại sau thời gian stale.
 - Dùng hook chung `useAgentModels`; không thêm `useClaudeModels` làm contract lâu dài.
@@ -117,7 +115,7 @@ MVP chỉ đọc môi trường thực tế của tiến trình HAPI/session. Pr
 |---|---|
 | `cli/src/modules/common/agentModels/` | Contract, registry, fallback và Claude gateway adapter |
 | `cli/src/modules/common/handlers/` | RPC generic `listAgentModels` |
-| `hub/src/sync/` | Chuyển RPC, cache snapshot và fingerprint |
+| `hub/src/sync/` | Chuyển RPC và cache snapshot session |
 | `hub/src/web/routes/` | REST machine/session nhận query `agent` |
 | `shared/src/` | Kiểu/schema Model Catalog và cache |
 | `web/src/hooks/queries/` | Hook generic `useAgentModels` |
@@ -133,8 +131,8 @@ Không thay đổi endpoint hoặc logic discovery hiện tại của Codex/Open
 4. Timeout, redirect, HTTP lỗi và payload sai → `failed`; UI fallback nhưng không bị khóa.
 5. URL `/v1`, header control character, duplicate model và prefix sai được xử lý đúng.
 6. `availableModels` giới hạn catalog; managed policy không đọc chắc chắn → không discovery.
-7. Provider fingerprint đổi → cache cũ không được dùng.
-8. Machine, active session và inactive session dùng đúng nguồn dữ liệu.
+7. Machine dùng đúng thư mục đang chọn; active/inactive session dùng đúng nguồn dữ liệu.
+8. Kết quả lỗi tạm thời không ghi đè snapshot session tốt gần nhất.
 9. Codex/OpenCode không đổi hành vi.
 
 Mọi logic mới đi theo TDD: test phải thất bại đúng nguyên nhân trước khi có production code.
@@ -147,7 +145,7 @@ Mọi logic mới đi theo TDD: test phải thất bại đúng nguyên nhân tr
 - OAuth và cloud provider tiếp tục dùng preset tĩnh.
 - Model list có thể cũ trong thời gian cache ngắn.
 
-Các trường hợp trên đều kết thúc bằng fallback; không làm mất dữ liệu, thay đổi auth hoặc chặn phiên Claude.
+Các trường hợp trên kết thúc bằng preset policy-safe hoặc `Default`; không làm mất dữ liệu, thay đổi auth hoặc chặn phiên Claude.
 
 ## 11. Khôi phục
 

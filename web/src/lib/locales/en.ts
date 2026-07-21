@@ -135,6 +135,7 @@ export default {
   'newSession.effort': 'Effort',
   'newSession.model.optional': 'optional',
   'newSession.model.loadFailed': 'Failed to load Codex models',
+  'newSession.agentModelsLoadFailed': 'Failed to load provider models',
   'newSession.opencodeModel.loading': 'Discovering OpenCode models…',
   'newSession.opencodeModel.loadFailed': 'Failed to load OpenCode models',
   'newSession.opencodeModel.retry': 'Retry',
@@ -163,6 +164,7 @@ export default {
   'session.directoryMissingSimpleConfirm': 'Directory does not exist. Click again to create it automatically.',
   'session.directoryMissingWorktree': 'Worktree sessions require an existing repository directory.',
   'session.codexModelsLoadFailed': 'Failed to load Codex models',
+  'session.agentModelsLoadFailed': 'Failed to load provider models',
   'session.createAndCreateDirectory': 'Create and make directory',
 
   // Machine

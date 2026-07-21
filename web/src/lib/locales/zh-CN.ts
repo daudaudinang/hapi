@@ -137,6 +137,7 @@ export default {
   'newSession.effort': '思考强度',
   'newSession.model.optional': '可选',
   'newSession.model.loadFailed': '加载 Codex 模型失败',
+  'newSession.agentModelsLoadFailed': '加载提供商模型失败',
   'newSession.opencodeModel.loading': '正在发现 OpenCode 模型…',
   'newSession.opencodeModel.loadFailed': '加载 OpenCode 模型失败',
   'newSession.opencodeModel.retry': '重试',
@@ -162,6 +163,7 @@ export default {
   'session.directoryMissingSimpleConfirm': '目录不存在。再次点击按钮将自动新建该目录。',
   'session.directoryMissingWorktree': 'worktree 需要已存在的仓库目录。',
   'session.codexModelsLoadFailed': '加载 Codex 模型失败',
+  'session.agentModelsLoadFailed': '加载提供商模型失败',
   'session.createAndCreateDirectory': '创建并新建目录',
 
   // Machine

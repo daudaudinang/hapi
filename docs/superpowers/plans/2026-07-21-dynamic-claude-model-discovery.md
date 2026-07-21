@@ -13,7 +13,7 @@
 - Chỉ discovery khi `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1` và không bị policy tắt.
 - Chỉ hỗ trợ `ANTHROPIC_BASE_URL` custom gateway với credential tĩnh.
 - Credential không được xuất hiện trong RPC, REST, cache hoặc log.
-- Mọi lỗi discovery phải trả preset Claude dùng được và không chặn UI.
+- Lỗi discovery trả preset đã lọc theo policy; nếu policy quản trị không đọc chắc chắn thì chỉ giữ `Default`, không mở lại preset ngoài policy.
 - Không đổi hành vi Codex/OpenCode.
 - TDD bắt buộc cho mọi logic mới.
 
@@ -104,7 +104,7 @@ Expected: PASS.
 **Interfaces:**
 - Consumes: shared catalog types.
 - Produces: `listAgentModels(agent: AgentFlavor, context: { cwd: string; env?: NodeJS.ProcessEnv }): Promise<AgentModelCatalogResult>`.
-- Registers RPC `listAgentModels` with `{ agent }`.
+- Registers RPC `listAgentModels` with `{ agent, cwd? }`.
 
 - [ ] **Step 1: Write failing policy-gate tests**
 
@@ -169,10 +169,10 @@ Expected: PASS.
 - Modify: `hub/src/web/routes/sessions.test.ts`
 
 **Interfaces:**
-- `listAgentModelsForMachine(machineId, agent)`.
+- `listAgentModelsForMachine(machineId, agent, cwd?)`.
 - `listAgentModelsForSession(sessionId, agent)`.
 - `cacheAgentModelsForSession(sessionId, agent, result)`.
-- REST: `/machines/:id/models?agent=claude`, `/sessions/:id/models?agent=claude`.
+- REST: `/machines/:id/models?agent=claude&cwd=...`, `/sessions/:id/models?agent=claude`.
 
 - [ ] **Step 1: Add failing route tests**
 
@@ -210,9 +210,9 @@ Expected: PASS.
 - Modify: affected mocks in `web/src/**/*.test.tsx`
 
 **Interfaces:**
-- `ApiClient.getMachineAgentModels(machineId, agent)`.
+- `ApiClient.getMachineAgentModels(machineId, agent, cwd?)`.
 - `ApiClient.getSessionAgentModels(sessionId, agent)`.
-- `useAgentModels({ api, agent, machineId?, sessionId?, enabled? })`.
+- `useAgentModels({ api, agent, machineId?, sessionId?, cwd?, enabled? })`.
 
 - [ ] **Step 1: Write failing hook tests**
 
