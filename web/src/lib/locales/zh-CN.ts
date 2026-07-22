@@ -67,6 +67,13 @@ export default {
   // Session header
   'session.title': '文件',
   'session.more': '更多操作',
+  'session.tasks.label': '任务',
+  'session.tasks.trigger': '会话任务：已完成 {completed}/{total}',
+  'session.tasks.title': '会话任务',
+  'session.tasks.progress': '已完成 {completed}/{total}',
+  'session.tasks.status.pending': '待处理',
+  'session.tasks.status.in_progress': '进行中',
+  'session.tasks.status.completed': '已完成',
   'session.outline.open': '会话大纲',
   'session.outline.close': '关闭大纲',
   'session.outline.title': '大纲',

@@ -67,6 +67,13 @@ export default {
   // Session header
   'session.title': 'Tệp',
   'session.more': 'Thêm thao tác',
+  'session.tasks.label': 'Công việc',
+  'session.tasks.trigger': 'Công việc trong phiên: {completed} trên {total} đã hoàn thành',
+  'session.tasks.title': 'Công việc trong phiên',
+  'session.tasks.progress': '{completed} trên {total} đã hoàn thành',
+  'session.tasks.status.pending': 'Đang chờ',
+  'session.tasks.status.in_progress': 'Đang làm',
+  'session.tasks.status.completed': 'Hoàn thành',
   'session.outline.open': 'Dàn ý hội thoại',
   'session.outline.close': 'Đóng dàn ý',
   'session.outline.title': 'Dàn ý',

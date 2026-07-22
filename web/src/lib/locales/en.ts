@@ -67,6 +67,13 @@ export default {
   // Session header
   'session.title': 'Files',
   'session.more': 'More actions',
+  'session.tasks.label': 'Tasks',
+  'session.tasks.trigger': 'Session tasks: {completed} of {total} completed',
+  'session.tasks.title': 'Session tasks',
+  'session.tasks.progress': '{completed} of {total} completed',
+  'session.tasks.status.pending': 'Pending',
+  'session.tasks.status.in_progress': 'In progress',
+  'session.tasks.status.completed': 'Completed',
   'session.outline.open': 'Conversation outline',
   'session.outline.close': 'Close outline',
   'session.outline.title': 'Outline',

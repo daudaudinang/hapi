@@ -10,6 +10,7 @@ import { useSessionTeamMemberships } from '@/hooks/queries/useSessionTeamMembers
 import { useSessionActions } from '@/hooks/mutations/useSessionActions'
 import { SessionActionMenu } from '@/components/SessionActionMenu'
 import { SessionGoalControl } from '@/components/SessionGoalControl'
+import { SessionTaskListControl } from '@/components/SessionTaskListControl'
 import { RenameSessionDialog } from '@/components/RenameSessionDialog'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { getSessionModelLabel } from '@/lib/sessionModelLabel'
@@ -364,6 +365,7 @@ export function SessionHeader(props: {
                                     <EditorIcon className="w-4 h-4" />
                                 </button>
                             ) : null}
+                            <SessionTaskListControl todos={session.todos} compact />
                             {props.codexGoal ? (
                                 <SessionGoalControl
                                     goal={props.codexGoal}
@@ -523,7 +525,7 @@ export function SessionHeader(props: {
                         </div>
                     </div>
 
-
+                    <SessionTaskListControl todos={session.todos} />
                     <select
                         aria-label="Machine"
                         value={session.metadata?.machineId ?? ''}
