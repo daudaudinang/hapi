@@ -1,7 +1,7 @@
 # Session Task List Visual Refresh Design
 
-**Ngày:** 2026-07-22  
-**Trạng thái:** Đã duyệt hướng thiết kế  
+**Ngày:** 2026-07-22
+**Trạng thái:** Đã duyệt hướng thiết kế
 **Hướng chọn:** Minimal Timeline
 
 ## 1. Mục tiêu
