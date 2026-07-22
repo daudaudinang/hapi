@@ -1652,12 +1652,6 @@
     transition: color 0.15s, background 0.15s;
 }
 
-.db-pinned__compact-action--tasks {
-    width: auto;
-    min-width: 36px;
-    padding: 0 4px;
-}
-
 .db-pinned__compact-action--focus {
     color: var(--app-fg);
 }

@@ -219,8 +219,10 @@ describe('SessionHeader editor entry point', () => {
         )
 
         const trigger = screen.getByRole('button', { name: 'Session tasks: 1 of 2 completed' })
-        expect(trigger).toHaveTextContent('Tasks')
+        expect(trigger).not.toHaveTextContent('Tasks')
         expect(trigger).toHaveTextContent('1/2')
+        expect(trigger.parentElement).toHaveClass('session-provider-tasks')
+        expect(trigger.parentElement).toHaveTextContent('codex')
 
         fireEvent.click(trigger)
 
@@ -250,6 +252,9 @@ describe('SessionHeader editor entry point', () => {
         const trigger = screen.getByRole('button', { name: 'Session tasks: 1 of 2 completed' })
         expect(trigger).toHaveTextContent('1/2')
         expect(trigger).not.toHaveTextContent('Tasks')
+        expect(trigger.parentElement).toHaveClass('session-provider-tasks')
+        expect(trigger.parentElement).toHaveTextContent('codex')
+        expect(trigger.closest('.db-pinned__compact-actions')).toBeNull()
 
         fireEvent.click(trigger)
 

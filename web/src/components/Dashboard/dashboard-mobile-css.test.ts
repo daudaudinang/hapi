@@ -26,7 +26,7 @@ describe('mobile dashboard CSS', () => {
         expect(dashboardCss).toMatch(/@media \(min-width: 768px\)[\s\S]*\.db-pinned--compact\s+\.aui-md\s*\{[\s\S]*line-height:\s*1\.15rem\s*!important;/)
     })
 
-    it('lets the compact task counter grow beyond the icon action width', () => {
-        expect(dashboardCss).toMatch(/\.db-pinned__compact-action--tasks\s*\{[^}]*width:\s*auto;[^}]*min-width:\s*\d+px;[^}]*padding:\s*0\s+\d+px;/)
+    it('does not style the task badge as an icon action', () => {
+        expect(dashboardCss).not.toContain('.db-pinned__compact-action--tasks')
     })
 })
