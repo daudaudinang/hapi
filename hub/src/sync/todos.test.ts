@@ -374,4 +374,48 @@ describe('session todo projection', () => {
             issues: []
         })
     })
+
+    it('preserves input causality when message timestamps move backwards', () => {
+        const messages = [
+            {
+                content: {
+                    role: 'agent',
+                    content: {
+                        type: 'codex',
+                        data: {
+                            type: 'tool-call',
+                            name: 'update_plan',
+                            input: { plan: [{ step: 'Plan A', status: 'inProgress' }] }
+                        }
+                    }
+                },
+                createdAt: 200
+            },
+            {
+                content: {
+                    role: 'agent',
+                    content: {
+                        type: 'codex',
+                        data: {
+                            type: 'tool-call',
+                            name: 'update_plan',
+                            input: { plan: [{ step: 'Plan B', status: 'completed' }] }
+                        }
+                    }
+                },
+                createdAt: 100
+            }
+        ]
+
+        expect(replaySessionTodos(messages)).toEqual({
+            todos: [{
+                id: 'codex-plan-1',
+                content: 'Plan B',
+                status: 'completed',
+                priority: 'medium'
+            }],
+            updatedAt: 100,
+            issues: []
+        })
+    })
 })

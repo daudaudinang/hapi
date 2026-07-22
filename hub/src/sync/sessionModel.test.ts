@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test'
+import { describe, expect, it, spyOn } from 'bun:test'
 import { toSessionSummary } from '@hapi/protocol'
 import type { SyncEvent } from '@hapi/protocol/types'
 import { Store } from '../store'
@@ -167,6 +167,49 @@ describe('session model', () => {
         expect(events.filter((event) => event.type === 'session-updated')).toHaveLength(1)
     })
 
+    it('does not roll todo projection back when an older local message is retried', () => {
+        const store = new Store(':memory:')
+        const events: SyncEvent[] = []
+        const cache = new SessionCache(store, createPublisher(events))
+        const session = cache.getOrCreateSession('task-local-retry', {}, null, 'default')
+        const handlers = registerTestSessionHandlers(store, (event) => events.push(event))
+
+        handlers.get('message')?.({ sid: session.id, localId: 'local-a', message: codexPlan('Plan A') })
+        handlers.get('message')?.({ sid: session.id, localId: 'local-b', message: codexPlan('Plan B') })
+        const seqAfterPlanB = store.sessions.getSession(session.id)?.seq
+        const todoEventsAfterPlanB = events.filter((event) => event.type === 'session-updated').length
+
+        handlers.get('message')?.({ sid: session.id, localId: 'local-a', message: codexPlan('Plan A') })
+
+        expect(store.messages.getMessages(session.id)).toHaveLength(2)
+        expect(store.sessions.getSession(session.id)?.todos).toEqual([
+            { id: 'codex-plan-1', content: 'Plan B', status: 'in_progress', priority: 'medium' }
+        ])
+        expect(store.sessions.getSession(session.id)?.seq).toBe(seqAfterPlanB)
+        expect(events.filter((event) => event.type === 'session-updated')).toHaveLength(todoEventsAfterPlanB)
+    })
+
+    it('does not project an unpersisted payload from a duplicate local ID', () => {
+        const store = new Store(':memory:')
+        const events: SyncEvent[] = []
+        const cache = new SessionCache(store, createPublisher(events))
+        const session = cache.getOrCreateSession('task-local-payload', {}, null, 'default')
+        const handlers = registerTestSessionHandlers(store, (event) => events.push(event))
+
+        handlers.get('message')?.({ sid: session.id, localId: 'local-a', message: codexPlan('Persisted') })
+        const seqAfterPersist = store.sessions.getSession(session.id)?.seq
+        handlers.get('message')?.({ sid: session.id, localId: 'local-a', message: codexPlan('Not persisted') })
+
+        expect(store.messages.getMessages(session.id).map((message) => message.content)).toEqual([
+            codexPlan('Persisted')
+        ])
+        expect(store.sessions.getSession(session.id)?.todos).toEqual([
+            { id: 'codex-plan-1', content: 'Persisted', status: 'in_progress', priority: 'medium' }
+        ])
+        expect(store.sessions.getSession(session.id)?.seq).toBe(seqAfterPersist)
+        expect(events.filter((event) => event.type === 'session-updated')).toHaveLength(1)
+    })
+
     it('stores a malformed source message without changing or emitting todos', () => {
         const store = new Store(':memory:')
         const events: SyncEvent[] = []
@@ -174,20 +217,27 @@ describe('session model', () => {
         const session = cache.getOrCreateSession('task-malformed', {}, null, 'default')
         const handlers = registerTestSessionHandlers(store, (event) => events.push(event))
 
-        handlers.get('message')?.({
-            sid: session.id,
-            message: {
-                role: 'agent',
-                content: {
-                    type: 'codex',
-                    data: {
-                        type: 'tool-call',
-                        name: 'update_plan',
-                        input: { plan: [{ step: '', status: 'pending' }] }
+        const warn = spyOn(console, 'warn').mockImplementation(() => {})
+        try {
+            handlers.get('message')?.({
+                sid: session.id,
+                message: {
+                    role: 'agent',
+                    content: {
+                        type: 'codex',
+                        data: {
+                            type: 'tool-call',
+                            name: 'update_plan',
+                            input: { plan: [{ step: '', status: 'pending' }] }
+                        }
                     }
                 }
-            }
-        })
+            })
+
+            expect(warn).toHaveBeenCalledWith('Ignored codex session todo update: invalid update_plan snapshot')
+        } finally {
+            warn.mockRestore()
+        }
 
         expect(store.messages.getMessages(session.id)).toHaveLength(1)
         expect(store.sessions.getSession(session.id)?.todos).toBeNull()

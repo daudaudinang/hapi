@@ -125,7 +125,7 @@ export function registerSessionHandlers(socket: CliSocketWithData, deps: Session
         const { sid, localId } = parsed.data
         const raw = parsed.data.message
 
-        const content = typeof raw === 'string'
+        const incomingContent = typeof raw === 'string'
             ? (() => {
                 try {
                     return JSON.parse(raw) as unknown
@@ -142,7 +142,10 @@ export function registerSessionHandlers(socket: CliSocketWithData, deps: Session
         }
         const session = sessionAccess.value
 
-        const msg = store.messages.addMessage(sid, content, localId)
+        const addResult = store.messages.addMessage(sid, incomingContent, localId)
+        if (addResult.kind === 'duplicate') return
+        const msg = addResult.message
+        const content = msg.content
         if (shouldRecordSessionActivity(content)) {
             onSessionActivity?.(sid, msg.createdAt)
         }

@@ -400,15 +400,12 @@ function detectSource(messageContent: unknown): 'claude' | 'codex' | 'acp' {
 export function replaySessionTodos(
     messages: readonly { content: unknown; createdAt: number }[]
 ): { todos: TodoItem[]; updatedAt: number; issues: SessionTodoExtraction['issues'] } | null {
-    const ordered = messages
-        .map((message, index) => ({ ...message, index }))
-        .sort((left, right) => left.createdAt - right.createdAt || left.index - right.index)
     let todos: TodoItem[] | null = null
     let updatedAt = 0
     const issues: SessionTodoExtraction['issues'] = []
 
-    ordered.forEach((message, index) => {
-        const recentMessageContents = ordered
+    messages.forEach((message, index) => {
+        const recentMessageContents = messages
             .slice(Math.max(0, index - 200), index)
             .map((item) => item.content)
         const extraction = extractSessionTodoUpdates(message.content, recentMessageContents)
