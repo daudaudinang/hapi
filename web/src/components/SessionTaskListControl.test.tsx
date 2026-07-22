@@ -38,7 +38,7 @@ describe('SessionTaskListControl', () => {
 
         rerender(<SessionTaskListControl todos={todos} />)
         const trigger = screen.getByRole('button', { name: 'Session tasks: 1 of 2 completed' })
-        expect(trigger).toHaveTextContent('Tasks')
+        expect(trigger).not.toHaveTextContent('Tasks')
         expect(trigger).toHaveTextContent('1/2')
 
         trigger.focus()
@@ -48,15 +48,19 @@ describe('SessionTaskListControl', () => {
         expect(dialog).toHaveAccessibleName('Session tasks')
         expect(dialog).toHaveAccessibleDescription('1 of 2 completed')
         expect(dialog).toContainElement(document.activeElement as HTMLElement)
-        expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '1')
+        const progressbar = screen.getByRole('progressbar')
+        expect(progressbar).toHaveAttribute('aria-valuenow', '1')
+        expect(progressbar.parentElement).toHaveClass('session-task-progress')
         expect(screen.getByRole('button', { name: 'Đóng' })).toBeInTheDocument()
         const items = screen.getAllByRole('listitem')
         expect(items.map((item) => item.textContent)).toEqual([
             expect.stringContaining('First task'),
             expect.stringContaining('A very long second task')
         ])
+        expect(items[0].closest('ul')).toHaveClass('session-task-timeline')
+        expect(items[0]).toHaveClass('session-task-row', 'session-task-row--completed')
+        expect(items[1]).toHaveClass('session-task-row', 'session-task-row--in_progress')
         expect(items[1].querySelector('p')).toHaveClass('break-words')
-        expect(items[0].closest('ul')).toHaveClass('max-h-[60vh]', 'overflow-y-auto')
 
         fireEvent.keyDown(document, { key: 'Escape' })
 
@@ -64,13 +68,13 @@ describe('SessionTaskListControl', () => {
         await waitFor(() => expect(trigger).toHaveFocus())
     })
 
-    it('uses the compact counter without the Tasks label', () => {
+    it('uses the same slim badge in compact mode', () => {
         render(<SessionTaskListControl todos={todos} compact />)
 
         const trigger = screen.getByRole('button')
         expect(trigger).toHaveTextContent('1/2')
         expect(trigger).not.toHaveTextContent('Tasks')
-        expect(trigger).toHaveClass('db-pinned__compact-action--tasks')
+        expect(trigger).toHaveClass('session-task-badge', 'session-task-badge--active')
     })
 
     it('stops compact trigger double-clicks from bubbling', () => {
@@ -85,8 +89,24 @@ describe('SessionTaskListControl', () => {
     it('keeps a fully completed snapshot visible', () => {
         render(<SessionTaskListControl todos={todos.map((todo) => ({ ...todo, status: 'completed' as const }))} />)
 
-        expect(screen.getByRole('button')).toHaveTextContent('Tasks')
+        expect(screen.getByRole('button')).not.toHaveTextContent('Tasks')
         expect(screen.getByRole('button')).toHaveTextContent('2/2')
+        expect(screen.getByRole('button')).toHaveClass('session-task-badge--completed')
+    })
+
+    it.each([
+        ['in_progress', 'session-task-badge--active'],
+        ['pending', 'session-task-badge--pending'],
+        ['completed', 'session-task-badge--completed']
+    ] as const)('maps %s todos to the expected badge state', (status, className) => {
+        render(<SessionTaskListControl todos={[
+            { id: status, content: status, status, priority: 'medium' }
+        ]} />)
+
+        const trigger = screen.getByRole('button')
+        expect(trigger).toHaveClass('session-task-badge', className)
+        expect(trigger).toHaveTextContent(status === 'completed' ? '1/1' : '0/1')
+        expect(trigger).not.toHaveTextContent('Tasks')
     })
 
     it('shows pending, in-progress, and completed statuses', () => {
