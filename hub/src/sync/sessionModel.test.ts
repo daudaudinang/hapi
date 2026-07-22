@@ -19,6 +19,64 @@ function createPublisher(events: SyncEvent[]): EventPublisher {
     } as unknown as EventPublisher
 }
 
+function registerTestSessionHandlers(
+    store: Store,
+    onWebappEvent: (event: SyncEvent) => void
+): Map<string, (payload: unknown) => void> {
+    const handlers = new Map<string, (payload: unknown) => void>()
+    registerSessionHandlers({
+        on: (event: string, handler: (payload: unknown) => void) => handlers.set(event, handler),
+        to: () => ({ emit() {} })
+    } as never, {
+        store,
+        resolveSessionAccess: (sessionId) => {
+            const stored = store.sessions.getSessionByNamespace(sessionId, 'default')
+            return stored ? { ok: true as const, value: stored } : { ok: false as const, reason: 'not-found' }
+        },
+        emitAccessError: () => {},
+        onWebappEvent
+    })
+    return handlers
+}
+
+function codexPlan(step: string, status: 'pending' | 'inProgress' | 'completed' = 'inProgress'): unknown {
+    return {
+        role: 'agent',
+        content: {
+            type: 'codex',
+            data: { type: 'tool-call', name: 'update_plan', input: { plan: [{ step, status }] } }
+        }
+    }
+}
+
+function claudeTaskCall(name: string, input: Record<string, unknown>, id = 'tool-1'): unknown {
+    return {
+        role: 'agent',
+        content: {
+            type: 'output',
+            data: {
+                type: 'assistant',
+                message: { content: [{ type: 'tool_use', id, name, input }] }
+            }
+        }
+    }
+}
+
+function claudeTaskResult(content: unknown, id = 'tool-1'): unknown {
+    return {
+        role: 'agent',
+        content: {
+            type: 'output',
+            data: {
+                type: 'user',
+                message: {
+                    content: [{ type: 'tool_result', tool_use_id: id, content }]
+                }
+            }
+        }
+    }
+}
+
 type TerminalEmittedEvent = {
     event: string
     data: unknown
@@ -77,6 +135,145 @@ function lastTerminalEmit(socket: TerminalFakeSocket, event: string): TerminalEm
 }
 
 describe('session model', () => {
+    it('stores a projected plan after the source message and emits once', () => {
+        const store = new Store(':memory:')
+        const events: SyncEvent[] = []
+        const cache = new SessionCache(store, createPublisher(events))
+        const session = cache.getOrCreateSession('task-live', {}, null, 'default')
+        const handlers = registerTestSessionHandlers(store, (event) => events.push(event))
+
+        handlers.get('message')?.({ sid: session.id, message: codexPlan('Ship') })
+
+        expect(store.messages.getMessages(session.id)).toHaveLength(1)
+        expect(store.sessions.getSession(session.id)?.todos).toEqual([
+            { id: 'codex-plan-1', content: 'Ship', status: 'in_progress', priority: 'medium' }
+        ])
+        expect(events.filter((event) => event.type === 'session-updated')).toHaveLength(1)
+    })
+
+    it('does not advance the session or emit for a duplicate plan snapshot', () => {
+        const store = new Store(':memory:')
+        const events: SyncEvent[] = []
+        const cache = new SessionCache(store, createPublisher(events))
+        const session = cache.getOrCreateSession('task-duplicate', {}, null, 'default')
+        const handlers = registerTestSessionHandlers(store, (event) => events.push(event))
+
+        handlers.get('message')?.({ sid: session.id, message: codexPlan('Ship') })
+        const seqAfterFirstSnapshot = store.sessions.getSession(session.id)?.seq
+        handlers.get('message')?.({ sid: session.id, message: codexPlan('Ship') })
+
+        expect(store.messages.getMessages(session.id)).toHaveLength(2)
+        expect(store.sessions.getSession(session.id)?.seq).toBe(seqAfterFirstSnapshot)
+        expect(events.filter((event) => event.type === 'session-updated')).toHaveLength(1)
+    })
+
+    it('stores a malformed source message without changing or emitting todos', () => {
+        const store = new Store(':memory:')
+        const events: SyncEvent[] = []
+        const cache = new SessionCache(store, createPublisher(events))
+        const session = cache.getOrCreateSession('task-malformed', {}, null, 'default')
+        const handlers = registerTestSessionHandlers(store, (event) => events.push(event))
+
+        handlers.get('message')?.({
+            sid: session.id,
+            message: {
+                role: 'agent',
+                content: {
+                    type: 'codex',
+                    data: {
+                        type: 'tool-call',
+                        name: 'update_plan',
+                        input: { plan: [{ step: '', status: 'pending' }] }
+                    }
+                }
+            }
+        })
+
+        expect(store.messages.getMessages(session.id)).toHaveLength(1)
+        expect(store.sessions.getSession(session.id)?.todos).toBeNull()
+        expect(events.filter((event) => event.type === 'session-updated')).toHaveLength(0)
+    })
+
+    it('uses monotonic todo timestamps for two changed messages in the same millisecond', () => {
+        const store = new Store(':memory:')
+        const events: SyncEvent[] = []
+        const cache = new SessionCache(store, createPublisher(events))
+        const session = cache.getOrCreateSession('task-same-millisecond', {}, null, 'default')
+        const handlers = registerTestSessionHandlers(store, (event) => events.push(event))
+        const originalNow = Date.now
+        const fixedNow = originalNow()
+
+        try {
+            Date.now = () => fixedNow
+            handlers.get('message')?.({ sid: session.id, message: codexPlan('First') })
+            const firstUpdatedAt = store.sessions.getSession(session.id)?.todosUpdatedAt
+            handlers.get('message')?.({ sid: session.id, message: codexPlan('Second') })
+
+            expect(store.sessions.getSession(session.id)?.todos).toEqual([
+                { id: 'codex-plan-1', content: 'Second', status: 'in_progress', priority: 'medium' }
+            ])
+            expect(store.sessions.getSession(session.id)?.todosUpdatedAt).toBe((firstUpdatedAt ?? 0) + 1)
+            expect(events.filter((event) => event.type === 'session-updated')).toHaveLength(2)
+        } finally {
+            Date.now = originalNow
+        }
+    })
+
+    it('correlates a live Claude task result with its stored call', () => {
+        const store = new Store(':memory:')
+        const events: SyncEvent[] = []
+        const cache = new SessionCache(store, createPublisher(events))
+        const session = cache.getOrCreateSession('task-claude-live', {}, null, 'default')
+        const handlers = registerTestSessionHandlers(store, (event) => events.push(event))
+
+        handlers.get('message')?.({
+            sid: session.id,
+            message: claudeTaskCall('TaskCreate', { subject: 'Requested', activeForm: 'Creating' })
+        })
+        handlers.get('message')?.({
+            sid: session.id,
+            message: claudeTaskResult(JSON.stringify({ task: { id: '42', subject: 'Created' } }))
+        })
+
+        expect(store.messages.getMessages(session.id)).toHaveLength(2)
+        expect(store.sessions.getSession(session.id)?.todos).toEqual([{
+            id: '42',
+            content: 'Created',
+            activeForm: 'Creating',
+            status: 'pending',
+            priority: 'medium'
+        }])
+        expect(events.filter((event) => event.type === 'session-updated')).toHaveLength(1)
+    })
+
+    it('backfills todos by replaying the latest 200 messages without changing team state', () => {
+        const store = new Store(':memory:')
+        const stored = store.sessions.getOrCreateSession('task-backfill', {}, null, 'default')
+        const teamState = { teamName: 'Keep me', tasks: [{ id: 'team-1', title: 'Team task' }] }
+        store.sessions.setSessionTeamState(stored.id, teamState, 10, 'default')
+        store.messages.addMessage(stored.id, codexPlan('Outside replay window'))
+        for (let index = 0; index < 198; index += 1) {
+            store.messages.addMessage(stored.id, { role: 'agent', content: { type: 'text', text: `filler-${index}` } })
+        }
+        store.messages.addMessage(stored.id, claudeTaskCall('TaskCreate', { subject: 'Requested' }, 'backfill-call'))
+        store.messages.addMessage(
+            stored.id,
+            claudeTaskResult(JSON.stringify({ task: { id: 'backfill-1', subject: 'Recovered' } }), 'backfill-call')
+        )
+        const events: SyncEvent[] = []
+
+        const reloaded = new SessionCache(store, createPublisher(events)).refreshSession(stored.id)
+
+        expect(store.messages.getMessages(stored.id, 200)).toHaveLength(200)
+        expect(reloaded?.todos).toEqual([{
+            id: 'backfill-1',
+            content: 'Recovered',
+            status: 'pending',
+            priority: 'medium'
+        }])
+        expect(store.sessions.getSession(stored.id)?.teamState).toEqual(teamState)
+    })
+
     it('includes explicit model in session summaries', () => {
         const store = new Store(':memory:')
         const events: SyncEvent[] = []
