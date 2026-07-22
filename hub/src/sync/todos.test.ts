@@ -2,7 +2,8 @@ import { describe, expect, it } from 'bun:test'
 import {
     extractSessionTodoUpdates,
     reduceSessionTodos,
-    replaySessionTodos
+    replaySessionTodos,
+    TodosSchema
 } from './todos'
 
 const pending = {
@@ -98,6 +99,21 @@ describe('session todo projection', () => {
                 type: 'create',
                 todo: { ...pending, content: 'Different' }
             }])).toEqual({ kind: 'rejected', reason: 'conflicting duplicate id: 1' })
+        })
+
+        it('compares duplicate creates semantically after schema normalization', () => {
+            const current = TodosSchema.parse([pending])
+            const sameTodoWithDifferentPropertyOrder = {
+                priority: 'medium' as const,
+                status: 'pending' as const,
+                content: 'Build API',
+                id: '1'
+            }
+
+            expect(reduceSessionTodos(current, [{
+                type: 'create',
+                todo: sameTodoWithDifferentPropertyOrder
+            }])).toEqual({ kind: 'unchanged' })
         })
 
         it('ignores patch and delete updates for unknown IDs', () => {
@@ -267,6 +283,38 @@ describe('session todo projection', () => {
             } }])
         })
 
+        it('uses structured SDK results when TaskUpdate and TaskList display text is not JSON', () => {
+            const update = extractSessionTodoUpdates(
+                claudeResult('Task #43 updated successfully', {
+                    toolUseResult: { success: true }
+                }),
+                [claudeCall('TaskUpdate', { taskId: '43', status: 'completed' })]
+            )
+            const list = extractSessionTodoUpdates(
+                claudeResult('43 [completed] Structured subject', {
+                    id: 'task-list-1',
+                    toolUseResult: {
+                        tasks: [{ id: '43', subject: 'Structured subject', status: 'completed' }]
+                    }
+                }),
+                [claudeCall('TaskList', {}, { id: 'task-list-1' })]
+            )
+
+            expect(update).toEqual({
+                updates: [{ type: 'patch', id: '43', changes: { status: 'completed' } }],
+                issues: []
+            })
+            expect(list).toEqual({
+                updates: [{ type: 'replace', todos: [{
+                    id: '43',
+                    content: 'Structured subject',
+                    status: 'completed',
+                    priority: 'medium'
+                }] }],
+                issues: []
+            })
+        })
+
         it('does not create a task for a failed or unmatched TaskCreate result', () => {
             const failed = extractSessionTodoUpdates(
                 claudeResult('{"task":{"id":"42","subject":"Nope"}}', { error: true }),
@@ -371,6 +419,28 @@ describe('session todo projection', () => {
         expect(replaySessionTodos(messages)).toEqual({
             todos: [{ ...pending, status: 'completed' }],
             updatedAt: 30,
+            issues: []
+        })
+    })
+
+    it('treats TaskGet call and result as read-only during replay', () => {
+        const messages = [
+            { content: claudeCall('TodoWrite', { todos: [pending] }), createdAt: 10 },
+            { content: claudeCall('TaskGet', { taskId: '1' }, { id: 'task-get-1' }), createdAt: 20 },
+            {
+                content: claudeResult('Task #1: Build API', {
+                    id: 'task-get-1',
+                    toolUseResult: { task: { id: '1', subject: 'Build API', status: 'pending' } }
+                }),
+                createdAt: 30
+            }
+        ]
+
+        expect(extractSessionTodoUpdates(messages[2].content, [messages[1].content]))
+            .toEqual({ updates: [], issues: [] })
+        expect(replaySessionTodos(messages)).toEqual({
+            todos: [pending],
+            updatedAt: 10,
             issues: []
         })
     })

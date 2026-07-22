@@ -1,6 +1,6 @@
 import { describe, expect, it, spyOn } from 'bun:test'
 import { toSessionSummary } from '@hapi/protocol'
-import type { SyncEvent } from '@hapi/protocol/types'
+import type { SyncEvent, TodoItem } from '@hapi/protocol/types'
 import { Store } from '../store'
 import { RpcRegistry } from '../socket/rpcRegistry'
 import { registerSessionHandlers } from '../socket/handlers/cli/sessionHandlers'
@@ -402,6 +402,40 @@ describe('session model', () => {
 
         const merged = cache.getSession(newSession.id)
         expect(merged?.model).toBe('gpt-5.4')
+    })
+
+    it('keeps the newer todo snapshot when merging sessions', async () => {
+        const store = new Store(':memory:')
+        const events: SyncEvent[] = []
+        const cache = new SessionCache(store, createPublisher(events))
+        const source = cache.getOrCreateSession(
+            'session-todos-old',
+            { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
+            null,
+            'default'
+        )
+        const target = cache.getOrCreateSession(
+            'session-todos-new',
+            { path: '/tmp/project', host: 'localhost', flavor: 'codex' },
+            null,
+            'default'
+        )
+        const olderTodos: TodoItem[] = [{
+            id: 'old', content: 'Old task', status: 'pending', priority: 'medium'
+        }]
+        const newerTodos: TodoItem[] = [{
+            id: 'new', content: 'New task', status: 'completed', priority: 'high'
+        }]
+        expect(store.sessions.setSessionTodos(source.id, olderTodos, 100, 'default')).toBe('applied')
+        expect(store.sessions.setSessionTodos(target.id, newerTodos, 200, 'default')).toBe('applied')
+
+        await cache.mergeSessions(source.id, target.id, 'default')
+
+        expect(cache.getSession(target.id)?.todos).toEqual(newerTodos)
+        expect(store.sessions.getSession(target.id)).toMatchObject({
+            todos: newerTodos,
+            todosUpdatedAt: 200
+        })
     })
 
     it('persists applied session model updates, including clear-to-auto', () => {

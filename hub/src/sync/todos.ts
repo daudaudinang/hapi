@@ -42,6 +42,19 @@ function hasUniqueIds(todos: readonly TodoItem[]): boolean {
     return true
 }
 
+function todoItemsEqual(left: TodoItem, right: TodoItem): boolean {
+    return left.id === right.id
+        && left.content === right.content
+        && left.status === right.status
+        && left.priority === right.priority
+        && left.activeForm === right.activeForm
+}
+
+function todoSnapshotsEqual(left: readonly TodoItem[], right: readonly TodoItem[]): boolean {
+    return left.length === right.length
+        && left.every((todo, index) => todoItemsEqual(todo, right[index]))
+}
+
 function validateSnapshot(candidate: unknown): TodoItem[] | null {
     const parsed = TodosSchema.safeParse(candidate)
     return parsed.success && hasUniqueIds(parsed.data) ? parsed.data : null
@@ -356,7 +369,7 @@ export function reduceSessionTodos(
         }
         if (update.type === 'create') {
             const existing = next.find((todo) => todo.id === update.todo.id)
-            if (existing && JSON.stringify(existing) !== JSON.stringify(update.todo)) {
+            if (existing && !todoItemsEqual(existing, update.todo)) {
                 return { kind: 'rejected', reason: `conflicting duplicate id: ${update.todo.id}` }
             }
             if (!existing) {
@@ -373,7 +386,7 @@ export function reduceSessionTodos(
             continue
         }
         const patched = { ...next[index], ...update.changes, id: update.id }
-        if (JSON.stringify(patched) !== JSON.stringify(next[index])) {
+        if (!todoItemsEqual(patched, next[index])) {
             next[index] = patched
             touched = true
         }
@@ -383,7 +396,7 @@ export function reduceSessionTodos(
     if (!parsed.success || !hasUniqueIds(parsed.data)) {
         return { kind: 'rejected', reason: 'invalid todo snapshot' }
     }
-    if (!touched || (current !== null && JSON.stringify(current) === JSON.stringify(parsed.data))) {
+    if (!touched || (current !== null && todoSnapshotsEqual(current, parsed.data))) {
         return { kind: 'unchanged' }
     }
     return { kind: 'changed', todos: parsed.data }
@@ -420,10 +433,4 @@ export function replaySessionTodos(
     })
 
     return todos === null ? null : { todos, updatedAt, issues }
-}
-
-export function extractTodoWriteTodosFromMessageContent(messageContent: unknown): TodoItem[] | null {
-    const extraction = extractSessionTodoUpdates(messageContent)
-    const replacement = extraction.updates.find((update) => update.type === 'replace')
-    return replacement?.todos ?? null
 }
