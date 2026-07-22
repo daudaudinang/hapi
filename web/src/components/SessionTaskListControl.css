@@ -77,13 +77,44 @@
 }
 
 .session-task-dialog {
+    --session-task-surface: #f8fafc;
+    --session-task-text: #1f2937;
+    --session-task-border: #d8dee8;
+    --session-task-shadow: rgb(15 23 42 / 18%);
+    --session-task-outline: rgb(15 23 42 / 5%);
+    --session-task-track: #e2e8f0;
+    --session-task-divider: #e5eaf0;
+    --session-task-line: #d8e0e9;
+    --session-task-row-hover: #f1f5f9;
+    --session-task-dot-border: #64748b;
+    --session-task-muted: #64748b;
+    --session-task-active: #6552c7;
+    --session-task-pending: #94600d;
+    --session-task-completed: #147557;
     width: calc(100vw - 24px);
     max-width: 440px;
-    border-color: #2b3038;
+    border-color: var(--session-task-border);
     border-radius: 14px;
-    background: #181c21;
-    color: #e7ebf1;
-    box-shadow: 0 24px 64px rgb(0 0 0 / 45%), 0 0 0 1px rgb(255 255 255 / 2%);
+    background: var(--session-task-surface);
+    color: var(--session-task-text);
+    box-shadow: 0 24px 64px var(--session-task-shadow), 0 0 0 1px var(--session-task-outline);
+}
+
+[data-theme="dark"] .session-task-dialog {
+    --session-task-surface: #181c21;
+    --session-task-text: #e7ebf1;
+    --session-task-border: #2b3038;
+    --session-task-shadow: rgb(0 0 0 / 45%);
+    --session-task-outline: rgb(255 255 255 / 2%);
+    --session-task-track: #2c313b;
+    --session-task-divider: #252a31;
+    --session-task-line: #303640;
+    --session-task-row-hover: #1e232a;
+    --session-task-dot-border: #5c6675;
+    --session-task-muted: #838d9c;
+    --session-task-active: #a99eff;
+    --session-task-pending: #d7a34a;
+    --session-task-completed: #46b98b;
 }
 
 .session-task-progress {
@@ -95,7 +126,7 @@
     height: 4px;
     overflow: hidden;
     border-radius: 999px;
-    background: #2c313b;
+    background: var(--session-task-track);
 }
 
 .session-task-progress__fill {
@@ -132,7 +163,7 @@
     min-height: 48px;
     gap: 8px;
     padding: 10px 6px;
-    border-bottom: 1px solid #252a31;
+    border-bottom: 1px solid var(--session-task-divider);
     border-radius: 7px;
     transition: background 150ms ease;
 }
@@ -147,12 +178,12 @@
     bottom: -1px;
     left: 12px;
     width: 1px;
-    background: #303640;
+    background: var(--session-task-line);
     content: '';
 }
 
 .session-task-row:hover {
-    background: #1e232a;
+    background: var(--session-task-row-hover);
 }
 
 .session-task-row__dot {
@@ -162,9 +193,9 @@
     height: 7px;
     margin-top: 6px;
     margin-left: 3px;
-    border: 2px solid #5c6675;
+    border: 2px solid var(--session-task-dot-border);
     border-radius: 999px;
-    background: #181c21;
+    background: var(--session-task-surface);
 }
 
 .session-task-row--in_progress .session-task-row__dot {
@@ -184,21 +215,21 @@
 
 .session-task-row__status {
     margin-top: 3px;
-    color: #838d9c;
+    color: var(--session-task-muted);
     font-size: 11px;
     line-height: 1.25;
 }
 
 .session-task-row--in_progress .session-task-row__status {
-    color: #a99eff;
+    color: var(--session-task-active);
 }
 
 .session-task-row--pending .session-task-row__status {
-    color: #d7a34a;
+    color: var(--session-task-pending);
 }
 
 .session-task-row--completed .session-task-row__status {
-    color: #46b98b;
+    color: var(--session-task-completed);
 }
 
 @keyframes session-task-pulse {
