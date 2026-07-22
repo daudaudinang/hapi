@@ -257,6 +257,29 @@ describe('SessionHeader editor entry point', () => {
         expect(screen.getByRole('dialog')).toHaveTextContent('Current task')
     })
 
+    it('does not focus the session when double-clicking the compact task control', () => {
+        const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        const onFocusSession = vi.fn()
+        render(
+            <QueryClientProvider client={qc}>
+                <SessionHeader
+                    session={makeSession({
+                        todos: [{ id: '1', content: 'Task', status: 'pending', priority: 'medium' }]
+                    })}
+                    onBack={vi.fn()}
+                    api={null}
+                    compactMode
+                    pinIndex={1}
+                    onFocusSession={onFocusSession}
+                />
+            </QueryClientProvider>
+        )
+
+        fireEvent.doubleClick(screen.getByRole('button', { name: 'Session tasks: 0 of 1 completed' }))
+
+        expect(onFocusSession).not.toHaveBeenCalled()
+    })
+
     it('shows the Codex goal button when a Codex session has goal state', () => {
         const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
         render(<QueryClientProvider client={qc}><SessionHeader session={makeSession()} onBack={vi.fn()} api={null} codexGoal={makeGoal()} onGoalCommand={vi.fn()} /></QueryClientProvider>)

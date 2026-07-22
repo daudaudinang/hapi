@@ -12,7 +12,8 @@ vi.mock('@/lib/use-translation', () => ({
                 'session.tasks.progress': '{completed} of {total} completed',
                 'session.tasks.status.pending': 'Pending',
                 'session.tasks.status.in_progress': 'In progress',
-                'session.tasks.status.completed': 'Completed'
+                'session.tasks.status.completed': 'Completed',
+                'button.close': 'Đóng'
             }
             let value = messages[key] ?? key
             for (const [param, replacement] of Object.entries(params ?? {})) {
@@ -43,8 +44,12 @@ describe('SessionTaskListControl', () => {
         trigger.focus()
         fireEvent.click(trigger)
 
-        expect(screen.getByRole('dialog')).toBeInTheDocument()
+        const dialog = screen.getByRole('dialog')
+        expect(dialog).toHaveAccessibleName('Session tasks')
+        expect(dialog).toHaveAccessibleDescription('1 of 2 completed')
+        expect(dialog).toContainElement(document.activeElement as HTMLElement)
         expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '1')
+        expect(screen.getByRole('button', { name: 'Đóng' })).toBeInTheDocument()
         const items = screen.getAllByRole('listitem')
         expect(items.map((item) => item.textContent)).toEqual([
             expect.stringContaining('First task'),
@@ -62,8 +67,19 @@ describe('SessionTaskListControl', () => {
     it('uses the compact counter without the Tasks label', () => {
         render(<SessionTaskListControl todos={todos} compact />)
 
-        expect(screen.getByRole('button')).toHaveTextContent('1/2')
-        expect(screen.getByRole('button')).not.toHaveTextContent('Tasks')
+        const trigger = screen.getByRole('button')
+        expect(trigger).toHaveTextContent('1/2')
+        expect(trigger).not.toHaveTextContent('Tasks')
+        expect(trigger).toHaveClass('db-pinned__compact-action--tasks')
+    })
+
+    it('stops compact trigger double-clicks from bubbling', () => {
+        const onDoubleClick = vi.fn()
+        render(<div onDoubleClick={onDoubleClick}><SessionTaskListControl todos={todos} compact /></div>)
+
+        fireEvent.doubleClick(screen.getByRole('button'))
+
+        expect(onDoubleClick).not.toHaveBeenCalled()
     })
 
     it('keeps a fully completed snapshot visible', () => {
@@ -71,5 +87,37 @@ describe('SessionTaskListControl', () => {
 
         expect(screen.getByRole('button')).toHaveTextContent('Tasks')
         expect(screen.getByRole('button')).toHaveTextContent('2/2')
+    })
+
+    it('shows pending, in-progress, and completed statuses', () => {
+        render(<SessionTaskListControl todos={[
+            { id: 'pending', content: 'Queued task', status: 'pending', priority: 'low' },
+            { id: 'active', content: 'Active task', status: 'in_progress', priority: 'medium' },
+            { id: 'done', content: 'Done task', status: 'completed', priority: 'high' }
+        ]} />)
+
+        fireEvent.click(screen.getByRole('button'))
+
+        expect(screen.getByText('Pending')).toBeInTheDocument()
+        expect(screen.getByText('In progress')).toBeInTheDocument()
+        expect(screen.getByText('Completed')).toBeInTheDocument()
+    })
+
+    it('renders duplicate and empty todo IDs without React key warnings', () => {
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+        try {
+            render(<SessionTaskListControl todos={[
+                { id: '', content: 'Empty ID', status: 'pending', priority: 'low' },
+                { id: 'duplicate', content: 'Duplicate one', status: 'in_progress', priority: 'medium' },
+                { id: 'duplicate', content: 'Duplicate two', status: 'completed', priority: 'high' }
+            ]} />)
+            fireEvent.click(screen.getByRole('button'))
+
+            expect(screen.getAllByRole('listitem')).toHaveLength(3)
+            expect(consoleErrorSpy).not.toHaveBeenCalled()
+        } finally {
+            consoleErrorSpy.mockRestore()
+        }
     })
 })
