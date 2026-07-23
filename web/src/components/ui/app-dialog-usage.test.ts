@@ -1,0 +1,48 @@
+import { expect, it } from 'vitest'
+
+const sources = import.meta.glob('/src/**/*.tsx', {
+    eager: true,
+    import: 'default',
+    query: '?raw'
+}) as Record<string, string>
+
+it('keeps raw DialogContent imports inside the ui layer only', () => {
+    const offenders = Object.entries(sources).flatMap(([file, source]) => {
+        if (file.endsWith('ui/dialog.tsx') || file.endsWith('ui/app-dialog.tsx')) {
+            return []
+        }
+        return source.includes("from '@/components/ui/dialog'") && source.includes('DialogContent')
+            ? [file]
+            : []
+    })
+
+    expect(offenders).toEqual([])
+})
+
+it('keeps custom modal dialog markup out of feature components', () => {
+    const offenders = Object.entries(sources).flatMap(([file, source]) => {
+        if (file.endsWith('.test.tsx')) {
+            return []
+        }
+        return source.includes('role="dialog"') || source.includes("role='dialog'")
+            ? [file]
+            : []
+    })
+
+    expect(offenders).toEqual([])
+})
+
+it('keeps full-screen modal overlays inside AppDialog', () => {
+    const allowedOverlays = new Set([
+        '/src/components/editor/EditorContextMenu.tsx',
+        '/src/components/ui/dialog.tsx',
+    ])
+    const offenders = Object.entries(sources).flatMap(([file, source]) => {
+        if (allowedOverlays.has(file) || file.endsWith('.test.tsx')) {
+            return []
+        }
+        return source.includes('fixed inset-0') ? [file] : []
+    })
+
+    expect(offenders).toEqual([])
+})

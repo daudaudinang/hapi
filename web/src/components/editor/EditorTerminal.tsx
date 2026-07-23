@@ -4,7 +4,12 @@ import type { ApiClient } from '@/api/client'
 import { TerminalView } from '@/components/Terminal/TerminalView'
 import { SessionTerminalTabs } from '@/components/Terminal/SessionTerminalTabs'
 import { TerminalQuickKeys, useTerminalQuickInput } from '@/components/Terminal/TerminalQuickKeys'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+    AppDialog,
+    AppDialogContent,
+    AppDialogFooter,
+    AppDialogHeader,
+} from '@/components/ui/app-dialog'
 import { useAppContext } from '@/lib/app-context'
 import type { EditorTab } from '@/hooks/useEditorState'
 import { useSession } from '@/hooks/queries/useSession'
@@ -327,6 +332,10 @@ export function EditorTerminal(props: {
         () => props.tabs.filter((tab) => tab.type === 'terminal'),
         [props.tabs]
     )
+    const legacyTerminalTabs = useMemo(
+        () => terminalTabs.filter((tab) => !tab.sessionId),
+        [terminalTabs]
+    )
     const activeTerminal = terminalTabs.find((tab) => tab.id === props.activeTabId) ?? terminalTabs[0] ?? null
     const activeSessionTerminal = activeTerminal?.sessionId ? activeTerminal : null
     const activeMachineTerminal = activeTerminal?.machineId ? activeTerminal : null
@@ -371,37 +380,41 @@ export function EditorTerminal(props: {
                     </button>
                 ) : null}
                 <div className="px-2 text-xs font-medium text-[var(--app-hint)]">Terminal</div>
-                <div className="flex min-w-0 flex-1 items-center overflow-x-auto">
-                    {terminalTabs.map((tab) => {
-                        const isActive = tab.id === activeTerminal?.id
-                        return (
-                            <div
-                                key={tab.id}
-                                className={`flex items-center gap-1 border-l border-[var(--app-border)] px-2 py-1 text-xs ${
-                                    isActive ? 'bg-[var(--app-bg)] text-[#818cf8]' : 'text-[var(--app-hint)]'
-                                }`}
-                            >
-                                <button
-                                    type="button"
-                                    aria-label={`Select terminal ${tab.label}`}
-                                    className="max-w-[140px] truncate hover:text-[var(--app-fg)]"
-                                    onClick={() => props.onSelectTab(tab.id)}
+                {activeSessionTerminal ? (
+                    <div className="min-w-0 flex-1" />
+                ) : (
+                    <div className="flex min-w-0 flex-1 items-center overflow-x-auto">
+                        {legacyTerminalTabs.map((tab) => {
+                            const isActive = tab.id === activeTerminal?.id
+                            return (
+                                <div
+                                    key={tab.id}
+                                    className={`flex items-center gap-1 border-l border-[var(--app-border)] px-2 py-1 text-xs ${
+                                        isActive ? 'bg-[var(--app-bg)] text-[#818cf8]' : 'text-[var(--app-hint)]'
+                                    }`}
                                 >
-                                    {tab.label}
-                                </button>
-                                <button
-                                    type="button"
-                                    aria-label={`Close terminal ${tab.label}`}
-                                    className="text-[10px] hover:text-[var(--app-fg)]"
-                                    onClick={() => handleCloseTerminal(tab.id)}
-                                >
-                                    ✕
-                                </button>
-                            </div>
-                        )
-                    })}
-                </div>
-                {!props.mobileMode ? (
+                                    <button
+                                        type="button"
+                                        aria-label={`Select terminal ${tab.label}`}
+                                        className="max-w-[140px] truncate hover:text-[var(--app-fg)]"
+                                        onClick={() => props.onSelectTab(tab.id)}
+                                    >
+                                        {tab.label}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        aria-label={`Close terminal ${tab.label}`}
+                                        className="text-[10px] hover:text-[var(--app-fg)]"
+                                        onClick={() => handleCloseTerminal(tab.id)}
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                            )
+                        })}
+                    </div>
+                )}
+                {!props.mobileMode && !activeSessionTerminal ? (
                     <button
                         type="button"
                         aria-label="Open terminal"
@@ -447,7 +460,7 @@ export function EditorTerminal(props: {
                 </div>
             ) : null}
 
-            <Dialog
+            <AppDialog
                 open={pendingCloseTerminalId !== null}
                 onOpenChange={(open) => {
                     if (!open) {
@@ -455,15 +468,12 @@ export function EditorTerminal(props: {
                     }
                 }}
             >
-                <DialogContent className="bottom-0 left-0 top-auto w-full max-w-none translate-x-0 translate-y-0 rounded-b-none rounded-t-xl p-4 sm:left-1/2 sm:bottom-auto sm:top-1/2 sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl sm:p-6">
-                    <div className="mx-auto flex max-w-md flex-col gap-3">
-                        <DialogHeader>
-                            <DialogTitle>Close terminal?</DialogTitle>
-                            <DialogDescription>
-                                This will stop the running process and close the terminal tab.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <div className="flex flex-col gap-2">
+                <AppDialogContent className="bottom-0 left-0 top-auto w-full max-w-none translate-x-0 translate-y-0 rounded-b-none rounded-t-xl sm:left-1/2 sm:bottom-auto sm:top-1/2 sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl">
+                    <AppDialogHeader
+                        title="Close terminal?"
+                        subtitle="This will stop the running process and close the terminal tab."
+                    />
+                    <AppDialogFooter className="mx-auto w-full max-w-md flex-col">
                             <button
                                 type="button"
                                 className="w-full rounded bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-500"
@@ -484,10 +494,9 @@ export function EditorTerminal(props: {
                             >
                                 Cancel
                             </button>
-                        </div>
-                    </div>
-                </DialogContent>
-            </Dialog>
+                    </AppDialogFooter>
+                </AppDialogContent>
+            </AppDialog>
         </div>
     )
 }

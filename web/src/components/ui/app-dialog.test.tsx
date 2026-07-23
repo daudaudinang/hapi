@@ -1,4 +1,5 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { useState } from 'react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
     AppDialog,
@@ -49,9 +50,40 @@ describe('AppDialog', () => {
         )
 
         const close = screen.getByRole('button', { name: 'Close' })
-        expect(close).toHaveClass('h-9', 'w-9')
-        expect(close.firstElementChild).toHaveClass('h-7', 'w-7', 'border')
+        expect(close).toHaveClass('h-[36px]', 'w-[36px]')
+        expect(close.firstElementChild).toHaveClass('h-[28px]', 'w-[28px]', 'border')
         expect(screen.getByText('Settings dialog')).toHaveClass('sr-only')
         expect(document.querySelector('[data-app-dialog-footer]')).not.toBeInTheDocument()
+    })
+
+    it('lets non-dismissible feature dialogs keep their existing Escape behavior', () => {
+        function Harness() {
+            const [open, setOpen] = useState(true)
+            return (
+                <AppDialog open={open} onOpenChange={setOpen}>
+                    <AppDialogContent dismissible={false}>
+                        <AppDialogHeader title="Destructive action" />
+                        <AppDialogBody>Body</AppDialogBody>
+                    </AppDialogContent>
+                </AppDialog>
+            )
+        }
+
+        render(<Harness />)
+        fireEvent.keyDown(document, { key: 'Escape' })
+
+        expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    it('can disable the shared close control while a feature action is pending', () => {
+        render(
+            <AppDialog open>
+                <AppDialogContent>
+                    <AppDialogHeader title="Saving" closeDisabled />
+                </AppDialogContent>
+            </AppDialog>
+        )
+
+        expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled()
     })
 })

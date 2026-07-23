@@ -1,4 +1,5 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { useEffect } from 'react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TerminalState } from '@hapi/protocol'
 import { en, viVN, zhCN } from '@/lib/locales'
@@ -25,10 +26,12 @@ var mocks: {
         clearLastError: ReturnType<typeof vi.fn>
     }
     terminalMounts: Array<{ onMount?: (terminal: unknown) => void; onResize?: (cols: number, rows: number) => void }>
+    autoMountTerminal: null | (() => unknown)
     emittedEvents: string[]
 } = {
     controller: null,
     terminalMounts: [],
+    autoMountTerminal: null,
     emittedEvents: []
 }
 
@@ -44,6 +47,12 @@ vi.mock('@/hooks/useTerminalSocket', () => ({
 vi.mock('@/components/Terminal/TerminalView', () => ({
     TerminalView: (props: { onMount?: (terminal: unknown) => void; onResize?: (cols: number, rows: number) => void }) => {
         mocks.terminalMounts.push(props)
+        useEffect(() => {
+            const terminal = mocks.autoMountTerminal?.()
+            if (terminal) {
+                props.onMount?.(terminal)
+            }
+        }, [])
         return <div data-testid="terminal-view" />
     }
 }))
@@ -146,6 +155,7 @@ describe('SessionTerminalTabs', () => {
     beforeEach(() => {
         vi.clearAllMocks()
         mocks.terminalMounts = []
+        mocks.autoMountTerminal = null
         mocks.emittedEvents = []
         mocks.controller = makeController()
     })
@@ -252,6 +262,48 @@ describe('SessionTerminalTabs', () => {
         expect(mocks.controller.closeOne).not.toHaveBeenCalledWith('t1')
     })
 
+    it('removes a user-closed terminal tab and switches to the remaining live terminal', () => {
+        mocks.controller = makeController([state('t1'), state('t2')])
+        const rendered = renderTabs()
+
+        expect(screen.getByText('t1')).toBeInTheDocument()
+        expect(screen.getByText('t2')).toBeInTheDocument()
+
+        mocks.controller = {
+            ...mocks.controller,
+            terminals: [
+                state('t1', 'closed_user', 'user_close'),
+                state('t2', 'running')
+            ]
+        }
+        rendered.rerender(
+            <SessionTerminalTabs
+                sessionId="session-1"
+                active={true}
+                terminalSupported={true}
+            />
+        )
+
+        expect(screen.queryByText('t1')).not.toBeInTheDocument()
+        expect(screen.getByText('t2')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 't2' }).parentElement).toHaveClass('text-[#818cf8]')
+        expect(screen.getByTestId('terminal-view')).toBeInTheDocument()
+        expect(screen.queryByText('Closed by user.')).not.toBeInTheDocument()
+    })
+
+    it('selects the first remaining visible tab when a user-closed record comes first', () => {
+        mocks.controller = makeController([
+            state('user-closed', 'closed_user', 'user_close'),
+            state('timed-out', 'closed_idle', 'idle_timeout')
+        ])
+
+        renderTabs()
+
+        expect(screen.queryByText('user-closed')).not.toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'timed-out' }).parentElement).toHaveClass('text-[#818cf8]')
+        expect(screen.getByText('Closed after idle timeout.')).toBeInTheDocument()
+    })
+
 
 
     it('reattaches an existing listed live terminal on first resize before resizing', () => {
@@ -282,6 +334,83 @@ describe('SessionTerminalTabs', () => {
 
         expect(mocks.controller.create).toHaveBeenCalledTimes(2)
         expect(mocks.controller.create).toHaveBeenNthCalledWith(1, expect.objectContaining({ terminalId: 't1', replay: true }))
+    })
+
+    it('restores buffered output only once when switching terminal tabs', () => {
+        const mountedTerminals: Array<{
+            write: ReturnType<typeof vi.fn>
+            clear: ReturnType<typeof vi.fn>
+            onData: ReturnType<typeof vi.fn>
+        }> = []
+        mocks.autoMountTerminal = () => {
+            const terminal = {
+                write: vi.fn(),
+                clear: vi.fn(),
+                onData: vi.fn(() => ({ dispose: vi.fn() }))
+            }
+            mountedTerminals.push(terminal)
+            return terminal
+        }
+        mocks.controller = makeController([state('t1'), state('t2')])
+
+        renderTabs()
+        const outputHandler = mocks.controller.onOutput.mock.calls.at(-1)?.[0] as
+            | ((terminalId: string, data: string) => void)
+            | undefined
+        act(() => outputHandler?.('t2', 'prompt$ '))
+
+        fireEvent.click(screen.getByRole('button', { name: 't2' }))
+
+        const switchedTerminal = mountedTerminals.at(-1)
+        expect(switchedTerminal?.write).toHaveBeenCalledTimes(1)
+        expect(switchedTerminal?.write).toHaveBeenCalledWith('prompt$ ')
+    })
+
+    it('keeps a new terminal pending and selected across a stale cached list', () => {
+        const inputHandlers: Array<(data: string) => void> = []
+        mocks.autoMountTerminal = () => ({
+            write: vi.fn(),
+            onData: vi.fn((handler: (data: string) => void) => {
+                inputHandlers.push(handler)
+                return { dispose: vi.fn() }
+            })
+        })
+        mocks.controller = makeController([state('t1')])
+        const rendered = renderTabs()
+        mocks.terminalMounts.at(-1)?.onResize?.(80, 24)
+
+        fireEvent.click(screen.getByRole('button', { name: 'New terminal' }))
+        const createdTerminalId = mocks.controller.create.mock.calls.at(-1)?.[0]?.terminalId as string
+
+        mocks.controller = {
+            ...mocks.controller,
+            terminals: [state('t1')]
+        }
+        rendered.rerender(
+            <SessionTerminalTabs
+                sessionId="session-1"
+                active={true}
+                terminalSupported={true}
+            />
+        )
+
+        expect(screen.getByRole('button', { name: 'New terminal' })).toBeDisabled()
+
+        mocks.controller = {
+            ...mocks.controller,
+            terminals: [state('t1'), state(createdTerminalId)]
+        }
+        rendered.rerender(
+            <SessionTerminalTabs
+                sessionId="session-1"
+                active={true}
+                terminalSupported={true}
+            />
+        )
+
+        expect(screen.getByRole('button', { name: createdTerminalId }).parentElement).toHaveClass('text-[#818cf8]')
+        act(() => inputHandlers.at(-1)?.('pwd\r'))
+        expect(mocks.controller.write).toHaveBeenLastCalledWith(createdTerminalId, 'pwd\r')
     })
 
     it('does not create or leave pending while the terminal socket is still connecting', () => {

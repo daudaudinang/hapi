@@ -4,12 +4,12 @@ import { useLongPress } from '@/hooks/useLongPress'
 import { useTranslation } from '@/lib/use-translation'
 import { Button } from '@/components/ui/button'
 import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog'
+    AppDialog,
+    AppDialogBody,
+    AppDialogContent,
+    AppDialogFooter,
+    AppDialogHeader,
+} from '@/components/ui/app-dialog'
 
 type QuickInput = {
     label: string
@@ -376,15 +376,13 @@ export function TerminalQuickKeys(props: {
                 ))}
             </div>
 
-            <Dialog open={moreOpen} onOpenChange={setMoreOpen}>
-                <DialogContent className="bottom-0 left-0 top-auto max-h-[82vh] w-full max-w-none translate-x-0 translate-y-0 overflow-y-auto rounded-b-none rounded-t-xl p-4 sm:left-1/2 sm:bottom-auto sm:top-1/2 sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl">
-                    <DialogHeader>
-                        <DialogTitle>More terminal keys</DialogTitle>
-                        <DialogDescription>
-                            Advanced terminal shortcuts for mobile.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="mt-3 space-y-4">
+            <AppDialog open={moreOpen} onOpenChange={setMoreOpen}>
+                <AppDialogContent className="bottom-0 left-0 top-auto max-h-[82vh] w-full max-w-none translate-x-0 translate-y-0 rounded-b-none rounded-t-xl sm:left-1/2 sm:bottom-auto sm:top-1/2 sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl">
+                    <AppDialogHeader
+                        title="More terminal keys"
+                        subtitle="Advanced terminal shortcuts for mobile."
+                    />
+                    <AppDialogBody className="space-y-4 overflow-y-auto p-4">
                         {ADVANCED_KEY_GROUPS.map((group) => (
                             <section key={group.label} className="space-y-2">
                                 <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--app-hint)]">
@@ -404,11 +402,11 @@ export function TerminalQuickKeys(props: {
                                 </div>
                             </section>
                         ))}
-                    </div>
-                </DialogContent>
-            </Dialog>
+                    </AppDialogBody>
+                </AppDialogContent>
+            </AppDialog>
 
-            <Dialog
+            <AppDialog
                 open={pasteDialogOpen}
                 onOpenChange={(open) => {
                     setPasteDialogOpen(open)
@@ -417,22 +415,22 @@ export function TerminalQuickKeys(props: {
                     }
                 }}
             >
-                <DialogContent className="max-w-md">
-                    <DialogHeader>
-                        <DialogTitle>{t('terminal.paste.fallbackTitle')}</DialogTitle>
-                        <DialogDescription>
-                            {t('terminal.paste.fallbackDescription')}
-                        </DialogDescription>
-                    </DialogHeader>
-                    <textarea
-                        value={manualPasteText}
-                        onChange={(event) => setManualPasteText(event.target.value)}
-                        placeholder={t('terminal.paste.placeholder')}
-                        className="mt-2 min-h-32 w-full resize-y rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--app-link)]"
-                        autoCapitalize="none"
-                        autoCorrect="off"
+                <AppDialogContent className="max-w-md">
+                    <AppDialogHeader
+                        title={t('terminal.paste.fallbackTitle')}
+                        subtitle={t('terminal.paste.fallbackDescription')}
                     />
-                    <div className="mt-3 flex justify-end gap-2">
+                    <AppDialogBody className="p-4">
+                        <textarea
+                            value={manualPasteText}
+                            onChange={(event) => setManualPasteText(event.target.value)}
+                            placeholder={t('terminal.paste.placeholder')}
+                            className="min-h-32 w-full resize-y rounded-md border border-[var(--app-border)] bg-[var(--app-bg)] p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--app-link)]"
+                            autoCapitalize="none"
+                            autoCorrect="off"
+                        />
+                    </AppDialogBody>
+                    <AppDialogFooter>
                         <Button
                             type="button"
                             variant="secondary"
@@ -450,9 +448,9 @@ export function TerminalQuickKeys(props: {
                         >
                             {t('button.paste')}
                         </Button>
-                    </div>
-                </DialogContent>
-            </Dialog>
+                    </AppDialogFooter>
+                </AppDialogContent>
+            </AppDialog>
         </div>
     )
 }

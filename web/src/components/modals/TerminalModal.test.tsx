@@ -50,9 +50,19 @@ describe('TerminalModal', () => {
             terminalSupported: true
         }))
         expect(sharedTabsMock).toHaveBeenCalledWith(expect.not.objectContaining({
-            title: expect.anything(),
-            subtitle: expect.anything()
+            header: expect.anything()
         }))
+        expect(screen.getByRole('heading', { name: 'Terminal' })).toBeInTheDocument()
+        expect(screen.getByText('/tmp/project')).toBeInTheDocument()
+        expect(document.querySelector('[data-app-dialog-content]')).toBeInTheDocument()
+    })
+
+    it('uses the shared slim close control in the dialog header', () => {
+        renderModal()
+
+        const close = screen.getByRole('button', { name: 'Close' })
+        expect(close).toHaveClass('h-[36px]', 'w-[36px]')
+        expect(close.firstElementChild).toHaveClass('h-[28px]', 'w-[28px]', 'border')
     })
 
     it('unmounts through shared tabs without legacy close', () => {

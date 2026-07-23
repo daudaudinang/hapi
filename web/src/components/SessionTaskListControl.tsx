@@ -1,12 +1,11 @@
 import type { TodoItem } from '@/types/api'
 import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger
-} from '@/components/ui/dialog'
+    AppDialog,
+    AppDialogBody,
+    AppDialogContent,
+    AppDialogHeader,
+    AppDialogTrigger,
+} from '@/components/ui/app-dialog'
 import { useTranslation } from '@/lib/use-translation'
 import './SessionTaskListControl.css'
 
@@ -28,8 +27,8 @@ export function SessionTaskListControl({ todos, compact = false }: {
             : 'completed'
 
     return (
-        <Dialog>
-            <DialogTrigger asChild>
+        <AppDialog>
+            <AppDialogTrigger asChild>
                 <button
                     type="button"
                     aria-label={label}
@@ -40,13 +39,15 @@ export function SessionTaskListControl({ todos, compact = false }: {
                     <span className="session-task-badge__dot" aria-hidden="true" />
                     <span>{completed}/{total}</span>
                 </button>
-            </DialogTrigger>
-            <DialogContent className="session-task-dialog" closeLabel={t('button.close')}>
-                <DialogHeader>
-                    <DialogTitle>{t('session.tasks.title')}</DialogTitle>
-                    <DialogDescription>{t('session.tasks.progress', { completed, total })}</DialogDescription>
-                </DialogHeader>
-                <div className="session-task-progress">
+            </AppDialogTrigger>
+            <AppDialogContent className="session-task-dialog">
+                <AppDialogHeader
+                    title={t('session.tasks.title')}
+                    subtitle={t('session.tasks.progress', { completed, total })}
+                    closeLabel={t('button.close')}
+                />
+                <AppDialogBody className="overflow-y-auto px-4 pb-4">
+                    <div className="session-task-progress">
                     <div
                         role="progressbar"
                         aria-label={label}
@@ -60,8 +61,8 @@ export function SessionTaskListControl({ todos, compact = false }: {
                             style={{ width: `${Math.round((completed / total) * 100)}%` }}
                         />
                     </div>
-                </div>
-                <ul className="session-task-timeline">
+                    </div>
+                    <ul className="session-task-timeline">
                     {todos.map((todo, index) => (
                         <li
                             key={`${todo.id || 'todo'}:${index}`}
@@ -74,8 +75,9 @@ export function SessionTaskListControl({ todos, compact = false }: {
                             </div>
                         </li>
                     ))}
-                </ul>
-            </DialogContent>
-        </Dialog>
+                    </ul>
+                </AppDialogBody>
+            </AppDialogContent>
+        </AppDialog>
     )
 }

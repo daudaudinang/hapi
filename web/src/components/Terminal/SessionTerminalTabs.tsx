@@ -3,7 +3,12 @@ import type { Terminal } from '@xterm/xterm'
 import type { TerminalState } from '@hapi/protocol'
 import { TerminalView } from '@/components/Terminal/TerminalView'
 import { TerminalQuickKeys, useTerminalQuickInput } from '@/components/Terminal/TerminalQuickKeys'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+    AppDialog,
+    AppDialogContent,
+    AppDialogFooter,
+    AppDialogHeader,
+} from '@/components/ui/app-dialog'
 import { useSessionTerminalSocket } from '@/hooks/useTerminalSocket'
 import { useAppContext } from '@/lib/app-context'
 import { useTranslation } from '@/lib/use-translation'
@@ -23,6 +28,10 @@ const UI_BUFFER_LIMIT = 50_000
 
 function isLiveTerminal(terminal: TerminalState): boolean {
     return LIVE_STATUSES.has(terminal.status)
+}
+
+function isVisibleTerminalTab(terminal: TerminalState): boolean {
+    return terminal.status !== 'closed_user' && terminal.closeReason !== 'user_close'
 }
 
 function warningReason(terminal: TerminalState): 'idle' | 'age' | null {
@@ -86,18 +95,23 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
     const [createPending, setCreatePending] = useState(false)
     const lastSizeRef = useRef<{ cols: number; rows: number } | null>(null)
     const bootstrapRequestedRef = useRef(false)
+    const pendingCreateTerminalIdRef = useRef<string | null>(null)
     const terminalRef = useRef<Terminal | null>(null)
     const inputDisposableRef = useRef<{ dispose: () => void } | null>(null)
     const buffersRef = useRef<Map<string, string>>(new Map())
     const attachedTerminalIdsRef = useRef<Set<string>>(new Set())
 
-    const liveTerminals = useMemo(() => controller.terminals.filter(isLiveTerminal), [controller.terminals])
+    const visibleTerminals = useMemo(
+        () => controller.terminals.filter(isVisibleTerminalTab),
+        [controller.terminals]
+    )
+    const liveTerminals = useMemo(() => visibleTerminals.filter(isLiveTerminal), [visibleTerminals])
     const liveCount = liveTerminals.length
     const selectedTerminal = useMemo(
-        () => controller.terminals.find((terminal) => terminal.terminalId === activeTerminalId) ?? null,
-        [activeTerminalId, controller.terminals]
+        () => visibleTerminals.find((terminal) => terminal.terminalId === activeTerminalId) ?? null,
+        [activeTerminalId, visibleTerminals]
     )
-    const displayTerminal = selectedTerminal ?? liveTerminals[0] ?? controller.terminals[0] ?? null
+    const displayTerminal = selectedTerminal ?? liveTerminals[0] ?? visibleTerminals[0] ?? null
     const activeLiveTerminal = displayTerminal && isLiveTerminal(displayTerminal) ? displayTerminal : null
     const selectedIsLive = Boolean(activeLiveTerminal)
     const activeWarning = activeLiveTerminal ? warningReason(activeLiveTerminal) : null
@@ -113,6 +127,8 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
             }
         }
     })
+    const terminalDataHandlerRef = useRef(quickInput.writeTerminalData)
+    terminalDataHandlerRef.current = quickInput.writeTerminalData
 
     useEffect(() => {
         if (!props.active || !props.terminalSupported) {
@@ -149,6 +165,7 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
 
     useEffect(() => {
         bootstrapRequestedRef.current = false
+        pendingCreateTerminalIdRef.current = null
         attachedTerminalIdsRef.current.clear()
         buffersRef.current.clear()
         setCreatePending(false)
@@ -158,26 +175,46 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
     }, [controller.clearLastError, props.sessionId])
 
     useEffect(() => {
-        if (controller.terminals.length > 0) {
+        const pendingTerminalId = pendingCreateTerminalIdRef.current
+        const pendingTerminalListed = pendingTerminalId
+            ? controller.terminals.some((terminal) => terminal.terminalId === pendingTerminalId)
+            : false
+        if (pendingTerminalListed) {
+            pendingCreateTerminalIdRef.current = null
+            bootstrapRequestedRef.current = false
+            setCreatePending(false)
+        } else if (!pendingTerminalId && controller.terminals.length > 0) {
             bootstrapRequestedRef.current = false
             setCreatePending(false)
         }
         setActiveTerminalId((activeId) => {
             const current = activeId
-                ? controller.terminals.find((terminal) => terminal.terminalId === activeId) ?? null
+                ? visibleTerminals.find((terminal) => terminal.terminalId === activeId) ?? null
                 : null
             if (current) {
                 return current.terminalId
             }
-            return liveTerminals[0]?.terminalId ?? controller.terminals[0]?.terminalId ?? null
+            if (activeId && activeId === pendingCreateTerminalIdRef.current) {
+                return activeId
+            }
+            return liveTerminals[0]?.terminalId ?? visibleTerminals[0]?.terminalId ?? null
         })
-    }, [controller.terminals, liveTerminals])
+    }, [controller.terminals, liveTerminals, visibleTerminals])
 
     useEffect(() => {
         if (controller.lastError) {
+            const pendingTerminalId = pendingCreateTerminalIdRef.current
+            pendingCreateTerminalIdRef.current = null
             setCreatePending(false)
+            if (pendingTerminalId) {
+                setActiveTerminalId((activeId) => (
+                    activeId === pendingTerminalId
+                        ? (liveTerminals[0]?.terminalId ?? visibleTerminals[0]?.terminalId ?? null)
+                        : activeId
+                ))
+            }
         }
-    }, [controller.lastError])
+    }, [controller.lastError, liveTerminals, visibleTerminals])
 
     const createTerminal = useCallback((replay = true, sizeFallback?: { cols: number; rows: number }) => {
         if (!canUseTerminal || !terminalSocketConnected) {
@@ -202,6 +239,7 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
         if (!accepted) {
             return
         }
+        pendingCreateTerminalIdRef.current = terminalId
         attachedTerminalIdsRef.current.add(terminalId)
         setCreatePending(true)
         setActiveTerminalId(terminalId)
@@ -234,6 +272,7 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
             return
         }
         bootstrapRequestedRef.current = true
+        pendingCreateTerminalIdRef.current = terminalId
         attachedTerminalIdsRef.current.add(terminalId)
         setCreatePending(true)
         setActiveTerminalId(terminalId)
@@ -242,24 +281,12 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
     const handleTerminalMount = useCallback((terminal: Terminal) => {
         terminalRef.current = terminal
         inputDisposableRef.current?.dispose()
-        inputDisposableRef.current = terminal.onData(quickInput.writeTerminalData)
+        inputDisposableRef.current = terminal.onData((data) => terminalDataHandlerRef.current(data))
         if (activeTerminalId) {
             const buffered = buffersRef.current.get(activeTerminalId)
             if (buffered) {
                 terminal.write(buffered)
             }
-        }
-    }, [activeTerminalId, quickInput.writeTerminalData])
-
-    useEffect(() => {
-        const terminal = terminalRef.current
-        if (!terminal || !activeTerminalId) {
-            return
-        }
-        terminal.clear?.()
-        const buffered = buffersRef.current.get(activeTerminalId)
-        if (buffered) {
-            terminal.write(buffered)
         }
     }, [activeTerminalId])
 
@@ -267,19 +294,25 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
         ? controller.terminals.find((terminal) => terminal.terminalId === pendingCloseTerminalId)
         : null
 
+    const statusContent = (
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+            <span className={`h-2 w-2 shrink-0 rounded-full ${controller.state.status === 'connected' ? 'bg-emerald-500' : controller.state.status === 'connecting' ? 'bg-amber-500' : controller.state.status === 'error' ? 'bg-red-500' : 'bg-[var(--app-hint)]'}`} />
+            <span className="text-[10px] text-[var(--app-hint)]">{controller.state.status}</span>
+            <span className="rounded-full border border-[var(--app-border)] px-1.5 py-0.5 text-[10px] text-[var(--app-hint)]">{liveCount}/3</span>
+            {createError ? <span className="truncate text-[10px] text-red-500">{createError}</span> : null}
+            {controller.lastError ? <span className="truncate text-[10px] text-red-500">{controller.lastError}</span> : null}
+            {controller.terminals.length === 0 && controller.recoveryReason === 'cli_lost' ? (
+                <span className="truncate text-[10px] text-amber-500">{t('terminal.recovery.cliLost')}</span>
+            ) : null}
+            {!props.terminalSupported ? <span className="text-[10px] text-red-500">{t('terminal.unsupported')}</span> : null}
+            {!props.active ? <span className="text-[10px] text-[var(--app-hint)]">{t('terminal.inactive')}</span> : null}
+        </div>
+    )
+
     return (
         <div className={`flex h-full min-h-0 flex-col bg-[var(--app-bg)] ${props.className ?? ''}`}>
             <div className="flex shrink-0 items-center gap-2 border-b border-[var(--app-border)] px-2 py-1">
-                <span className={`h-2 w-2 shrink-0 rounded-full ${controller.state.status === 'connected' ? 'bg-emerald-500' : controller.state.status === 'connecting' ? 'bg-amber-500' : controller.state.status === 'error' ? 'bg-red-500' : 'bg-[var(--app-hint)]'}`} />
-                <span className="text-[10px] text-[var(--app-hint)]">{controller.state.status}</span>
-                <span className="rounded-full border border-[var(--app-border)] px-1.5 py-0.5 text-[10px] text-[var(--app-hint)]">{liveCount}/3</span>
-                {createError ? <span className="truncate text-[10px] text-red-500">{createError}</span> : null}
-                {controller.lastError ? <span className="truncate text-[10px] text-red-500">{controller.lastError}</span> : null}
-                {controller.terminals.length === 0 && controller.recoveryReason === 'cli_lost' ? (
-                    <span className="truncate text-[10px] text-amber-500">{t('terminal.recovery.cliLost')}</span>
-                ) : null}
-                {!props.terminalSupported ? <span className="text-[10px] text-red-500">{t('terminal.unsupported')}</span> : null}
-                {!props.active ? <span className="text-[10px] text-[var(--app-hint)]">{t('terminal.inactive')}</span> : null}
+                {statusContent}
             </div>
 
             <div
@@ -287,7 +320,7 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
                 aria-label="Terminal tabs"
                 className="flex shrink-0 items-center overflow-x-auto border-b border-[var(--app-border)]"
             >
-                {controller.terminals.map((terminal) => {
+                {visibleTerminals.map((terminal) => {
                     const isSelected = terminal.terminalId === activeTerminalId
                     const warning = warningReason(terminal)
                     return (
@@ -390,13 +423,13 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
                 onWritePlainInput={quickInput.writePlainInput}
             />
 
-            <Dialog open={pendingCloseTerminalId !== null} onOpenChange={(open) => !open && setPendingCloseTerminalId(null)}>
-                <DialogContent className="max-w-md">
-                    <DialogHeader>
-                        <DialogTitle>{t('terminal.close.confirmTitle')}</DialogTitle>
-                        <DialogDescription>{t('terminal.close.confirmDescription')}</DialogDescription>
-                    </DialogHeader>
-                    <div className="mt-3 flex justify-end gap-2">
+            <AppDialog open={pendingCloseTerminalId !== null} onOpenChange={(open) => !open && setPendingCloseTerminalId(null)}>
+                <AppDialogContent className="max-w-md">
+                    <AppDialogHeader
+                        title={t('terminal.close.confirmTitle')}
+                        subtitle={t('terminal.close.confirmDescription')}
+                    />
+                    <AppDialogFooter>
                         <button
                             type="button"
                             className="rounded border border-[var(--app-border)] px-3 py-1.5 text-sm"
@@ -416,9 +449,9 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
                         >
                             {t('terminal.close.confirmAction')}
                         </button>
-                    </div>
-                </DialogContent>
-            </Dialog>
+                    </AppDialogFooter>
+                </AppDialogContent>
+            </AppDialog>
         </div>
     )
 }

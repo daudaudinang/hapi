@@ -1,5 +1,5 @@
 import { useRouter, useSearch } from '@tanstack/react-router'
-import { Dialog } from '@/components/ui/dialog'
+import { AppDialog } from '@/components/ui/app-dialog'
 import type { RootSearch } from '@/router'
 import { SettingsModal } from '@/components/modals/SettingsModal'
 import { NewSessionModal } from '@/components/modals/NewSessionModal'
@@ -31,13 +31,13 @@ export function GlobalModalManager() {
     if (!modal) return null
 
     return (
-        <Dialog open={!!modal} onOpenChange={(open) => !open && handleClose()}>
+        <AppDialog open={!!modal} onOpenChange={(open) => !open && handleClose()}>
             {modal === 'settings' && <SettingsModal onClose={handleClose} />}
             {modal === 'new-session' && <NewSessionModal onClose={handleClose} />}
             {modal === 'files' && <FilesModal sessionId={modalSessionId!} path={modalPath} onClose={handleClose} />}
             {modal === 'terminal' && <TerminalModal sessionId={modalSessionId!} onClose={handleClose} />}
             {modal === 'browser' && <BrowserModal machineId={modalMachineId} initialPath={modalPath} onClose={handleClose} />}
             {modal === 'replace-pin' && <ReplacePinModal onClose={handleClose} />}
-        </Dialog>
+        </AppDialog>
     )
 }

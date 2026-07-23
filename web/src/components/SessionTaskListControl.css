@@ -253,9 +253,3 @@
         animation: none;
     }
 }
-
-@media (max-width: 375px) {
-    .session-task-dialog {
-        padding: 18px;
-    }
-}

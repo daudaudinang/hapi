@@ -1,7 +1,7 @@
 # Hapi AppDialog Design
 
 **Ngày:** 2026-07-23  
-**Trạng thái:** Chờ duyệt trước khi lập implementation plan
+**Trạng thái:** Đã duyệt và triển khai
 
 ## 1. Mục tiêu
 
@@ -75,6 +75,8 @@ API composition:
 Quy ước:
 
 - `AppDialogHeader` tự render close button; caller không tự đặt nút đóng khác.
+- `closeDisabled` khóa nút đóng khi feature đang thực hiện thao tác không được gián đoạn.
+- `dismissible={false}` giữ nguyên các luồng cũ vốn không cho đóng bằng `Escape` hoặc click overlay.
 - `icon`, `subtitle`, `meta`, `actions` và footer đều tùy chọn.
 - `className` của content/body/footer cho phép modal giữ layout hiện tại.
 - Header chịu trách nhiệm truncate title/subtitle và bảo vệ vùng close button.

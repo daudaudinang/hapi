@@ -5,7 +5,7 @@ import { useAppContext } from '@/lib/app-context'
 import { useTranslation } from '@/lib/use-translation'
 import { useMachines } from '@/hooks/queries/useMachines'
 import { queryKeys } from '@/lib/query-keys'
-import { DialogContent, DialogTitle, DialogHeader, DialogDescription } from '@/components/ui/dialog'
+import { AppDialogBody, AppDialogContent, AppDialogHeader } from '@/components/ui/app-dialog'
 import { NewSession } from '@/components/NewSession'
 import type { RootSearch } from '@/router'
 
@@ -137,13 +137,9 @@ export function NewSessionModal(props: { onClose: () => void }) {
     }, [navigate, search.modalReturnTo])
 
     return (
-        <DialogContent className="flex flex-col max-h-[85vh] w-[95vw] max-w-2xl p-0 gap-0 overflow-hidden">
-            <DialogHeader className="p-4 pb-3 border-b border-[var(--app-border)]">
-                <DialogTitle className="text-xl font-semibold">{t('newSession.title')}</DialogTitle>
-                <DialogDescription className="sr-only">Create a new session</DialogDescription>
-            </DialogHeader>
-
-            <div className="app-scroll-y p-4">
+        <AppDialogContent className="max-h-[85vh] w-[95vw] max-w-2xl">
+            <AppDialogHeader title={t('newSession.title')} subtitle="Create a new session" />
+            <AppDialogBody className="app-scroll-y p-4">
                 {machinesError ? (
                     <div className="mb-3 p-3 text-sm text-red-600 rounded bg-red-50">
                         {machinesError}
@@ -160,7 +156,7 @@ export function NewSessionModal(props: { onClose: () => void }) {
                     initialDirectory={initialDirectory}
                     initialMachineId={initialMachineId}
                 />
-            </div>
-        </DialogContent>
+            </AppDialogBody>
+        </AppDialogContent>
     )
 }

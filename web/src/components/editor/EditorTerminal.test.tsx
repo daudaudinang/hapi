@@ -140,7 +140,7 @@ describe('EditorTerminal', () => {
         expect(screen.getByText('No terminal open')).toBeInTheDocument()
     })
 
-    it('renders session terminal tabs through the shared component and closes editor tab only', () => {
+    it('renders only the shared session terminal strip in agent mode', () => {
         const onSelectTab = vi.fn()
         const onCloseTab = vi.fn()
         const onOpenTerminal = vi.fn()
@@ -160,8 +160,8 @@ describe('EditorTerminal', () => {
         )
 
         expect(screen.queryByText('App.tsx')).not.toBeInTheDocument()
-        expect(screen.getByText('Terminal: bash')).toBeInTheDocument()
-        expect(screen.getAllByText('Terminal: zsh')).toHaveLength(1)
+        expect(screen.queryByText('Terminal: bash')).not.toBeInTheDocument()
+        expect(screen.queryByText('Terminal: zsh')).not.toBeInTheDocument()
         expect(screen.getAllByTestId('session-terminal-tabs')).toHaveLength(1)
         expect(screen.queryByTestId('terminal-view')).not.toBeInTheDocument()
         expect(mocks.sessionTabsProps[0]).toEqual(expect.objectContaining({
@@ -171,15 +171,12 @@ describe('EditorTerminal', () => {
         }))
         expect(mocks.useTerminalSocket).not.toHaveBeenCalled()
 
-        fireEvent.click(screen.getByRole('button', { name: 'Select terminal Terminal: bash' }))
-        expect(onSelectTab).toHaveBeenCalledWith('term-1')
-
-        fireEvent.click(screen.getByRole('button', { name: 'Close terminal Terminal: zsh' }))
-        expect(mocks.closesByTerminalId.get('term-2')).toBeUndefined()
-        expect(onCloseTab).toHaveBeenCalledWith('term-2')
-
-        fireEvent.click(screen.getByRole('button', { name: 'Open terminal' }))
-        expect(onOpenTerminal).toHaveBeenCalledWith()
+        expect(screen.queryByRole('button', { name: /^Select terminal / })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /^Close terminal / })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Open terminal' })).not.toBeInTheDocument()
+        expect(onSelectTab).not.toHaveBeenCalled()
+        expect(onCloseTab).not.toHaveBeenCalled()
+        expect(onOpenTerminal).not.toHaveBeenCalled()
 
         fireEvent.click(screen.getByRole('button', { name: 'Collapse terminal' }))
         expect(onToggleCollapsed).toHaveBeenCalledWith()

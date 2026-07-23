@@ -13,12 +13,36 @@ import {
 export const AppDialog = Dialog
 export const AppDialogTrigger = DialogTrigger
 
-export function AppDialogContent(props: ComponentProps<typeof DialogContent>) {
-    const { className, showClose: _showClose, ...rest } = props
+type AppDialogContentProps = ComponentProps<typeof DialogContent> & {
+    dismissible?: boolean
+}
+
+export function AppDialogContent(props: AppDialogContentProps) {
+    const {
+        className,
+        dismissible = true,
+        onEscapeKeyDown,
+        onInteractOutside,
+        onPointerDownOutside,
+        showClose: _showClose,
+        ...rest
+    } = props
     return (
         <DialogContent
             showClose={false}
             data-app-dialog-content=""
+            onEscapeKeyDown={(event) => {
+                onEscapeKeyDown?.(event)
+                if (!dismissible) event.preventDefault()
+            }}
+            onInteractOutside={(event) => {
+                onInteractOutside?.(event)
+                if (!dismissible) event.preventDefault()
+            }}
+            onPointerDownOutside={(event) => {
+                onPointerDownOutside?.(event)
+                if (!dismissible) event.preventDefault()
+            }}
             className={cn(
                 'flex max-h-[calc(100vh-24px)] flex-col gap-0 overflow-hidden border-[var(--app-border)] bg-[var(--app-bg)] p-0',
                 className
@@ -35,6 +59,7 @@ export function AppDialogHeader(props: {
     meta?: ReactNode
     actions?: ReactNode
     closeLabel?: string
+    closeDisabled?: boolean
     className?: string
 }) {
     return (
@@ -63,20 +88,27 @@ export function AppDialogHeader(props: {
             </div>
             {props.meta ? <div className="flex shrink-0 items-center gap-2">{props.meta}</div> : null}
             {props.actions ? <div className="flex shrink-0 items-center gap-1">{props.actions}</div> : null}
-            <AppDialogClose label={props.closeLabel} />
+            <AppDialogClose label={props.closeLabel} disabled={props.closeDisabled} />
         </header>
     )
 }
 
-export function AppDialogClose({ label = 'Close' }: { label?: string }) {
+export function AppDialogClose({
+    label = 'Close',
+    disabled = false,
+}: {
+    label?: string
+    disabled?: boolean
+}) {
     return (
         <DialogClose asChild>
             <button
                 type="button"
                 aria-label={label}
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-button)]"
+                disabled={disabled}
+                className="grid h-[36px] w-[36px] shrink-0 place-items-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-button)] disabled:cursor-not-allowed disabled:opacity-50"
             >
-                <span className="grid h-7 w-7 place-items-center rounded-lg border border-[var(--app-border)] bg-transparent text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]">
+                <span className="grid h-[28px] w-[28px] place-items-center rounded-lg border border-[var(--app-border)] bg-transparent text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]">
                     <CloseIcon className="h-[13px] w-[13px]" />
                 </span>
             </button>

@@ -3,7 +3,14 @@ import { ApiClient } from '@/api/client'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { Spinner } from '@/components/Spinner'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import {
+    AppDialog,
+    AppDialogBody,
+    AppDialogContent,
+    AppDialogFooter,
+    AppDialogHeader,
+    AppDialogTrigger,
+} from '@/components/ui/app-dialog'
 import { useTranslation } from '@/lib/use-translation'
 import type { ServerUrlResult } from '@/hooks/useServerUrl'
 
@@ -171,20 +178,19 @@ export function LoginPrompt(props: LoginPromptProps) {
                         <a href="https://hapi.run/docs" target="_blank" rel="noopener noreferrer" className="underline hover:text-[var(--app-fg)]">
                             {t('login.help')}
                         </a>
-                        <Dialog open={isServerDialogOpen} onOpenChange={handleServerDialogOpenChange}>
-                            <DialogTrigger asChild>
+                        <AppDialog open={isServerDialogOpen} onOpenChange={handleServerDialogOpenChange}>
+                            <AppDialogTrigger asChild>
                                 <button type="button" className="underline hover:text-[var(--app-fg)]">
                                     Hub {props.serverUrl ? `${t('login.server.custom')}` : `${t('login.server.default')}`}
                                 </button>
-                            </DialogTrigger>
-                            <DialogContent className="max-w-md">
-                                <DialogHeader>
-                                    <DialogTitle>{t('login.server.title')}</DialogTitle>
-                                    <DialogDescription>
-                                        {t('login.server.description')}
-                                    </DialogDescription>
-                                </DialogHeader>
-                                <form onSubmit={handleSaveServer} className="space-y-4">
+                            </AppDialogTrigger>
+                            <AppDialogContent className="max-w-md">
+                                <AppDialogHeader
+                                    title={t('login.server.title')}
+                                    subtitle={t('login.server.description')}
+                                />
+                                <form onSubmit={handleSaveServer} className="contents">
+                                    <AppDialogBody className="space-y-4 p-4">
                                     <div className="text-xs text-[var(--app-hint)]">
                                         {t('login.server.current')} {serverSummary}
                                     </div>
@@ -211,7 +217,8 @@ export function LoginPrompt(props: LoginPromptProps) {
                                         </div>
                                     )}
 
-                                    <div className="flex items-center justify-end gap-2">
+                                    </AppDialogBody>
+                                    <AppDialogFooter>
                                         {props.serverUrl && (
                                             <Button type="button" variant="outline" onClick={handleClearServer}>
                                                 {t('login.server.useSameOrigin')}
@@ -220,10 +227,10 @@ export function LoginPrompt(props: LoginPromptProps) {
                                         <Button type="submit">
                                             {t('login.server.save')}
                                         </Button>
-                                    </div>
+                                    </AppDialogFooter>
                                 </form>
-                            </DialogContent>
-                        </Dialog>
+                            </AppDialogContent>
+                        </AppDialog>
                     </div>
                 )}
             </div>
