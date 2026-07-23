@@ -67,7 +67,13 @@ vi.mock('@/hooks/queries/useSkills', () => ({
 vi.mock('@/components/SessionChat', async () => {
     const React = await import('react')
     return {
-        SessionChat: (props: { session: { id: string }; onBack?: () => void; onFocusSession?: () => void }) => {
+        SessionChat: (props: {
+            session: { id: string }
+            onBack?: () => void
+            onFocusSession?: () => void
+            compactCloseLabel?: string
+            compactCloseButtonRef?: React.Ref<HTMLButtonElement>
+        }) => {
             const instanceId = React.useId()
             const [draft, setDraft] = React.useState('')
             React.useEffect(() => () => sessionChatUnmounts(props.session.id), [props.session.id])
@@ -86,7 +92,15 @@ vi.mock('@/components/SessionChat', async () => {
                         <button type="button" onClick={props.onFocusSession}>Mock focus session</button>
                     ) : null}
                     {props.onBack ? (
-                        <button type="button" onClick={props.onBack}>Mock unpin session</button>
+                        <button
+                            ref={props.compactCloseButtonRef}
+                            type="button"
+                            data-testid="mock-session-header-close"
+                            aria-label={props.compactCloseLabel ?? 'Unpin this session'}
+                            onClick={props.onBack}
+                        >
+                            Mock close session
+                        </button>
                     ) : null}
                 </div>
             )
@@ -278,7 +292,7 @@ describe('Dashboard session context menu', () => {
     })
 
     it('expands the existing pinned panel without remounting the session chat', () => {
-        renderDashboard()
+        const { container } = renderDashboard()
 
         fireEvent.click(screen.getByText('Build app'))
         const chat = screen.getByTestId('pinned-panel-chat')
@@ -294,6 +308,7 @@ describe('Dashboard session context menu', () => {
         expect(screen.getByTestId('pinned-panel-chat')).toHaveAttribute('data-instance-id', instanceId)
         expect(screen.getByRole('textbox', { name: 'Mock composer draft' })).toHaveValue('draft before focus')
         expect(screen.getByRole('button', { name: 'Close focus session' })).toHaveFocus()
+        expect(container.querySelector('.db__pinned-focus-close')).not.toBeInTheDocument()
         expect(sessionStorage.getItem('mc-pinned-ids')).toBe(JSON.stringify(['session-1']))
 
         fireEvent.click(screen.getByRole('button', { name: 'Close focus session' }))
@@ -356,18 +371,19 @@ describe('Dashboard session context menu', () => {
         expect(sessionChatUnmounts).not.toHaveBeenCalled()
     })
 
-    it('clears focus immediately when unpinning the focused panel', () => {
+    it('closes the focused panel from the session header without unpinning', () => {
         renderDashboard()
 
         fireEvent.click(screen.getByText('Build app'))
         fireEvent.click(screen.getByRole('button', { name: 'Mock focus session' }))
         expect(screen.getByTestId('focused-pinned-panel')).toBeInTheDocument()
 
-        fireEvent.click(screen.getByRole('button', { name: 'Mock unpin session' }))
+        fireEvent.click(screen.getByTestId('mock-session-header-close'))
 
         expect(screen.queryByTestId('focused-pinned-panel')).not.toBeInTheDocument()
         expect(screen.queryByRole('button', { name: 'Close focus session' })).not.toBeInTheDocument()
-        expect(sessionStorage.getItem('mc-pinned-ids')).toBe('[]')
+        expect(sessionChatUnmounts).not.toHaveBeenCalled()
+        expect(sessionStorage.getItem('mc-pinned-ids')).toBe(JSON.stringify(['session-1']))
     })
 
     it('closes focused pinned panel when viewport becomes mobile', () => {

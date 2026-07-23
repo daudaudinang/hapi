@@ -285,6 +285,29 @@ describe('SessionHeader editor entry point', () => {
         expect(onFocusSession).not.toHaveBeenCalled()
     })
 
+    it('uses the focused-modal close semantics for the compact header x button', () => {
+        const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        const onBack = vi.fn()
+
+        render(
+            <QueryClientProvider client={qc}>
+                <SessionHeader
+                    session={makeSession()}
+                    onBack={onBack}
+                    api={null}
+                    compactMode
+                    pinIndex={1}
+                    compactCloseLabel="Close focus session"
+                />
+            </QueryClientProvider>
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: 'Close focus session' }))
+
+        expect(onBack).toHaveBeenCalledTimes(1)
+        expect(screen.queryByRole('button', { name: 'Unpin this session' })).not.toBeInTheDocument()
+    })
+
     it('shows the Codex goal button when a Codex session has goal state', () => {
         const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
         render(<QueryClientProvider client={qc}><SessionHeader session={makeSession()} onBack={vi.fn()} api={null} codexGoal={makeGoal()} onGoalCommand={vi.fn()} /></QueryClientProvider>)

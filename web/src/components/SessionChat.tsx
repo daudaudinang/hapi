@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { Ref } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { AssistantRuntimeProvider } from '@assistant-ui/react'
 import type { ApiClient } from '@/api/client'
@@ -61,6 +62,7 @@ export function SessionChat(props: {
     pendingCount: number
     messagesVersion: number
     onBack: () => void
+    onSessionDeleted?: () => void
     onRefresh: () => void
     onLoadMore: () => Promise<unknown>
     onSend: (text: string, attachments?: AttachmentMetadata[]) => void
@@ -77,6 +79,8 @@ export function SessionChat(props: {
     onComposerAppendTextConsumed?: () => void
     onNewSessionRequested?: () => void
     onFocusSession?: () => void
+    compactCloseLabel?: string
+    compactCloseButtonRef?: Ref<HTMLButtonElement>
 }) {
     const { requests: teamMentionRequests } = useSessionTeamMentions(props.api, props.session.id)
     const { haptic } = usePlatform()
@@ -462,10 +466,12 @@ export function SessionChat(props: {
                     onViewFiles={terminalSupported ? handleViewFiles : undefined}
                     onOpenOutline={() => setOutlineOpen(true)}
                     api={props.api}
-                    onSessionDeleted={props.onBack}
+                    onSessionDeleted={props.onSessionDeleted ?? props.onBack}
                     compactMode={props.compactMode}
                     pinIndex={props.pinIndex}
                     onFocusSession={props.onFocusSession}
+                    compactCloseLabel={props.compactCloseLabel}
+                    compactCloseButtonRef={props.compactCloseButtonRef}
                     codexGoal={reduced.latestGoal}
                     onGoalCommand={handleGoalCommand}
                 />
