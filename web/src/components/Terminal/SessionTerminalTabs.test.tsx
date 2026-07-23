@@ -291,6 +291,20 @@ describe('SessionTerminalTabs', () => {
         expect(screen.queryByText('Closed by user.')).not.toBeInTheDocument()
     })
 
+    it('does not render closed-state cards for user-closed terminal records', () => {
+        mocks.controller = makeController([
+            state('t1', 'closed_user', 'user_close'),
+            state('t2', 'closed_user', 'user_close'),
+            state('t3', 'closed_user', 'user_close')
+        ])
+
+        renderTabs()
+
+        expect(screen.queryByText('Closed by user.')).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Create new terminal' })).not.toBeInTheDocument()
+        expect(screen.getByTestId('terminal-view')).toBeInTheDocument()
+    })
+
     it('selects the first remaining visible tab when a user-closed record comes first', () => {
         mocks.controller = makeController([
             state('user-closed', 'closed_user', 'user_close'),

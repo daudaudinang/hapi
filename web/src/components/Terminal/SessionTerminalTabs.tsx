@@ -371,9 +371,9 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
                         ) : null}
                     </div>
                 ) : null}
-                {liveCount === 0 && controller.terminals.length > 0 ? (
+                {liveCount === 0 && visibleTerminals.length > 0 ? (
                     <div className="flex h-full flex-col items-center justify-center gap-3 overflow-auto rounded border border-[var(--app-border)] p-4 text-center text-sm text-[var(--app-hint)]">
-                        {controller.terminals.map((terminal) => (
+                        {visibleTerminals.map((terminal) => (
                             <div key={terminal.terminalId} className="flex flex-col items-center gap-2">
                                 <div>{closeReasonCopy(terminal, t)}</div>
                                 <button
