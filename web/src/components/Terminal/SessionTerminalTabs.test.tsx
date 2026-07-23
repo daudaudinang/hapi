@@ -454,6 +454,40 @@ describe('SessionTerminalTabs', () => {
         expect(mocks.controller.create).not.toHaveBeenCalled()
     })
 
+    it('bootstraps after the empty terminal list arrives without requiring another resize', () => {
+        mocks.controller = {
+            ...makeController([]),
+            state: { status: 'connecting' as const },
+            listLoaded: false
+        }
+        const rendered = renderTabs()
+
+        mocks.terminalMounts.at(-1)?.onResize?.(120, 36)
+        expect(mocks.controller.create).not.toHaveBeenCalled()
+
+        mocks.controller = {
+            ...mocks.controller,
+            state: { status: 'connected' as const },
+            listLoaded: true
+        }
+        rendered.rerender(
+            <SessionTerminalTabs
+                sessionId="session-1"
+                active={true}
+                terminalSupported={true}
+            />
+        )
+
+        expect(mocks.controller.create).toHaveBeenCalledTimes(1)
+        expect(mocks.controller.create).toHaveBeenCalledWith({
+            terminalId: expect.any(String),
+            cols: 120,
+            rows: 36,
+            cwd: undefined,
+            replay: true
+        })
+    })
+
     it('prefers first live terminal when closed terminal appears before running terminal', () => {
         mocks.controller = makeController([
             state('closed-first', 'closed_idle', 'idle_timeout'),
