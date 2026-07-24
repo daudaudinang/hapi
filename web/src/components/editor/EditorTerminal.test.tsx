@@ -125,9 +125,23 @@ function renderMachineTerminal(overrides: Partial<React.ComponentProps<typeof Ed
     )
 }
 
+function setDockViewport(matches: boolean): void {
+    window.matchMedia = vi.fn((query: string) => ({
+        matches: query === '(max-width: 1023px)' ? matches : false,
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+    })) as unknown as typeof window.matchMedia
+}
+
 describe('EditorTerminal', () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        setDockViewport(false)
         mocks.terminalViewProps = []
         mocks.sessionTabsProps = []
         mocks.useSession.mockReturnValue({
@@ -412,26 +426,38 @@ describe('EditorTerminal', () => {
     })
 
     it('focuses xterm only from the mobile Keyboard action', () => {
+        setDockViewport(true)
         renderMachineTerminal({ mobileMode: true })
         const { focus } = mountLastTerminal()
 
+        expect(focus).not.toHaveBeenCalled()
         fireEvent.pointerDown(screen.getByRole('button', { name: 'Keyboard' }))
 
         expect(focus).toHaveBeenCalledTimes(1)
     })
 
     it('keeps the dock available below lg when editor mobile mode is false', () => {
+        setDockViewport(true)
         renderMachineTerminal({ mobileMode: false })
         const { focus } = mountLastTerminal()
-        focus.mockClear()
 
+        expect(focus).not.toHaveBeenCalled()
         expect(screen.getByRole('toolbar', { name: 'Terminal controls' })).toHaveClass('lg:hidden')
         fireEvent.pointerDown(screen.getByRole('button', { name: 'Keyboard' }))
 
         expect(focus).toHaveBeenCalledTimes(1)
     })
 
+    it('preserves automatic terminal focus at desktop width', () => {
+        setDockViewport(false)
+        renderMachineTerminal({ mobileMode: false })
+        const { focus } = mountLastTerminal()
+
+        expect(focus).toHaveBeenCalledTimes(1)
+    })
+
     it('does not refocus xterm when tapping mobile helper keys', () => {
+        setDockViewport(true)
         renderMachineTerminal({ mobileMode: true })
         const terminal = mountLastTerminal()
 

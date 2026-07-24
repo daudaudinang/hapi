@@ -17,6 +17,7 @@ import {
 import { useAppContext } from '@/lib/app-context'
 import type { EditorTab } from '@/hooks/useEditorState'
 import { useSession } from '@/hooks/queries/useSession'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useTerminalSocket } from '@/hooks/useTerminalSocket'
 import { isRemoteTerminalSupported } from '@/utils/terminalSupport'
 
@@ -71,6 +72,7 @@ function EditorTerminalBody(props: {
     mobileMode?: boolean
 }) {
     const { token, baseUrl } = useAppContext()
+    const isDockViewport = useMediaQuery('(max-width: 1023px)')
     const sessionId = props.tab.sessionId ?? null
     const machineId = props.tab.machineId ?? null
     const cwd = props.tab.cwd ?? undefined
@@ -161,10 +163,10 @@ function EditorTerminalBody(props: {
         }
 
         inputDisposableRef.current = terminal.onData(quickInput.writeTerminalData)
-        if (!props.mobileMode) {
+        if (!isDockViewport) {
             terminal.focus()
         }
-    }, [props.mobileMode, quickInput.writeTerminalData])
+    }, [isDockViewport, quickInput.writeTerminalData])
 
     const handleResize = useCallback((cols: number, rows: number) => {
         lastSizeRef.current = { cols, rows }
