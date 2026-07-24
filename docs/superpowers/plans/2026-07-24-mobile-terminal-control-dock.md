@@ -16,6 +16,7 @@
 - `Paste` is immediate and never selected.
 - Tapping the selected tool or terminal content clears the HAPI tool selection.
 - Tapping terminal content must not forcibly blur or dismiss the native keyboard.
+- Below the `lg` breakpoint, xterm focus is initiated only by the `Keyboard` action; retain automatic focus at desktop widths.
 - Motion is limited to short opacity/translate transitions and must respect reduced-motion preferences.
 - Snippet and History selections send plain text without Enter and without shell-specific line clearing.
 - History is memory-only, current-terminal-only, capped at 100 commands and never reads shell history.
@@ -387,10 +388,12 @@ it('closes the active dock panel when terminal content is tapped', () => {
 })
 
 it('focuses xterm only from the mobile or tablet Keyboard action', () => {
+    mockViewportBelowLg(true)
     renderMachineTerminal({ mobileMode: false })
     const { focus } = mountLastTerminal()
 
     expect(screen.getByRole('toolbar', { name: 'Terminal controls' })).toHaveClass('lg:hidden')
+    expect(focus).not.toHaveBeenCalled()
     fireEvent.pointerDown(screen.getByRole('button', { name: 'Keyboard' }))
     expect(focus).toHaveBeenCalledTimes(1)
 })
@@ -507,6 +510,18 @@ const [activeDockTool, setActiveDockTool] = useState<TerminalDockTool | null>(nu
 ```
 
 Delete assertions tied to the old tall row and replace them with the approved dock behavior. Keep desktop-collapse, tab-close and transport tests unchanged.
+
+Gate initial xterm focus by the same breakpoint:
+
+```ts
+const isDockViewport = useMediaQuery('(max-width: 1023px)')
+
+if (!isDockViewport) {
+    terminal.focus()
+}
+```
+
+Keep the media-query result in the mount callback dependencies. Do not clear the focus mock in the tablet test: it must prove there was no mount-time focus before the Keyboard pointer-down.
 
 After both imports compile, delete the obsolete module:
 
