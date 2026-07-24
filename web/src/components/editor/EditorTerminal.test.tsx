@@ -420,6 +420,17 @@ describe('EditorTerminal', () => {
         expect(focus).toHaveBeenCalledTimes(1)
     })
 
+    it('keeps the dock available below lg when editor mobile mode is false', () => {
+        renderMachineTerminal({ mobileMode: false })
+        const { focus } = mountLastTerminal()
+        focus.mockClear()
+
+        expect(screen.getByRole('toolbar', { name: 'Terminal controls' })).toHaveClass('lg:hidden')
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'Keyboard' }))
+
+        expect(focus).toHaveBeenCalledTimes(1)
+    })
+
     it('does not refocus xterm when tapping mobile helper keys', () => {
         renderMachineTerminal({ mobileMode: true })
         const terminal = mountLastTerminal()
