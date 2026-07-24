@@ -368,7 +368,7 @@ git commit -m "feat(web): add mobile terminal control dock"
 
 **Interfaces:**
 - Consumes: `TerminalControlDock`, `TerminalDockTool`, `useTerminalQuickInput`.
-- Produces: identical dock behavior in session modal/page through shared `SessionTerminalTabs`, and in editor mobile mode.
+- Produces: identical dock behavior below the existing `lg` breakpoint in session modal/page and both editor terminal paths.
 
 - [ ] **Step 1: Write failing integration tests**
 
@@ -386,10 +386,11 @@ it('closes the active dock panel when terminal content is tapped', () => {
     expect(screen.queryByRole('region', { name: 'More terminal keys' })).not.toBeInTheDocument()
 })
 
-it('focuses xterm only from the mobile Keyboard action', () => {
-    renderMachineTerminal({ mobileMode: true })
+it('focuses xterm only from the mobile or tablet Keyboard action', () => {
+    renderMachineTerminal({ mobileMode: false })
     const { focus } = mountLastTerminal()
 
+    expect(screen.getByRole('toolbar', { name: 'Terminal controls' })).toHaveClass('lg:hidden')
     fireEvent.pointerDown(screen.getByRole('button', { name: 'Keyboard' }))
     expect(focus).toHaveBeenCalledTimes(1)
 })
@@ -467,7 +468,7 @@ The pointer handler belongs only to the terminal content wrapper, not the dock/o
 
 - [ ] **Step 4: Wire `EditorTerminalBody`**
 
-Use the same controlled state and capture handler inside mobile mode:
+Use the same controlled state and capture handler. Always render the shared dock; its own `lg:hidden` contract shows it only below 1024px, independent of the editor's narrower `mobileMode` layout switch:
 
 ```diff
 - import { TerminalQuickKeys, useTerminalQuickInput } from '@/components/Terminal/TerminalQuickKeys'
@@ -492,19 +493,17 @@ const [activeDockTool, setActiveDockTool] = useState<TerminalDockTool | null>(nu
     />
 </div>
 
-{props.mobileMode ? (
-    <TerminalControlDock
-        disabled={quickInputDisabled}
-        activeTool={activeDockTool}
-        onActiveToolChange={setActiveDockTool}
-        onFocusTerminal={() => terminalRef.current?.focus()}
-        ctrlActive={quickInput.ctrlActive}
-        altActive={quickInput.altActive}
-        onQuickInput={quickInput.sendQuickInput}
-        onModifierToggle={quickInput.toggleModifier}
-        onWritePlainInput={quickInput.writePlainInput}
-    />
-) : null}
+<TerminalControlDock
+    disabled={quickInputDisabled}
+    activeTool={activeDockTool}
+    onActiveToolChange={setActiveDockTool}
+    onFocusTerminal={() => terminalRef.current?.focus()}
+    ctrlActive={quickInput.ctrlActive}
+    altActive={quickInput.altActive}
+    onQuickInput={quickInput.sendQuickInput}
+    onModifierToggle={quickInput.toggleModifier}
+    onWritePlainInput={quickInput.writePlainInput}
+/>
 ```
 
 Delete assertions tied to the old tall row and replace them with the approved dock behavior. Keep desktop-collapse, tab-close and transport tests unchanged.
@@ -550,6 +549,7 @@ Show the working session modal, session page and editor terminal at a mobile vie
 3. Keyboard opens native input and helper keys retain focus.
 4. More floats above the dock and does not resize xterm.
 5. Terminal tap closes HAPI panels.
+6. Both editor terminal paths expose the same `lg:hidden` dock contract at tablet width and hide it from 1024px upward.
 
 Do not begin Gate 2 until the user accepts Gate 1.
 
