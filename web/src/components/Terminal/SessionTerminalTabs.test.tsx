@@ -66,6 +66,19 @@ vi.mock('@/lib/use-translation', () => ({
             'terminal.paste.fallbackTitle': 'Paste input',
             'terminal.paste.fallbackDescription': 'Clipboard read is unavailable. Paste your text below.',
             'terminal.paste.placeholder': 'Paste terminal input here…',
+            'terminal.controls.toolbar': 'Terminal controls',
+            'terminal.controls.paste': 'Paste',
+            'terminal.controls.snippets': 'Snippets',
+            'terminal.controls.search': 'Search',
+            'terminal.controls.history': 'History',
+            'terminal.controls.keyboard': 'Keyboard',
+            'terminal.controls.more': 'More',
+            'terminal.controls.pasted': 'Pasted',
+            'terminal.controls.keyboardPanel': 'Terminal keyboard helpers',
+            'terminal.controls.morePanel': 'More terminal keys',
+            'terminal.controls.navigation': 'Navigation',
+            'terminal.controls.functionKeys': 'Function keys',
+            'terminal.controls.symbols': 'Symbols',
             'terminal.lifecycle.hint': 'Closing this window only detaches. Terminals live with the session and stop only when you close them, archive the session, or timeout limits apply.',
             'terminal.limit.full': 'Close an existing terminal before creating another.',
             'terminal.new': 'New terminal',
@@ -162,12 +175,33 @@ describe('SessionTerminalTabs', () => {
 
     afterEach(() => cleanup())
 
-    it('marks terminal quick keys as mobile and tablet only', () => {
+    it('marks the terminal control dock as mobile and tablet only', () => {
         mocks.controller = makeController([state('t1')])
 
         renderTabs()
 
-        expect(screen.getByRole('toolbar', { name: 'Terminal quick keys' })).toHaveClass('lg:hidden')
+        expect(screen.getByRole('toolbar', { name: 'Terminal controls' })).toHaveClass('lg:hidden')
+    })
+
+    it('closes the active dock panel when terminal content is tapped', () => {
+        mocks.controller = makeController([state('t1')])
+        renderTabs()
+
+        fireEvent.click(screen.getByRole('button', { name: 'More' }))
+        expect(screen.getByRole('region', { name: 'More terminal keys' })).toBeInTheDocument()
+
+        fireEvent.pointerDown(screen.getByTestId('terminal-surface'))
+        expect(screen.queryByRole('region', { name: 'More terminal keys' })).not.toBeInTheDocument()
+    })
+
+    it('clears the selected dock tool when the session terminal tab changes', () => {
+        mocks.controller = makeController([state('t1'), state('t2')])
+        renderTabs()
+
+        fireEvent.click(screen.getByRole('button', { name: 'More' }))
+        fireEvent.click(screen.getByRole('button', { name: 't2' }))
+
+        expect(screen.queryByRole('region', { name: 'More terminal keys' })).not.toBeInTheDocument()
     })
 
     it('renders count n/3 from CLI list', () => {

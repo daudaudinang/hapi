@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Terminal } from '@xterm/xterm'
 import type { ApiClient } from '@/api/client'
+import {
+    TerminalControlDock,
+    type TerminalDockTool,
+} from '@/components/Terminal/TerminalControlDock'
 import { TerminalView } from '@/components/Terminal/TerminalView'
 import { SessionTerminalTabs } from '@/components/Terminal/SessionTerminalTabs'
-import { TerminalQuickKeys, useTerminalQuickInput } from '@/components/Terminal/TerminalQuickKeys'
+import { useTerminalQuickInput } from '@/components/Terminal/terminalControls'
 import {
     AppDialog,
     AppDialogContent,
@@ -80,6 +84,7 @@ function EditorTerminalBody(props: {
     const [exitInfo, setExitInfo] = useState<{ code: number | null; signal: string | null } | null>(null)
     const [terminalSelection, setTerminalSelection] = useState<string | null>(null)
     const [terminalMousePos, setTerminalMousePos] = useState<{ x: number; y: number } | null>(null)
+    const [activeDockTool, setActiveDockTool] = useState<TerminalDockTool | null>(null)
     const terminalContainerRef = useRef<HTMLDivElement | null>(null)
 
     const {
@@ -264,7 +269,9 @@ function EditorTerminalBody(props: {
             ) : null}
             <div
                 ref={terminalContainerRef}
-                className="min-h-0 flex-1 overflow-hidden p-2 relative"
+                data-testid="terminal-surface"
+                onPointerDownCapture={() => setActiveDockTool(null)}
+                className="relative min-h-0 flex-1 overflow-hidden p-2"
             >
                 {canUseTerminal ? (
                     <TerminalView
@@ -300,8 +307,11 @@ function EditorTerminalBody(props: {
                 )}
             </div>
             {props.mobileMode ? (
-                <TerminalQuickKeys
+                <TerminalControlDock
                     disabled={quickInputDisabled}
+                    activeTool={activeDockTool}
+                    onActiveToolChange={setActiveDockTool}
+                    onFocusTerminal={() => terminalRef.current?.focus()}
                     ctrlActive={quickInput.ctrlActive}
                     altActive={quickInput.altActive}
                     onQuickInput={quickInput.sendQuickInput}

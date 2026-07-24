@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Terminal } from '@xterm/xterm'
 import type { TerminalState } from '@hapi/protocol'
+import {
+    TerminalControlDock,
+    type TerminalDockTool,
+} from '@/components/Terminal/TerminalControlDock'
 import { TerminalView } from '@/components/Terminal/TerminalView'
-import { TerminalQuickKeys, useTerminalQuickInput } from '@/components/Terminal/TerminalQuickKeys'
+import { useTerminalQuickInput } from '@/components/Terminal/terminalControls'
 import {
     AppDialog,
     AppDialogContent,
@@ -90,6 +94,7 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
     const { t } = useTranslation()
     const controller = useSessionTerminalSocket({ token, baseUrl, sessionId: props.sessionId })
     const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null)
+    const [activeDockTool, setActiveDockTool] = useState<TerminalDockTool | null>(null)
     const [pendingCloseTerminalId, setPendingCloseTerminalId] = useState<string | null>(null)
     const [createError, setCreateError] = useState<string | null>(null)
     const [createPending, setCreatePending] = useState(false)
@@ -129,6 +134,14 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
     })
     const terminalDataHandlerRef = useRef(quickInput.writeTerminalData)
     terminalDataHandlerRef.current = quickInput.writeTerminalData
+
+    useEffect(() => {
+        setActiveDockTool(null)
+    }, [displayTerminal?.terminalId])
+
+    const dismissDockTool = useCallback(() => {
+        setActiveDockTool(null)
+    }, [])
 
     useEffect(() => {
         if (!props.active || !props.terminalSupported) {
@@ -388,7 +401,11 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
                 </button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-hidden p-2">
+            <div
+                data-testid="terminal-surface"
+                onPointerDownCapture={dismissDockTool}
+                className="min-h-0 flex-1 overflow-hidden p-2"
+            >
                 {activeWarning ? (
                     <div role="status" className="mb-2 flex items-center justify-between gap-3 rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
                         <span>{t(activeWarning === 'idle' ? 'terminal.warning.idle' : 'terminal.warning.age')}</span>
@@ -446,8 +463,11 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
                 )}
             </div>
 
-            <TerminalQuickKeys
+            <TerminalControlDock
                 disabled={quickInputDisabled}
+                activeTool={activeDockTool}
+                onActiveToolChange={setActiveDockTool}
+                onFocusTerminal={() => terminalRef.current?.focus()}
                 ctrlActive={quickInput.ctrlActive}
                 altActive={quickInput.altActive}
                 onQuickInput={quickInput.sendQuickInput}
