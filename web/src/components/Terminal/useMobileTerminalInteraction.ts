@@ -10,6 +10,17 @@ import type { Terminal } from '@xterm/xterm'
 import { safeCopyToClipboard } from '@/lib/clipboard'
 import type { MobileTerminalOverlayProps } from './MobileTerminalInteractionOverlay'
 import {
+    MobileTerminalSelectionLifecycle,
+    beginSelectionLayerDrag,
+    createHandleDrag,
+    rangeForSelectionDrag,
+    type SelectionDrag,
+} from './mobileTerminalSelectionLifecycle'
+import {
+    XtermSelectionCoordinateAdapter,
+    type RawXtermSelectionPosition,
+} from './terminalSelectionCoordinates'
+import {
     cellToScreenPoint,
     normalizeRange,
     pointToBufferCell,
@@ -58,16 +69,6 @@ type OverlayState = {
     feedback: 'copied' | 'copy-error' | null
 }
 
-type PointerDrag = {
-    target: HTMLElement
-    pointerId: number
-    kind: 'range' | 'start' | 'end'
-    anchor: TerminalCell
-    pendingPoint: { x: number; y: number } | null
-    frameId: number | null
-    removeListeners: () => void
-}
-
 const IDLE_OVERLAY: OverlayState = {
     mode: 'idle',
     choiceAnchor: null,
@@ -79,27 +80,6 @@ const IDLE_OVERLAY: OverlayState = {
 
 function clamp(value: number, minimum: number, maximum: number): number {
     return Math.min(Math.max(value, minimum), maximum)
-}
-
-function cellOffset(cell: TerminalCell, cols: number): number {
-    return (cell.row * cols) + cell.column
-}
-
-function advanceCell(cell: TerminalCell, cols: number): TerminalCell {
-    return {
-        column: Math.min(cell.column + 1, cols),
-        row: cell.row,
-    }
-}
-
-function inclusiveRange(
-    first: TerminalCell,
-    second: TerminalCell,
-    cols: number,
-): TerminalCellRange {
-    return cellOffset(first, cols) <= cellOffset(second, cols)
-        ? { start: first, end: advanceCell(second, cols) }
-        : { start: second, end: advanceCell(first, cols) }
 }
 
 export function useMobileTerminalInteraction(
@@ -118,8 +98,9 @@ export function useMobileTerminalInteraction(
     const seedCellRef = useRef<TerminalCell | null>(null)
     const fallbackChoicePointRef = useRef<{ x: number; y: number } | null>(null)
     const selectionRangeRef = useRef<TerminalCellRange | null>(null)
-    const pointerDragRef = useRef<PointerDrag | null>(null)
-    const interactionGenerationRef = useRef(0)
+    const suppressSelectionEventRef = useRef(false)
+    const coordinateAdapterRef = useRef(new XtermSelectionCoordinateAdapter())
+    const selectionLifecycleRef = useRef(new MobileTerminalSelectionLifecycle())
 
     terminalRef.current = options.terminal
     rootRef.current = options.root
@@ -143,20 +124,27 @@ export function useMobileTerminalInteraction(
         longPressTimerRef.current = null
     }, [])
 
-    const clearPointerDrag = useCallback(() => {
-        const drag = pointerDragRef.current
-        if (!drag) return
-        pointerDragRef.current = null
-        drag.removeListeners()
-        if (drag.frameId !== null) {
-            window.cancelAnimationFrame(drag.frameId)
-        }
+    const cancelTouch = useCallback(() => {
+        clearLongPressTimer()
+        touchRef.current = null
+        touchPixelRemainderRef.current = 0
+    }, [clearLongPressTimer])
+
+    const cancelTransientWork = useCallback(() => {
+        cancelTouch()
+        selectionLifecycleRef.current.reset()
+        coordinateAdapterRef.current.reset()
+        seedCellRef.current = null
+        fallbackChoicePointRef.current = null
+        selectionRangeRef.current = null
+    }, [cancelTouch])
+
+    const clearTerminalSelection = useCallback((terminal: Terminal) => {
+        suppressSelectionEventRef.current = true
         try {
-            if (drag.target.hasPointerCapture?.(drag.pointerId)) {
-                drag.target.releasePointerCapture(drag.pointerId)
-            }
-        } catch {
-            // The browser may have released capture before pointerup/cancel.
+            terminal.clearSelection()
+        } finally {
+            suppressSelectionEventRef.current = false
         }
     }, [])
 
@@ -235,38 +223,44 @@ export function useMobileTerminalInteraction(
         }
     }, [])
 
-    const currentTerminalRange = useCallback((): TerminalCellRange | null => {
+    const failClosedSelection = useCallback(() => {
+        clearLongPressTimer()
+        selectionLifecycleRef.current.reset()
+        coordinateAdapterRef.current.reset()
+        selectionRangeRef.current = null
         const terminal = terminalRef.current
-        const position = terminal?.getSelectionPosition()
-        if (!terminal || !position) return null
-        const maximumRow = Math.max(terminal.buffer.active.length - 1, 0)
-        const start = {
-            column: clamp(position.start.x - 1, 0, Math.max(terminal.cols - 1, 0)),
-            row: clamp(position.start.y - 1, 0, maximumRow),
+        if (terminal) {
+            if (terminal.textarea) terminal.textarea.readOnly = true
+            clearTerminalSelection(terminal)
         }
-        const end = {
-            column: clamp(position.end.x - 1, 0, terminal.cols),
-            row: clamp(position.end.y - 1, 0, maximumRow),
-        }
-        return normalizeRange(start, end)
-    }, [])
+        updateOverlay(IDLE_OVERLAY)
+    }, [clearLongPressTimer, clearTerminalSelection, updateOverlay])
 
-    const syncSelectionOverlay = useCallback(() => {
-        if (overlayRef.current.mode !== 'select') return
-        const range = currentTerminalRange()
-        selectionRangeRef.current = range
-        if (!range) {
-            updateOverlay({
-                startHandle: null,
-                endHandle: null,
-                toolbarAnchor: null,
-            })
-            return
+    const resolveTerminalRange = useCallback((): TerminalCellRange | null => {
+        const terminal = terminalRef.current
+        if (!terminal) return null
+        const resolution = coordinateAdapterRef.current.resolve(
+            terminal.getSelectionPosition() as RawXtermSelectionPosition | undefined,
+            {
+                cols: terminal.cols,
+                bufferLength: terminal.buffer.active.length,
+            },
+        )
+        if (resolution.status !== 'resolved') {
+            failClosedSelection()
+            return null
         }
+        selectionRangeRef.current = resolution.range
+        return resolution.range
+    }, [failClosedSelection])
+
+    const syncSelectionOverlay = useCallback((): boolean => {
+        if (overlayRef.current.mode !== 'select') return true
+        const range = resolveTerminalRange()
+        if (!range) return false
         const startHandle = cellToRootPoint(range.start)
         const endHandle = cellToRootPoint(range.end)
-        const root = rootRef.current
-        const rootRect = root?.getBoundingClientRect()
+        const rootRect = rootRef.current?.getBoundingClientRect()
         const toolbarAnchor = startHandle && endHandle && rootRect
             ? {
                 x: clamp(
@@ -282,7 +276,8 @@ export function useMobileTerminalInteraction(
             }
             : startHandle ?? endHandle
         updateOverlay({ startHandle, endHandle, toolbarAnchor })
-    }, [cellToRootPoint, currentTerminalRange, updateOverlay])
+        return true
+    }, [cellToRootPoint, resolveTerminalRange, updateOverlay])
 
     const syncChoiceAnchor = useCallback(() => {
         if (overlayRef.current.mode !== 'choice') return
@@ -298,14 +293,17 @@ export function useMobileTerminalInteraction(
         })
     }, [cellToRootPoint, updateOverlay])
 
-    const applySelection = useCallback((range: TerminalCellRange) => {
+    const applySelection = useCallback((range: TerminalCellRange): boolean => {
         const terminal = terminalRef.current
-        if (!terminal || !activeRef.current) return
+        if (!terminal || !activeRef.current) return false
         const normalized = normalizeRange(range.start, range.end)
+        selectionLifecycleRef.current.selectionMutated()
+        coordinateAdapterRef.current.expectSelection(normalized)
         selectionRangeRef.current = normalized
         const selection = rangeToSelection(normalized, terminal.cols)
         terminal.select(selection.column, selection.row, selection.length)
-        syncSelectionOverlay()
+        if (overlayRef.current.mode !== 'select') return false
+        return syncSelectionOverlay()
     }, [syncSelectionOverlay])
 
     const selectWord = useCallback((seedCell: TerminalCell) => {
@@ -322,65 +320,57 @@ export function useMobileTerminalInteraction(
                 }
             },
         )
-        const range = wordRangeAt(cells, seedCell)
         if (terminal.textarea) terminal.textarea.readOnly = true
         terminal.blur()
         updateOverlay({
+            ...IDLE_OVERLAY,
             mode: 'select',
-            choiceAnchor: null,
-            feedback: null,
         })
-        applySelection(range)
+        applySelection(wordRangeAt(cells, seedCell))
     }, [applySelection, updateOverlay])
 
     const reset = useCallback(() => {
-        interactionGenerationRef.current += 1
-        clearLongPressTimer()
-        clearPointerDrag()
-        touchRef.current = null
-        touchPixelRemainderRef.current = 0
-        seedCellRef.current = null
-        fallbackChoicePointRef.current = null
-        selectionRangeRef.current = null
+        const wasInput = overlayRef.current.mode === 'input'
+        cancelTransientWork()
         const terminal = terminalRef.current
         if (terminal) {
             if (terminal.textarea && enabledRef.current && mobileRef.current) {
                 terminal.textarea.readOnly = true
             }
-            if (overlayRef.current.mode === 'input') terminal.blur()
-            terminal.clearSelection()
+            if (wasInput) terminal.blur()
+            clearTerminalSelection(terminal)
         }
         updateOverlay(IDLE_OVERLAY)
-    }, [clearLongPressTimer, clearPointerDrag, updateOverlay])
+    }, [cancelTransientWork, clearTerminalSelection, updateOverlay])
 
     const onInput = useCallback(() => {
         const terminal = terminalRef.current
         if (!terminal || !activeRef.current || !terminal.textarea) return
+        cancelTouch()
         terminal.textarea.readOnly = false
         updateOverlay({
             ...IDLE_OVERLAY,
             mode: 'input',
         })
         terminal.focus()
-    }, [updateOverlay])
+    }, [cancelTouch, updateOverlay])
 
     const onSelect = useCallback(() => {
         const seedCell = seedCellRef.current
-        if (!seedCell) return
-        selectWord(seedCell)
+        if (seedCell) selectWord(seedCell)
     }, [selectWord])
 
     const onCopy = useCallback(async () => {
         const terminal = terminalRef.current
         if (!terminal || !activeRef.current) return
-        const generation = interactionGenerationRef.current
+        const token = selectionLifecycleRef.current.beginCopy()
         try {
             await safeCopyToClipboard(terminal.getSelection())
         } catch {
             if (
                 terminalRef.current !== terminal
                 || !activeRef.current
-                || interactionGenerationRef.current !== generation
+                || !selectionLifecycleRef.current.isCopyCurrent(token)
             ) return
             updateOverlay({ mode: 'select', feedback: 'copy-error' })
             return
@@ -388,146 +378,68 @@ export function useMobileTerminalInteraction(
         if (
             terminalRef.current !== terminal
             || !activeRef.current
-            || interactionGenerationRef.current !== generation
+            || !selectionLifecycleRef.current.isCopyCurrent(token)
         ) return
+        selectionLifecycleRef.current.selectionMutated()
+        coordinateAdapterRef.current.reset()
         selectionRangeRef.current = null
-        terminal.clearSelection()
         updateOverlay({
             ...IDLE_OVERLAY,
             feedback: 'copied',
         })
-    }, [updateOverlay])
+        clearTerminalSelection(terminal)
+    }, [clearTerminalSelection, updateOverlay])
 
     const onSelectAll = useCallback(() => {
         const terminal = terminalRef.current
         if (!terminal || !activeRef.current) return
+        selectionLifecycleRef.current.selectionMutated()
         updateOverlay({ mode: 'select', feedback: null })
         terminal.selectAll()
-        syncSelectionOverlay()
+        if (overlayRef.current.mode === 'select') syncSelectionOverlay()
     }, [syncSelectionOverlay, updateOverlay])
 
-    const selectionForDrag = useCallback((
-        drag: PointerDrag,
-        movingCell: TerminalCell,
-    ): TerminalCellRange => {
+    const edgeDirection = useCallback((clientY: number): -1 | 0 | 1 => {
         const terminal = terminalRef.current
-        const cols = terminal?.cols ?? 1
-        if (drag.kind === 'range') {
-            return inclusiveRange(drag.anchor, movingCell, cols)
+        const geometry = getMetrics(terminal)
+        if (!terminal || !geometry) return 0
+        const buffer = terminal.buffer.active
+        if (
+            clientY - geometry.screenRect.top <= EDGE_SCROLL_PX
+            && buffer.viewportY > 0
+        ) {
+            return -1
         }
-        return cellOffset(movingCell, cols) < cellOffset(drag.anchor, cols)
-            ? { start: movingCell, end: drag.anchor }
-            : { start: drag.anchor, end: advanceCell(movingCell, cols) }
-    }, [])
+        if (
+            geometry.screenRect.bottom - clientY <= EDGE_SCROLL_PX
+            && buffer.viewportY < buffer.baseY
+        ) {
+            return 1
+        }
+        return 0
+    }, [getMetrics])
 
     const startPointerDrag = useCallback((
         target: HTMLElement,
         pointerId: number,
-        kind: PointerDrag['kind'],
-        anchor: TerminalCell,
+        drag: SelectionDrag,
     ) => {
-        clearPointerDrag()
-
-        const drag: PointerDrag = {
+        selectionLifecycleRef.current.startPointer({
             target,
             pointerId,
-            kind,
-            anchor,
-            pendingPoint: null,
-            frameId: null,
-            removeListeners: () => undefined,
-        }
-
-        const applyPoint = (clientX: number, clientY: number) => {
-            const cell = pointToCell(clientX, clientY)
-            if (!cell || pointerDragRef.current !== drag) return
-            applySelection(selectionForDrag(drag, cell))
-        }
-
-        const edgeDirection = (clientY: number): -1 | 0 | 1 => {
-            const terminal = terminalRef.current
-            const geometry = getMetrics(terminal)
-            if (!terminal || !geometry) return 0
-            const buffer = terminal.buffer.active
-            if (
-                clientY - geometry.screenRect.top <= EDGE_SCROLL_PX
-                && buffer.viewportY > 0
-            ) {
-                return -1
-            }
-            if (
-                geometry.screenRect.bottom - clientY <= EDGE_SCROLL_PX
-                && buffer.viewportY < buffer.baseY
-            ) {
-                return 1
-            }
-            return 0
-        }
-
-        const scheduleEdgeFrame = () => {
-            if (drag.frameId !== null) return
-            drag.frameId = window.requestAnimationFrame(() => {
-                drag.frameId = null
-                const point = drag.pendingPoint
-                if (!point || pointerDragRef.current !== drag) return
-                const direction = edgeDirection(point.y)
-                if (direction === 0) {
-                    applyPoint(point.x, point.y)
-                    return
-                }
+            edgeDirection,
+            scrollEdge: (direction) => {
                 terminalRef.current?.scrollLines(direction)
-                applyPoint(point.x, point.y)
-                scheduleEdgeFrame()
-            })
-        }
-
-        const handlePointerMove = (event: PointerEvent) => {
-            if (event.pointerId !== drag.pointerId) return
-            event.preventDefault()
-            drag.pendingPoint = { x: event.clientX, y: event.clientY }
-            if (edgeDirection(event.clientY) !== 0) {
-                scheduleEdgeFrame()
-                return
-            }
-            if (drag.frameId !== null) {
-                window.cancelAnimationFrame(drag.frameId)
-                drag.frameId = null
-            }
-            applyPoint(event.clientX, event.clientY)
-        }
-        const handlePointerUp = (event: PointerEvent) => {
-            if (event.pointerId !== drag.pointerId) return
-            event.preventDefault()
-            clearPointerDrag()
-        }
-        const handlePointerCancel = (event: PointerEvent) => {
-            if (event.pointerId !== drag.pointerId) return
-            event.preventDefault()
-            reset()
-        }
-
-        drag.removeListeners = () => {
-            target.removeEventListener('pointermove', handlePointerMove)
-            target.removeEventListener('pointerup', handlePointerUp)
-            target.removeEventListener('pointercancel', handlePointerCancel)
-        }
-        pointerDragRef.current = drag
-        target.addEventListener('pointermove', handlePointerMove)
-        target.addEventListener('pointerup', handlePointerUp)
-        target.addEventListener('pointercancel', handlePointerCancel)
-        try {
-            target.setPointerCapture(pointerId)
-        } catch {
-            clearPointerDrag()
-        }
-    }, [
-        applySelection,
-        clearPointerDrag,
-        getMetrics,
-        pointToCell,
-        reset,
-        selectionForDrag,
-    ])
+            },
+            applyPoint: (clientX, clientY) => {
+                const terminal = terminalRef.current
+                const cell = pointToCell(clientX, clientY)
+                if (!terminal || !cell) return
+                applySelection(rangeForSelectionDrag(drag, cell, terminal.cols))
+            },
+            onCancel: reset,
+        })
+    }, [applySelection, edgeDirection, pointToCell, reset])
 
     const onSelectionPointerDown = useCallback((
         event: ReactPointerEvent<HTMLDivElement>,
@@ -537,58 +449,36 @@ export function useMobileTerminalInteraction(
         if (!terminal || !cell || overlayRef.current.mode !== 'select') return
         event.preventDefault()
         event.stopPropagation()
-        const range = currentTerminalRange()
-        const pointOffset = cellOffset(cell, terminal.cols)
-        const startOffset = range ? cellOffset(range.start, terminal.cols) : 0
-        const endOffset = range ? cellOffset(range.end, terminal.cols) : 0
-        let kind: PointerDrag['kind'] = 'range'
-        let anchor = cell
-
-        if (range && pointOffset >= startOffset && pointOffset < endOffset) {
-            const startDistance = pointOffset - startOffset
-            const endDistance = Math.max(endOffset - 1 - pointOffset, 0)
-            if (startDistance <= endDistance) {
-                kind = 'start'
-                anchor = range.end
-            } else {
-                kind = 'end'
-                anchor = range.start
-            }
-        } else {
-            applySelection({
-                start: cell,
-                end: advanceCell(cell, terminal.cols),
-            })
-        }
-
-        startPointerDrag(
-            event.currentTarget,
-            event.pointerId,
-            kind,
-            anchor,
+        if (!syncSelectionOverlay()) return
+        const { drag, replacementRange } = beginSelectionLayerDrag(
+            selectionRangeRef.current,
+            cell,
+            terminal.cols,
         )
+        if (replacementRange && !applySelection(replacementRange)) return
+        startPointerDrag(event.currentTarget, event.pointerId, drag)
     }, [
         applySelection,
-        currentTerminalRange,
         pointToCell,
         startPointerDrag,
+        syncSelectionOverlay,
     ])
 
     const onHandlePointerDown = useCallback((
         edge: 'start' | 'end',
         event: ReactPointerEvent<HTMLButtonElement>,
     ) => {
-        const range = currentTerminalRange()
-        if (!range || overlayRef.current.mode !== 'select') return
+        if (overlayRef.current.mode !== 'select' || !syncSelectionOverlay()) return
+        const range = selectionRangeRef.current
+        if (!range) return
         event.preventDefault()
         event.stopPropagation()
         startPointerDrag(
             event.currentTarget,
             event.pointerId,
-            edge,
-            edge === 'start' ? range.end : range.start,
+            createHandleDrag(range, edge),
         )
-    }, [currentTerminalRange, startPointerDrag])
+    }, [startPointerDrag, syncSelectionOverlay])
 
     useEffect(() => {
         const terminal = options.terminal
@@ -603,12 +493,7 @@ export function useMobileTerminalInteraction(
             || !options.root
         ) {
             activeRef.current = false
-            interactionGenerationRef.current += 1
-            clearLongPressTimer()
-            clearPointerDrag()
-            touchRef.current = null
-            touchPixelRemainderRef.current = 0
-            selectionRangeRef.current = null
+            cancelTransientWork()
             updateOverlay(IDLE_OVERLAY)
             return
         }
@@ -617,21 +502,19 @@ export function useMobileTerminalInteraction(
         activeRef.current = true
         if (textarea) textarea.readOnly = true
 
-        const clearTouch = () => {
-            clearLongPressTimer()
-            touchRef.current = null
-            touchPixelRemainderRef.current = 0
-        }
-
         const handleTouchStart = (event: TouchEvent) => {
+            if (
+                overlayRef.current.mode === 'input'
+                || overlayRef.current.mode === 'select'
+            ) return
             if (event.touches.length !== 1) {
-                clearTouch()
+                cancelTouch()
                 return
             }
             const touch = event.touches[0]
             const seedCell = pointToCell(touch.clientX, touch.clientY)
             if (!seedCell) {
-                clearTouch()
+                cancelTouch()
                 return
             }
             clearLongPressTimer()
@@ -652,20 +535,30 @@ export function useMobileTerminalInteraction(
             )
             longPressTimerRef.current = window.setTimeout(() => {
                 longPressTimerRef.current = null
-                if (touchRef.current !== session || session.scrolling) return
+                if (
+                    touchRef.current !== session
+                    || session.scrolling
+                    || overlayRef.current.mode === 'input'
+                ) return
                 session.longPressed = true
                 selectWord(session.seedCell)
             }, LONG_PRESS_MS)
         }
 
         const handleTouchMove = (event: TouchEvent) => {
+            if (overlayRef.current.mode === 'input') return
             const session = touchRef.current
             if (!session) return
             const touch = Array.from(event.touches).find(
                 (candidate) => candidate.identifier === session.identifier,
             )
             if (!touch) {
-                clearTouch()
+                cancelTouch()
+                return
+            }
+            if (session.longPressed || overlayRef.current.mode === 'select') {
+                event.preventDefault()
+                session.last = { x: touch.clientX, y: touch.clientY }
                 return
             }
 
@@ -678,7 +571,6 @@ export function useMobileTerminalInteraction(
                 session.last = { x: touch.clientX, y: touch.clientY }
                 return
             }
-
             if (!session.scrolling) {
                 session.scrolling = true
                 clearLongPressTimer()
@@ -700,6 +592,7 @@ export function useMobileTerminalInteraction(
         }
 
         const handleTouchEnd = (event: TouchEvent) => {
+            if (overlayRef.current.mode === 'input') return
             const session = touchRef.current
             if (!session) return
             const ended = Array.from(event.changedTouches).some(
@@ -713,7 +606,6 @@ export function useMobileTerminalInteraction(
                 updateOverlay({
                     ...IDLE_OVERLAY,
                     mode: 'choice',
-                    choiceAnchor: null,
                 })
                 syncChoiceAnchor()
             }
@@ -722,6 +614,7 @@ export function useMobileTerminalInteraction(
         }
 
         const handleTouchCancel = (event: TouchEvent) => {
+            if (overlayRef.current.mode === 'input') return
             event.preventDefault()
             reset()
         }
@@ -734,6 +627,16 @@ export function useMobileTerminalInteraction(
         const refreshOverlay = () => {
             syncChoiceAnchor()
             syncSelectionOverlay()
+        }
+        const handleSelectionChange = () => {
+            if (suppressSelectionEventRef.current) return
+            selectionLifecycleRef.current.selectionMutated()
+            syncSelectionOverlay()
+        }
+        const handleEnvironmentChange = () => {
+            cancelTouch()
+            selectionLifecycleRef.current.cancelPointer()
+            refreshOverlay()
         }
 
         terminalElement.addEventListener('touchstart', handleTouchStart, {
@@ -749,36 +652,37 @@ export function useMobileTerminalInteraction(
             passive: false,
         })
         textarea?.addEventListener('blur', handleBlur)
-        window.addEventListener('resize', refreshOverlay)
+        window.addEventListener('resize', handleEnvironmentChange)
+        window.addEventListener('orientationchange', handleEnvironmentChange)
         const cursorDisposable = terminal.onCursorMove(refreshOverlay)
-        const selectionDisposable = terminal.onSelectionChange(refreshOverlay)
+        const selectionDisposable = terminal.onSelectionChange(handleSelectionChange)
+        const resizeDisposable = terminal.onResize(handleEnvironmentChange)
 
         return () => {
             activeRef.current = false
-            interactionGenerationRef.current += 1
-            clearLongPressTimer()
-            clearPointerDrag()
-            touchRef.current = null
-            touchPixelRemainderRef.current = 0
-            selectionRangeRef.current = null
-            terminal.clearSelection()
+            cancelTransientWork()
+            clearTerminalSelection(terminal)
             if (textarea) textarea.readOnly = originalReadOnly
             terminalElement.removeEventListener('touchstart', handleTouchStart)
             terminalElement.removeEventListener('touchmove', handleTouchMove)
             terminalElement.removeEventListener('touchend', handleTouchEnd)
             terminalElement.removeEventListener('touchcancel', handleTouchCancel)
             textarea?.removeEventListener('blur', handleBlur)
-            window.removeEventListener('resize', refreshOverlay)
+            window.removeEventListener('resize', handleEnvironmentChange)
+            window.removeEventListener('orientationchange', handleEnvironmentChange)
             cursorDisposable.dispose()
             selectionDisposable.dispose()
+            resizeDisposable.dispose()
         }
     }, [
         options.enabled,
         options.mobile,
         options.root,
         options.terminal,
+        cancelTouch,
+        cancelTransientWork,
         clearLongPressTimer,
-        clearPointerDrag,
+        clearTerminalSelection,
         clientToRootPoint,
         getMetrics,
         pointToCell,
