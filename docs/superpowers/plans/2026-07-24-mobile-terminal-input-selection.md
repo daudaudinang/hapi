@@ -56,7 +56,7 @@
   - `TerminalScreenMetrics`
   - `pointToBufferCell(point, metrics)`
   - `cellToScreenPoint(cell, metrics)`
-  - `wordRangeAt(line, cell)`
+  - `wordRangeAt(cells, cell)`
   - `normalizeRange(anchor, focus)`
   - `rangeToSelection(range, cols)`
 
@@ -86,20 +86,36 @@ describe('terminalSelection', () => {
     })
 
     it('maps a visible buffer cell back to a screen anchor', () => {
-        expect(cellToScreenPoint({ column: 40, row: 35 }, metrics)).toEqual({ x: 172, y: 140 })
+        expect(cellToScreenPoint({ column: 40, row: 35 }, metrics)).toEqual({ x: 162, y: 120 })
         expect(cellToScreenPoint({ column: 2, row: 10 }, metrics)).toBeNull()
     })
 
     it('selects the non-whitespace word under the touched cell', () => {
-        expect(wordRangeAt('git status --short', { column: 5, row: 8 })).toEqual({
+        const cells = Array.from('git status --short', (chars) => ({ chars, width: 1 }))
+        expect(wordRangeAt(cells, { column: 5, row: 8 })).toEqual({
             start: { column: 4, row: 8 },
             end: { column: 10, row: 8 },
         })
     })
 
     it('uses a one-cell range when the touched cell is blank', () => {
-        expect(wordRangeAt('git  status', { column: 3, row: 8 })).toEqual({
+        const cells = Array.from('git  status', (chars) => ({ chars, width: 1 }))
+        expect(wordRangeAt(cells, { column: 3, row: 8 })).toEqual({
             start: { column: 3, row: 8 },
+            end: { column: 4, row: 8 },
+        })
+    })
+
+    it('keeps a wide glyph and its continuation cell in one word', () => {
+        const cells = [
+            { chars: '你', width: 2 },
+            { chars: '', width: 0 },
+            { chars: '好', width: 2 },
+            { chars: '', width: 0 },
+            { chars: ' ', width: 1 },
+        ]
+        expect(wordRangeAt(cells, { column: 1, row: 8 })).toEqual({
+            start: { column: 0, row: 8 },
             end: { column: 4, row: 8 },
         })
     })
@@ -150,6 +166,11 @@ export type TerminalScreenMetrics = {
 
 type ScreenPoint = { x: number; y: number }
 
+export type TerminalBufferCell = {
+    chars: string
+    width: number
+}
+
 function clamp(value: number, minimum: number, maximum: number): number {
     return Math.min(Math.max(value, minimum), maximum)
 }
@@ -185,8 +206,8 @@ export function cellToScreenPoint(
         return null
     }
     return {
-        x: metrics.rect.left + ((cell.column + 0.5) * metrics.rect.width / metrics.cols),
-        y: metrics.rect.top + ((visibleRow + 1) * metrics.rect.height / metrics.rows),
+        x: (cell.column + 0.5) * metrics.rect.width / metrics.cols,
+        y: (visibleRow + 1) * metrics.rect.height / metrics.rows,
     }
 }
 
@@ -199,9 +220,14 @@ export function normalizeRange(
         : { start: focus, end: anchor }
 }
 
-export function wordRangeAt(line: string, cell: TerminalCell): TerminalCellRange {
-    const column = clamp(cell.column, 0, Math.max(line.length, 1) - 1)
-    if (!line[column] || /\s/u.test(line[column])) {
+export function wordRangeAt(
+    cells: readonly TerminalBufferCell[],
+    cell: TerminalCell,
+): TerminalCellRange {
+    let column = clamp(cell.column, 0, Math.max(cells.length, 1) - 1)
+    while (column > 0 && cells[column]?.width === 0) column -= 1
+    const touched = cells[column]
+    if (!touched?.chars || /^\s+$/u.test(touched.chars)) {
         return {
             start: { ...cell, column },
             end: { ...cell, column: column + 1 },
@@ -209,9 +235,19 @@ export function wordRangeAt(line: string, cell: TerminalCell): TerminalCellRange
     }
 
     let start = column
-    let end = column + 1
-    while (start > 0 && !/\s/u.test(line[start - 1])) start -= 1
-    while (end < line.length && !/\s/u.test(line[end])) end += 1
+    let end = column + Math.max(touched.width, 1)
+    while (start > 0) {
+        let previous = start - 1
+        while (previous > 0 && cells[previous]?.width === 0) previous -= 1
+        const previousCell = cells[previous]
+        if (!previousCell?.chars || /^\s+$/u.test(previousCell.chars)) break
+        start = previous
+    }
+    while (end < cells.length) {
+        const next = cells[end]
+        if (!next?.chars || /^\s+$/u.test(next.chars)) break
+        end += Math.max(next.width, 1)
+    }
     return {
         start: { ...cell, column: start },
         end: { ...cell, column: end },
@@ -552,7 +588,7 @@ Implementation rules:
 5. A short `touchend` computes a clamped cursor anchor, falls back to the touch point if the cursor is offscreen, and switches to `choice`.
 6. `onInput` must synchronously set `textarea.readOnly = false`, switch to `input`, then call `terminal.focus()`.
 7. `terminal.onBlur` restores `readOnly = true` and returns `input` to `idle`.
-8. `onSelect` reads the seed line using `buffer.active.getLine(row)?.translateToString(true)`, calls `terminal.select`, and switches to `select`.
+8. `onSelect` reads the seed line with `buffer.active.getLine(row)?.getCell(column)`, preserving each cell's `getChars()` and `getWidth()`, calls `terminal.select`, and switches to `select`.
 9. The selection layer uses pointer capture. Starting outside the current range replaces the anchor; starting inside moves the nearest edge. Every move calls `terminal.select` with `rangeToSelection`.
 10. Handle drags pin the opposite edge and move only their own edge.
 11. Pointer positions within 28px of the top/bottom call `scrollLines(-1/1)` at a throttled animation-frame cadence before recomputing the cell.
@@ -861,4 +897,3 @@ git commit -m "fix(web): harden mobile terminal selection interactions"
 ```
 
 Skip this commit when verification required no changes.
-
