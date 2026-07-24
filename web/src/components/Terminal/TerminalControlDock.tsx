@@ -401,7 +401,7 @@ export function TerminalControlDock(props: TerminalControlDockProps) {
             <div
                 role="toolbar"
                 aria-label={t('terminal.controls.toolbar')}
-                className="grid min-h-14 grid-cols-6 border-t border-[var(--app-border)] bg-[var(--app-bg)]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
+                className="grid min-h-[calc(56px+env(safe-area-inset-bottom))] grid-cols-6 border-t border-[var(--app-border)] bg-[var(--app-bg)]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
             >
                 <DockButton
                     tool="paste"

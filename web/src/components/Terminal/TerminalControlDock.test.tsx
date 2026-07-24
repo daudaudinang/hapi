@@ -60,7 +60,11 @@ describe('TerminalControlDock', () => {
     it('renders a slim six-item dock and disables unfinished tools', () => {
         renderDock()
 
-        expect(screen.getByRole('toolbar', { name: 'Terminal controls' })).toHaveClass('lg:hidden')
+        expect(screen.getByRole('toolbar', { name: 'Terminal controls' })).toHaveClass(
+            'min-h-[calc(56px+env(safe-area-inset-bottom))]',
+            'pb-[env(safe-area-inset-bottom)]',
+            'lg:hidden',
+        )
         expect(screen.getAllByRole('button')).toEqual(expect.arrayContaining([
             expect.objectContaining({ textContent: 'Paste' }),
             expect.objectContaining({ textContent: 'Snippets' }),
