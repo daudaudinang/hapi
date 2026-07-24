@@ -11,6 +11,7 @@ vi.mock('@/lib/use-translation', () => ({
             'terminal.interaction.choice': 'Terminal action',
             'terminal.interaction.input': 'Input',
             'terminal.interaction.select': 'Select',
+            'terminal.interaction.selectionToolbar': 'Selection actions',
             'terminal.interaction.selectionStart': 'Selection start',
             'terminal.interaction.selectionEnd': 'Selection end',
             'terminal.interaction.copy': 'Copy',
@@ -56,8 +57,13 @@ describe('MobileTerminalInteractionOverlay', () => {
         const toolbar = screen.getByRole('toolbar', { name: 'Terminal action' })
         expect(toolbar).toHaveStyle({ left: '120px', top: '80px' })
 
-        fireEvent.click(screen.getByRole('button', { name: 'Input' }))
-        fireEvent.click(screen.getByRole('button', { name: 'Select' }))
+        const inputAction = screen.getByRole('button', { name: 'Input' })
+        const selectAction = screen.getByRole('button', { name: 'Select' })
+        expect(inputAction).toHaveClass('min-h-[44px]', 'min-w-[44px]')
+        expect(selectAction).toHaveClass('min-h-[44px]', 'min-w-[44px]')
+
+        fireEvent.click(inputAction)
+        fireEvent.click(selectAction)
         expect(baseProps.onInput).toHaveBeenCalledOnce()
         expect(baseProps.onSelect).toHaveBeenCalledOnce()
     })
@@ -75,16 +81,24 @@ describe('MobileTerminalInteractionOverlay', () => {
 
         const startHandle = screen.getByRole('button', { name: 'Selection start' })
         const endHandle = screen.getByRole('button', { name: 'Selection end' })
+        const toolbar = screen.getByRole('toolbar', { name: 'Selection actions' })
         expect(startHandle).toBeVisible()
         expect(endHandle).toBeVisible()
-        expect(startHandle).toHaveClass('h-11', 'w-11')
-        expect(endHandle).toHaveClass('h-11', 'w-11')
+        expect(startHandle).toHaveClass('h-[44px]', 'w-[44px]')
+        expect(endHandle).toHaveClass('h-[44px]', 'w-[44px]')
 
         fireEvent.pointerDown(startHandle)
         fireEvent.pointerDown(endHandle)
-        fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
-        fireEvent.click(screen.getByRole('button', { name: 'Select all' }))
-        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+        const copyAction = screen.getByRole('button', { name: 'Copy' })
+        const selectAllAction = screen.getByRole('button', { name: 'Select all' })
+        const cancelAction = screen.getByRole('button', { name: 'Cancel' })
+        expect(copyAction).toHaveClass('min-h-[44px]', 'min-w-[44px]')
+        expect(selectAllAction).toHaveClass('min-h-[44px]', 'min-w-[44px]')
+        expect(cancelAction).toHaveClass('min-h-[44px]', 'min-w-[44px]')
+
+        fireEvent.click(copyAction)
+        fireEvent.click(selectAllAction)
+        fireEvent.click(cancelAction)
 
         expect(baseProps.onHandlePointerDown).toHaveBeenNthCalledWith(
             1,
@@ -99,6 +113,24 @@ describe('MobileTerminalInteractionOverlay', () => {
         expect(baseProps.onCopy).toHaveBeenCalledOnce()
         expect(baseProps.onSelectAll).toHaveBeenCalledOnce()
         expect(baseProps.onCancel).toHaveBeenCalledOnce()
+        expect(toolbar).toBeVisible()
+    })
+
+    it('routes selection pointer-down without letting toolbar presses bubble', () => {
+        render(
+            <MobileTerminalInteractionOverlay
+                {...baseProps}
+                mode="select"
+                toolbarAnchor={{ x: 110, y: 70 }}
+            />,
+        )
+
+        fireEvent.pointerDown(screen.getByTestId('terminal-selection-layer'))
+        expect(baseProps.onSelectionPointerDown).toHaveBeenCalledOnce()
+
+        vi.mocked(baseProps.onSelectionPointerDown).mockClear()
+        fireEvent.pointerDown(screen.getByRole('toolbar', { name: 'Selection actions' }))
+        expect(baseProps.onSelectionPointerDown).not.toHaveBeenCalled()
     })
 
     it('announces copy failure without removing selection controls', () => {

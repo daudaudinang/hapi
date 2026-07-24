@@ -39,7 +39,7 @@ function SelectionHandle(props: SelectionHandleProps) {
         <button
             type="button"
             aria-label={props.label}
-            className="absolute flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 touch-none items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+            className="absolute flex h-[44px] w-[44px] -translate-x-1/2 -translate-y-1/2 touch-none items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
             style={{ left: props.point.x, top: props.point.y }}
             onPointerDown={(event) => props.onPointerDown(props.edge, event)}
         >
@@ -55,6 +55,7 @@ type SelectionToolbarProps = Pick<
     MobileTerminalOverlayProps,
     'toolbarAnchor' | 'onCopy' | 'onSelectAll' | 'onCancel'
 > & {
+    toolbarLabel: string
     copyLabel: string
     selectAllLabel: string
     cancelLabel: string
@@ -68,14 +69,14 @@ function SelectionToolbar(props: SelectionToolbarProps) {
     return (
         <div
             role="toolbar"
-            aria-label={props.selectAllLabel}
+            aria-label={props.toolbarLabel}
             className="absolute flex -translate-x-1/2 -translate-y-full overflow-hidden rounded-full border border-[var(--app-border)] bg-[var(--app-bg)]/95 p-1 shadow-xl backdrop-blur"
             style={anchorStyle}
             onPointerDown={(event) => event.stopPropagation()}
         >
             <button
                 type="button"
-                className="min-h-11 px-4 text-sm font-medium"
+                className="min-h-[44px] min-w-[44px] px-4 text-sm font-medium"
                 onClick={props.onCopy}
             >
                 {props.copyLabel}
@@ -83,7 +84,7 @@ function SelectionToolbar(props: SelectionToolbarProps) {
             <span aria-hidden="true" className="my-2 w-px bg-[var(--app-border)]" />
             <button
                 type="button"
-                className="min-h-11 px-4 text-sm font-medium"
+                className="min-h-[44px] min-w-[44px] px-4 text-sm font-medium"
                 onClick={props.onSelectAll}
             >
                 {props.selectAllLabel}
@@ -91,7 +92,7 @@ function SelectionToolbar(props: SelectionToolbarProps) {
             <span aria-hidden="true" className="my-2 w-px bg-[var(--app-border)]" />
             <button
                 type="button"
-                className="min-h-11 px-4 text-sm font-medium"
+                className="min-h-[44px] min-w-[44px] px-4 text-sm font-medium"
                 onClick={props.onCancel}
             >
                 {props.cancelLabel}
@@ -116,7 +117,7 @@ export function MobileTerminalInteractionOverlay(props: MobileTerminalOverlayPro
                 >
                     <button
                         type="button"
-                        className="min-h-11 px-4 text-sm font-medium"
+                        className="min-h-[44px] min-w-[44px] px-4 text-sm font-medium"
                         onClick={props.onInput}
                     >
                         {t('terminal.interaction.input')}
@@ -124,7 +125,7 @@ export function MobileTerminalInteractionOverlay(props: MobileTerminalOverlayPro
                     <span aria-hidden="true" className="my-2 w-px bg-[var(--app-border)]" />
                     <button
                         type="button"
-                        className="min-h-11 px-4 text-sm font-medium"
+                        className="min-h-[44px] min-w-[44px] px-4 text-sm font-medium"
                         onClick={props.onSelect}
                     >
                         {t('terminal.interaction.select')}
@@ -152,6 +153,7 @@ export function MobileTerminalInteractionOverlay(props: MobileTerminalOverlayPro
                     />
                     <SelectionToolbar
                         toolbarAnchor={props.toolbarAnchor}
+                        toolbarLabel={t('terminal.interaction.selectionToolbar')}
                         copyLabel={t('terminal.interaction.copy')}
                         selectAllLabel={t('terminal.interaction.selectAll')}
                         cancelLabel={t('terminal.interaction.cancel')}
