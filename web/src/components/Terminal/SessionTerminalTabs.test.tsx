@@ -81,10 +81,10 @@ vi.mock('@/lib/use-translation', () => ({
             'terminal.controls.snippets': 'Snippets',
             'terminal.controls.search': 'Search',
             'terminal.controls.history': 'History',
-            'terminal.controls.keyboard': 'Keyboard',
+            'terminal.controls.keys': 'Keys',
             'terminal.controls.more': 'More',
             'terminal.controls.pasted': 'Pasted',
-            'terminal.controls.keyboardPanel': 'Terminal keyboard helpers',
+            'terminal.controls.keysPanel': 'Terminal helper keys',
             'terminal.controls.morePanel': 'More terminal keys',
             'terminal.controls.navigation': 'Navigation',
             'terminal.controls.functionKeys': 'Function keys',
@@ -679,8 +679,21 @@ describe('SessionTerminalTabs', () => {
         expect(screen.queryByText('Waiting for terminal size before creating a terminal.')).not.toBeInTheDocument()
     })
 
-    it('has terminal lifecycle locale coverage in en vi and zh', () => {
+    it('has terminal lifecycle and mobile interaction locale coverage in en vi and zh', () => {
         const keys = [
+            'terminal.controls.keys',
+            'terminal.controls.keysPanel',
+            'terminal.interaction.choice',
+            'terminal.interaction.input',
+            'terminal.interaction.select',
+            'terminal.interaction.selectionToolbar',
+            'terminal.interaction.selectionStart',
+            'terminal.interaction.selectionEnd',
+            'terminal.interaction.copy',
+            'terminal.interaction.selectAll',
+            'terminal.interaction.cancel',
+            'terminal.interaction.copied',
+            'terminal.interaction.copyFailed',
             'terminal.lifecycle.hint',
             'terminal.limit.full',
             'terminal.new',

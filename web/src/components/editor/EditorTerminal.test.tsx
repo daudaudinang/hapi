@@ -34,10 +34,10 @@ vi.mock('@/lib/use-translation', () => ({
             'terminal.controls.snippets': 'Snippets',
             'terminal.controls.search': 'Search',
             'terminal.controls.history': 'History',
-            'terminal.controls.keyboard': 'Keyboard',
+            'terminal.controls.keys': 'Keys',
             'terminal.controls.more': 'More',
             'terminal.controls.pasted': 'Pasted',
-            'terminal.controls.keyboardPanel': 'Terminal keyboard helpers',
+            'terminal.controls.keysPanel': 'Terminal helper keys',
             'terminal.controls.morePanel': 'More terminal keys',
             'terminal.controls.navigation': 'Navigation',
             'terminal.controls.functionKeys': 'Function keys',
@@ -413,10 +413,10 @@ describe('EditorTerminal', () => {
         expect(onCloseTab).toHaveBeenCalledWith('term-machine')
     })
 
-    it('shows the mobile terminal dock and writes keyboard helper sequences', () => {
+    it('shows the mobile terminal dock and writes helper key sequences', () => {
         renderMachineTerminal({ mobileMode: true })
 
-        fireEvent.click(screen.getByRole('button', { name: 'Keyboard' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Keys' }))
         pressQuickKey('Tab')
 
         expectTerminalWrite('term-machine', '\t')
@@ -425,15 +425,16 @@ describe('EditorTerminal', () => {
         expect(screen.getByRole('button', { name: 'Control' })).toBeInTheDocument()
     })
 
-    it('focuses xterm only from the mobile Keyboard action', () => {
+    it('does not focus xterm from the mobile Keys action', () => {
         setDockViewport(true)
         renderMachineTerminal({ mobileMode: true })
         const { focus } = mountLastTerminal()
 
         expect(focus).not.toHaveBeenCalled()
-        fireEvent.pointerDown(screen.getByRole('button', { name: 'Keyboard' }))
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'Keys' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Keys' }))
 
-        expect(focus).toHaveBeenCalledTimes(1)
+        expect(focus).not.toHaveBeenCalled()
     })
 
     it('keeps the dock available below lg when editor mobile mode is false', () => {
@@ -443,9 +444,9 @@ describe('EditorTerminal', () => {
 
         expect(focus).not.toHaveBeenCalled()
         expect(screen.getByRole('toolbar', { name: 'Terminal controls' })).toHaveClass('lg:hidden')
-        fireEvent.pointerDown(screen.getByRole('button', { name: 'Keyboard' }))
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'Keys' }))
 
-        expect(focus).toHaveBeenCalledTimes(1)
+        expect(focus).not.toHaveBeenCalled()
     })
 
     it('preserves automatic terminal focus at desktop width', () => {
@@ -461,8 +462,8 @@ describe('EditorTerminal', () => {
         renderMachineTerminal({ mobileMode: true })
         const terminal = mountLastTerminal()
 
-        fireEvent.pointerDown(screen.getByRole('button', { name: 'Keyboard' }))
-        fireEvent.click(screen.getByRole('button', { name: 'Keyboard' }))
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'Keys' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Keys' }))
         terminal.focus.mockClear()
 
         pressQuickKey('Escape')
@@ -505,11 +506,11 @@ describe('EditorTerminal', () => {
         expectTerminalWrite('term-machine', '\u001b[15~')
     })
 
-    it('keeps modifiers, navigation and function layers in the Keyboard panel', () => {
+    it('keeps modifiers, navigation and function layers in the Keys panel', () => {
         renderMachineTerminal({ mobileMode: true })
-        fireEvent.click(screen.getByRole('button', { name: 'Keyboard' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Keys' }))
 
-        const keyboardPanel = screen.getByRole('region', { name: 'Terminal keyboard helpers' })
+        const keyboardPanel = screen.getByRole('region', { name: 'Terminal helper keys' })
         for (const key of ['Escape', 'Tab', 'Control', 'Alternate']) {
             expect(within(keyboardPanel).getByRole('button', { name: key })).toBeInTheDocument()
         }

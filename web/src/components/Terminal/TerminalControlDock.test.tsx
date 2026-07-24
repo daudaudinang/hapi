@@ -18,10 +18,10 @@ vi.mock('@/lib/use-translation', () => ({
             'terminal.controls.snippets': 'Snippets',
             'terminal.controls.search': 'Search',
             'terminal.controls.history': 'History',
-            'terminal.controls.keyboard': 'Keyboard',
+            'terminal.controls.keys': 'Keys',
             'terminal.controls.more': 'More',
             'terminal.controls.pasted': 'Pasted',
-            'terminal.controls.keyboardPanel': 'Terminal keyboard helpers',
+            'terminal.controls.keysPanel': 'Terminal helper keys',
             'terminal.controls.morePanel': 'More terminal keys',
             'terminal.controls.navigation': 'Navigation',
             'terminal.controls.functionKeys': 'Function keys',
@@ -70,7 +70,7 @@ describe('TerminalControlDock', () => {
             expect.objectContaining({ textContent: 'Snippets' }),
             expect.objectContaining({ textContent: 'Search' }),
             expect.objectContaining({ textContent: 'History' }),
-            expect.objectContaining({ textContent: 'Keyboard' }),
+            expect.objectContaining({ textContent: 'Keys' }),
             expect.objectContaining({ textContent: 'More' }),
         ]))
         expect(screen.getByRole('button', { name: 'Snippets' })).toBeDisabled()
@@ -93,22 +93,38 @@ describe('TerminalControlDock', () => {
         expect(onActiveToolChange).toHaveBeenLastCalledWith(null)
     })
 
-    it('focuses terminal synchronously from Keyboard pointer-down', () => {
+    it('opens Keys without focusing xterm', () => {
         const onFocusTerminal = vi.fn()
-        renderDock({ onFocusTerminal })
+        const onActiveToolChange = vi.fn()
+        const rendered = renderDock({ onFocusTerminal, onActiveToolChange })
 
-        fireEvent.pointerDown(screen.getByRole('button', { name: 'Keyboard' }))
-        expect(onFocusTerminal).toHaveBeenCalledTimes(1)
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'Keys' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Keys' }))
+
+        expect(onActiveToolChange).toHaveBeenCalledWith('keys')
+        rendered.rerender(makeDock({
+            activeTool: 'keys',
+            onActiveToolChange,
+            onFocusTerminal,
+        }))
+        expect(onFocusTerminal).not.toHaveBeenCalled()
+        expect(screen.getByRole('region', { name: 'Terminal helper keys' })).toBeVisible()
     })
 
-    it('keeps xterm focused when Paste is pressed from the mobile keyboard', () => {
+    it('pastes without focusing xterm or summoning native input', async () => {
+        vi.stubGlobal('navigator', {
+            clipboard: { readText: vi.fn().mockResolvedValue('pwd') },
+        })
         const onFocusTerminal = vi.fn()
-        renderDock({ onFocusTerminal })
+        const onWritePlainInput = vi.fn(() => true)
+        renderDock({ onFocusTerminal, onWritePlainInput })
 
-        const eventAccepted = fireEvent.pointerDown(screen.getByRole('button', { name: 'Paste' }))
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'Paste' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Paste' }))
 
-        expect(eventAccepted).toBe(false)
-        expect(onFocusTerminal).toHaveBeenCalledTimes(1)
+        await waitFor(() => expect(onWritePlainInput).toHaveBeenCalledWith('pwd'))
+        expect(onFocusTerminal).not.toHaveBeenCalled()
+        expect(screen.queryByRole('dialog', { name: 'Paste input' })).not.toBeInTheDocument()
     })
 
     it('keeps Paste immediate and falls back to manual input', async () => {
@@ -123,7 +139,7 @@ describe('TerminalControlDock', () => {
         expect(onActiveToolChange).not.toHaveBeenCalled()
     })
 
-    it('returns focus to xterm after the manual paste dialog closes', async () => {
+    it('submits manual paste without returning focus to xterm', async () => {
         vi.stubGlobal('navigator', {
             clipboard: { readText: vi.fn().mockRejectedValue(new Error('denied')) },
         })
@@ -138,8 +154,28 @@ describe('TerminalControlDock', () => {
         })
         fireEvent.click(within(dialog).getByRole('button', { name: 'Paste' }))
 
-        await waitFor(() => expect(onFocusTerminal).toHaveBeenCalledTimes(1))
+        await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Paste input' })).not.toBeInTheDocument())
+        expect(onFocusTerminal).not.toHaveBeenCalled()
         expect(onWritePlainInput).toHaveBeenCalledWith('pwd')
+    })
+
+    it('routes helper sequences through onQuickInput', () => {
+        const onQuickInput = vi.fn()
+        renderDock({ activeTool: 'keys', onQuickInput })
+
+        fireEvent.click(screen.getByRole('button', { name: 'Escape' }))
+
+        expect(onQuickInput).toHaveBeenCalledWith('\u001b')
+    })
+
+    it('routes Ctrl and Alt through onModifierToggle', () => {
+        const onModifierToggle = vi.fn()
+        renderDock({ activeTool: 'keys', onModifierToggle })
+
+        fireEvent.click(screen.getByRole('button', { name: 'Control' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Alternate' }))
+
+        expect(onModifierToggle.mock.calls).toEqual([['ctrl'], ['alt']])
     })
 
     it('announces a successful direct paste without selecting a tool', async () => {
