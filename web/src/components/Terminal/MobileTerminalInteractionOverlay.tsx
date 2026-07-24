@@ -6,6 +6,20 @@ type ScreenPoint = {
     y: number
 }
 
+const MOBILE_TOOLBAR_SAFE_TOP = 64
+
+function getToolbarAnchorStyle(point: ScreenPoint | null): {
+    left: string
+    top: number
+} | undefined {
+    if (!point) return undefined
+
+    return {
+        left: '50%',
+        top: Math.max(MOBILE_TOOLBAR_SAFE_TOP, point.y),
+    }
+}
+
 export type MobileTerminalOverlayProps = {
     mode: 'idle' | 'choice' | 'input' | 'select'
     choiceAnchor: ScreenPoint | null
@@ -62,9 +76,7 @@ type SelectionToolbarProps = Pick<
 }
 
 function SelectionToolbar(props: SelectionToolbarProps) {
-    const anchorStyle = props.toolbarAnchor
-        ? { left: props.toolbarAnchor.x, top: props.toolbarAnchor.y }
-        : undefined
+    const anchorStyle = getToolbarAnchorStyle(props.toolbarAnchor)
 
     return (
         <div
@@ -113,7 +125,7 @@ export function MobileTerminalInteractionOverlay(props: MobileTerminalOverlayPro
                     role="toolbar"
                     aria-label={t('terminal.interaction.choice')}
                     className="pointer-events-auto absolute flex -translate-x-1/2 -translate-y-full overflow-hidden rounded-full border border-[var(--app-border)] bg-[var(--app-bg)]/95 p-1 shadow-xl backdrop-blur"
-                    style={{ left: props.choiceAnchor.x, top: props.choiceAnchor.y }}
+                    style={getToolbarAnchorStyle(props.choiceAnchor)}
                 >
                     <button
                         type="button"

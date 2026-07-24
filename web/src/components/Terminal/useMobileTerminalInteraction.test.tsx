@@ -431,6 +431,30 @@ describe('useMobileTerminalInteraction', () => {
         expect(fixture.scrollLines).not.toHaveBeenCalled()
     })
 
+    it('resets on a non-cancelable touchcancel without trying to prevent it', () => {
+        const fixture = createTerminalFixture()
+        const { result } = renderInteraction(fixture)
+        const point = touch(1, 55, 130)
+        const cancelEvent = new Event('touchcancel', {
+            bubbles: true,
+            cancelable: false,
+        }) as TouchEvent
+        Object.defineProperties(cancelEvent, {
+            touches: { value: [] },
+            targetTouches: { value: [] },
+            changedTouches: { value: [point] },
+        })
+        const preventDefault = vi.spyOn(cancelEvent, 'preventDefault')
+
+        act(() => {
+            dispatchTouch(fixture.terminalElement, 'touchstart', [point])
+            fixture.terminalElement.dispatchEvent(cancelEvent)
+        })
+
+        expect(preventDefault).not.toHaveBeenCalled()
+        expect(result.current.overlayProps.mode).toBe('idle')
+    })
+
     it('selects, extends, selects all and safely copies output', async () => {
         const fixture = createTerminalFixture()
         const { result } = renderInteraction(fixture)

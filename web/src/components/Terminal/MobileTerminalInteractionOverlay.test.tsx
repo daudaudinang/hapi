@@ -45,7 +45,7 @@ afterEach(() => {
 })
 
 describe('MobileTerminalInteractionOverlay', () => {
-    it('renders the choice actions at the supplied anchor', () => {
+    it('renders the choice actions at the supplied vertical anchor', () => {
         render(
             <MobileTerminalInteractionOverlay
                 {...baseProps}
@@ -55,7 +55,7 @@ describe('MobileTerminalInteractionOverlay', () => {
         )
 
         const toolbar = screen.getByRole('toolbar', { name: 'Terminal action' })
-        expect(toolbar).toHaveStyle({ left: '120px', top: '80px' })
+        expect(toolbar).toHaveStyle({ left: '50%', top: '80px' })
 
         const inputAction = screen.getByRole('button', { name: 'Input' })
         const selectAction = screen.getByRole('button', { name: 'Select' })
@@ -66,6 +66,21 @@ describe('MobileTerminalInteractionOverlay', () => {
         fireEvent.click(selectAction)
         expect(baseProps.onInput).toHaveBeenCalledOnce()
         expect(baseProps.onSelect).toHaveBeenCalledOnce()
+    })
+
+    it('keeps top-edge choice actions centered inside the terminal overlay', () => {
+        render(
+            <MobileTerminalInteractionOverlay
+                {...baseProps}
+                mode="choice"
+                choiceAnchor={{ x: 4, y: 0 }}
+            />,
+        )
+
+        expect(screen.getByRole('toolbar', { name: 'Terminal action' })).toHaveStyle({
+            left: '50%',
+            top: '64px',
+        })
     })
 
     it('renders handles and routes all selection actions in select mode', () => {
@@ -114,6 +129,23 @@ describe('MobileTerminalInteractionOverlay', () => {
         expect(baseProps.onSelectAll).toHaveBeenCalledOnce()
         expect(baseProps.onCancel).toHaveBeenCalledOnce()
         expect(toolbar).toBeVisible()
+    })
+
+    it('keeps top-edge selection actions centered inside the terminal overlay', () => {
+        render(
+            <MobileTerminalInteractionOverlay
+                {...baseProps}
+                mode="select"
+                startHandle={{ x: 4, y: 8 }}
+                endHandle={{ x: 44, y: 8 }}
+                toolbarAnchor={{ x: 24, y: 0 }}
+            />,
+        )
+
+        expect(screen.getByRole('toolbar', { name: 'Selection actions' })).toHaveStyle({
+            left: '50%',
+            top: '64px',
+        })
     })
 
     it('routes selection pointer-down without letting toolbar presses bubble', () => {

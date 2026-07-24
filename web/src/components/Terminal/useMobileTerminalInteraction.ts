@@ -615,7 +615,9 @@ export function useMobileTerminalInteraction(
 
         const handleTouchCancel = (event: TouchEvent) => {
             if (overlayRef.current.mode === 'input') return
-            event.preventDefault()
+            if (event.cancelable) {
+                event.preventDefault()
+            }
             reset()
         }
         const handleBlur = () => {
