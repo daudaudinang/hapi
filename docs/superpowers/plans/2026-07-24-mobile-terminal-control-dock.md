@@ -30,6 +30,7 @@
 |---|---|
 | `web/src/components/Terminal/TerminalControlDock.tsx` | Shared dock, controlled active tool, paste fallback and all anchored tool panels |
 | `web/src/components/Terminal/TerminalControlDock.test.tsx` | Dock interaction, accessibility and no-layout-regression tests |
+| `web/src/components/Terminal/terminalControls.ts` | Shared key definitions, modifier transformation and quick-input hook |
 | `web/src/components/Terminal/terminalSearch.ts` | Small typed adapter around xterm SearchAddon |
 | `web/src/components/Terminal/terminalSearch.test.ts` | Search direction, options, result events and cleanup tests |
 | `web/src/components/Terminal/terminalCommandHistory.ts` | Conservative current-instance command recorder |
@@ -47,8 +48,10 @@
 ### Task 1: Build the shared dock presentation
 
 **Files:**
+- Create: `web/src/components/Terminal/terminalControls.ts`
 - Create: `web/src/components/Terminal/TerminalControlDock.tsx`
 - Create: `web/src/components/Terminal/TerminalControlDock.test.tsx`
+- Modify: `web/src/components/Terminal/TerminalQuickKeys.tsx`
 - Modify: `web/src/lib/locales/en.ts`
 - Modify: `web/src/lib/locales/vi-VN.ts`
 - Modify: `web/src/lib/locales/zh-CN.ts`
@@ -73,18 +76,51 @@ export type TerminalControlDockProps = {
 }
 ```
 
-- Preserves: `applyTerminalModifierState` and `useTerminalQuickInput`.
+- Produces from `terminalControls.ts`: `QuickInput`, `QUICK_INPUT_ROWS`, `ADVANCED_KEY_GROUPS`, `applyTerminalModifierState` and `useTerminalQuickInput`.
 - Gate-1 enabled tools: `Paste`, `Keyboard`, `More`.
 - Gate-1 disabled tools: `Snippets`, `Search`, `History`.
 
-- [ ] **Step 1: Copy the existing input logic into the new module**
+- [ ] **Step 1: Extract the shared terminal-control model**
 
-```bash
-cp web/src/components/Terminal/TerminalQuickKeys.tsx \
-    web/src/components/Terminal/TerminalControlDock.tsx
+Move these existing definitions without changing behavior:
+
+```ts
+export type QuickInput = {
+    label: string
+    sequence?: string
+    description: string
+    modifier?: 'ctrl' | 'alt'
+    popup?: {
+        label: string
+        sequence: string
+        description: string
+    }
+}
+
+export type ModifierState = {
+    ctrl: boolean
+    alt: boolean
+}
+
+export type TerminalQuickInput = {
+    ctrlActive: boolean
+    altActive: boolean
+    sendQuickInput: (sequence: string) => void
+    toggleModifier: (modifier: 'ctrl' | 'alt') => void
+    writePlainInput: (text: string) => boolean
+    writeTerminalData: (text: string) => void
+}
+
+export const QUICK_INPUT_ROWS: Array<{ label: string; keys: QuickInput[] }>
+export const ADVANCED_KEY_GROUPS: Array<{ label: string; keys: QuickInput[] }>
+export function applyTerminalModifierState(sequence: string, state: ModifierState): string
+export function useTerminalQuickInput(args: {
+    disabled: boolean
+    write: (text: string) => void
+}): TerminalQuickInput
 ```
 
-Keep `TerminalQuickKeys.tsx` unchanged until Task 2 switches both consumers, so this task remains independently buildable. Task 2 deletes the old module after the imports move.
+`TerminalQuickKeys.tsx` imports and re-exports `applyTerminalModifierState` and `useTerminalQuickInput` from `terminalControls.ts`, and imports the key definitions it still renders. This keeps the old UI buildable without copying its component logic. `TerminalControlDock.tsx` imports the same definitions and implements only the new dock presentation. Task 2 deletes the old UI after both consumers switch.
 
 - [ ] **Step 2: Write failing dock tests**
 
@@ -313,6 +349,8 @@ Expected: PASS.
 ```bash
 git add web/src/components/Terminal/TerminalControlDock.tsx \
     web/src/components/Terminal/TerminalControlDock.test.tsx \
+    web/src/components/Terminal/terminalControls.ts \
+    web/src/components/Terminal/TerminalQuickKeys.tsx \
     web/src/lib/locales/en.ts \
     web/src/lib/locales/vi-VN.ts \
     web/src/lib/locales/zh-CN.ts
@@ -383,7 +421,8 @@ Use controlled state and terminal capture:
 
 ```diff
 - import { TerminalQuickKeys, useTerminalQuickInput } from '@/components/Terminal/TerminalQuickKeys'
-+ import { TerminalControlDock, useTerminalQuickInput } from '@/components/Terminal/TerminalControlDock'
++ import { TerminalControlDock } from '@/components/Terminal/TerminalControlDock'
++ import { useTerminalQuickInput } from '@/components/Terminal/terminalControls'
 ```
 
 ```tsx
@@ -432,7 +471,8 @@ Use the same controlled state and capture handler inside mobile mode:
 
 ```diff
 - import { TerminalQuickKeys, useTerminalQuickInput } from '@/components/Terminal/TerminalQuickKeys'
-+ import { TerminalControlDock, useTerminalQuickInput } from '@/components/Terminal/TerminalControlDock'
++ import { TerminalControlDock } from '@/components/Terminal/TerminalControlDock'
++ import { useTerminalQuickInput } from '@/components/Terminal/terminalControls'
 ```
 
 ```tsx
@@ -921,7 +961,7 @@ Demonstrate empty query, no result, multiple matches, previous/next, long scroll
 **Files:**
 - Create: `web/src/components/Terminal/terminalCommandHistory.ts`
 - Create: `web/src/components/Terminal/terminalCommandHistory.test.ts`
-- Modify: `web/src/components/Terminal/TerminalControlDock.tsx`
+- Modify: `web/src/components/Terminal/terminalControls.ts`
 
 **Interfaces:**
 - Extends `useTerminalQuickInput` arguments with `onWrite?: (data: string) => void`.
@@ -1068,7 +1108,7 @@ bun run --cwd web test -- \
 bun run --cwd web typecheck
 git add web/src/components/Terminal/terminalCommandHistory.ts \
     web/src/components/Terminal/terminalCommandHistory.test.ts \
-    web/src/components/Terminal/TerminalControlDock.tsx
+    web/src/components/Terminal/terminalControls.ts
 git commit -m "feat(web): capture current terminal command history"
 ```
 
