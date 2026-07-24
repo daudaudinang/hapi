@@ -274,7 +274,11 @@ function dispatchPointer(
     return event
 }
 
-function renderInteraction(fixture: TerminalFixture, mobile = true) {
+function renderInteraction(
+    fixture: TerminalFixture,
+    mobile = true,
+    initialEnabled = true,
+) {
     return renderHook(
         ({ dismissRequested, enabled }) => useMobileTerminalInteraction({
             terminal: fixture.terminal,
@@ -286,7 +290,7 @@ function renderInteraction(fixture: TerminalFixture, mobile = true) {
         {
             initialProps: {
                 dismissRequested: false,
-                enabled: true,
+                enabled: initialEnabled,
             },
         },
     )
@@ -429,6 +433,74 @@ describe('useMobileTerminalInteraction', () => {
 
         act(() => fixture.emitBlur())
         expect(fixture.textarea.readOnly).toBe(true)
+        expect(result.current.overlayProps.mode).toBe('idle')
+    })
+
+    it('keeps an initially disabled mobile terminal readonly and unfocused', () => {
+        const fixture = createTerminalFixture()
+        fixture.textarea.focus()
+
+        const { result } = renderInteraction(fixture, true, false)
+
+        expect(fixture.textarea.readOnly).toBe(true)
+        expect(fixture.blur).toHaveBeenCalled()
+        expect(document.activeElement).not.toBe(fixture.textarea)
+        expect(result.current.overlayProps.mode).toBe('idle')
+    })
+
+    it('forces readonly and blur when Input becomes disabled', () => {
+        const fixture = createTerminalFixture()
+        const { result, rerender } = renderInteraction(fixture)
+        const point = touch(1, 55, 130)
+
+        act(() => {
+            dispatchTouch(fixture.terminalElement, 'touchstart', [point])
+            dispatchTouch(fixture.terminalElement, 'touchend', [], [point])
+            result.current.overlayProps.onInput()
+        })
+        expect(fixture.textarea.readOnly).toBe(false)
+        expect(document.activeElement).toBe(fixture.textarea)
+        fixture.blur.mockClear()
+        fixture.clearSelection.mockClear()
+
+        act(() => rerender({ dismissRequested: false, enabled: false }))
+
+        expect(fixture.textarea.readOnly).toBe(true)
+        expect(fixture.blur).toHaveBeenCalled()
+        expect(document.activeElement).not.toBe(fixture.textarea)
+        expect(fixture.clearSelection).toHaveBeenCalled()
+        expect(result.current.overlayProps.mode).toBe('idle')
+    })
+
+    it('stays readonly after mobile interaction is re-enabled until Input is explicit', () => {
+        const fixture = createTerminalFixture()
+        const { result, rerender } = renderInteraction(fixture, true, false)
+        const point = touch(1, 55, 130)
+
+        act(() => rerender({ dismissRequested: false, enabled: true }))
+        expect(fixture.textarea.readOnly).toBe(true)
+
+        act(() => {
+            dispatchTouch(fixture.terminalElement, 'touchstart', [point])
+            dispatchTouch(fixture.terminalElement, 'touchend', [], [point])
+        })
+        expect(result.current.overlayProps.mode).toBe('choice')
+        expect(fixture.textarea.readOnly).toBe(true)
+
+        act(() => result.current.overlayProps.onInput())
+        expect(result.current.overlayProps.mode).toBe('input')
+        expect(fixture.textarea.readOnly).toBe(false)
+    })
+
+    it('leaves a disabled desktop terminal writable and focused', () => {
+        const fixture = createTerminalFixture()
+        fixture.textarea.focus()
+
+        const { result } = renderInteraction(fixture, false, false)
+
+        expect(fixture.textarea.readOnly).toBe(false)
+        expect(fixture.blur).not.toHaveBeenCalled()
+        expect(document.activeElement).toBe(fixture.textarea)
         expect(result.current.overlayProps.mode).toBe('idle')
     })
 

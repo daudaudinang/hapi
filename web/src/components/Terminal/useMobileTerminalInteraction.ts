@@ -551,8 +551,7 @@ export function useMobileTerminalInteraction(
         const textarea = terminal?.textarea
         const originalReadOnly = textarea?.readOnly ?? false
         if (
-            !options.enabled
-            || !options.mobile
+            !options.mobile
             || !terminal
             || !terminalElement
             || !options.root
@@ -563,11 +562,8 @@ export function useMobileTerminalInteraction(
             return
         }
 
-        reset()
-        activeRef.current = true
-        if (textarea) textarea.readOnly = true
-
         const handleTouchStart = (event: TouchEvent) => {
+            if (!activeRef.current) return
             if (
                 overlayRef.current.mode === 'input'
                 || overlayRef.current.mode === 'select'
@@ -748,7 +744,6 @@ export function useMobileTerminalInteraction(
             resizeDisposable.dispose()
         }
     }, [
-        options.enabled,
         options.mobile,
         options.root,
         options.terminal,
@@ -765,6 +760,36 @@ export function useMobileTerminalInteraction(
         settleChoiceFocus,
         syncChoiceAnchor,
         syncSelectionOverlay,
+        updateOverlay,
+    ])
+
+    useEffect(() => {
+        const terminal = options.terminal
+        if (
+            !options.mobile
+            || !terminal
+            || !terminal.element
+            || !options.root
+        ) return
+
+        activeRef.current = false
+        cancelTransientWork()
+        clearTerminalSelection(terminal)
+        if (terminal.textarea) {
+            terminal.textarea.readOnly = true
+        }
+        updateOverlay(IDLE_OVERLAY)
+        if (!options.enabled) {
+            terminal.blur()
+        }
+        activeRef.current = options.enabled
+    }, [
+        options.enabled,
+        options.mobile,
+        options.root,
+        options.terminal,
+        cancelTransientWork,
+        clearTerminalSelection,
         updateOverlay,
     ])
 
