@@ -96,6 +96,7 @@ export function useMobileTerminalInteraction(
     const touchRef = useRef<TouchSession | null>(null)
     const touchPixelRemainderRef = useRef(0)
     const longPressTimerRef = useRef<number | null>(null)
+    const choiceRevealTimerRef = useRef<number | null>(null)
     const choiceBlurTimerRef = useRef<number | null>(null)
     const feedbackTimerRef = useRef<number | null>(null)
     const seedCellRef = useRef<TerminalCell | null>(null)
@@ -134,6 +135,12 @@ export function useMobileTerminalInteraction(
         choiceBlurTimerRef.current = null
     }, [])
 
+    const clearChoiceRevealTimer = useCallback(() => {
+        if (choiceRevealTimerRef.current === null) return
+        window.clearTimeout(choiceRevealTimerRef.current)
+        choiceRevealTimerRef.current = null
+    }, [])
+
     const clearFeedbackTimer = useCallback(() => {
         if (feedbackTimerRef.current === null) return
         window.clearTimeout(feedbackTimerRef.current)
@@ -148,6 +155,7 @@ export function useMobileTerminalInteraction(
 
     const cancelTransientWork = useCallback(() => {
         cancelTouch()
+        clearChoiceRevealTimer()
         clearChoiceBlurTimer()
         clearFeedbackTimer()
         selectionLifecycleRef.current.reset()
@@ -156,7 +164,12 @@ export function useMobileTerminalInteraction(
         fallbackChoicePointRef.current = null
         lastUsableAnchorRef.current = null
         selectionRangeRef.current = null
-    }, [cancelTouch, clearChoiceBlurTimer, clearFeedbackTimer])
+    }, [
+        cancelTouch,
+        clearChoiceBlurTimer,
+        clearChoiceRevealTimer,
+        clearFeedbackTimer,
+    ])
 
     const clearTerminalSelection = useCallback((terminal: Terminal) => {
         suppressSelectionEventRef.current = true
@@ -345,6 +358,30 @@ export function useMobileTerminalInteraction(
         }, 0)
     }, [clearChoiceBlurTimer])
 
+    const scheduleChoiceReveal = useCallback((terminal: Terminal) => {
+        clearChoiceRevealTimer()
+        choiceRevealTimerRef.current = window.setTimeout(() => {
+            choiceRevealTimerRef.current = null
+            if (
+                !activeRef.current
+                || terminalRef.current !== terminal
+                || overlayRef.current.mode !== 'idle'
+                || touchRef.current !== null
+            ) return
+            updateOverlay({
+                ...IDLE_OVERLAY,
+                mode: 'choice',
+            })
+            syncChoiceAnchor()
+            settleChoiceFocus(terminal)
+        }, 0)
+    }, [
+        clearChoiceRevealTimer,
+        settleChoiceFocus,
+        syncChoiceAnchor,
+        updateOverlay,
+    ])
+
     const applySelection = useCallback((range: TerminalCellRange): boolean => {
         const terminal = terminalRef.current
         if (!terminal || !activeRef.current) return false
@@ -361,6 +398,7 @@ export function useMobileTerminalInteraction(
     const selectWord = useCallback((seedCell: TerminalCell) => {
         const terminal = terminalRef.current
         if (!terminal || !activeRef.current) return
+        clearChoiceRevealTimer()
         const line = terminal.buffer.active.getLine(seedCell.row)
         const cells: TerminalBufferCell[] = Array.from(
             { length: terminal.cols },
@@ -380,7 +418,12 @@ export function useMobileTerminalInteraction(
             mode: 'select',
         })
         applySelection(wordRangeAt(cells, seedCell))
-    }, [applySelection, clearFeedbackTimer, updateOverlay])
+    }, [
+        applySelection,
+        clearChoiceRevealTimer,
+        clearFeedbackTimer,
+        updateOverlay,
+    ])
 
     const reset = useCallback(() => {
         const wasInput = overlayRef.current.mode === 'input'
@@ -400,6 +443,7 @@ export function useMobileTerminalInteraction(
         const terminal = terminalRef.current
         if (!terminal || !activeRef.current || !terminal.textarea) return
         cancelTouch()
+        clearChoiceRevealTimer()
         clearChoiceBlurTimer()
         terminal.textarea.readOnly = false
         updateOverlay({
@@ -407,7 +451,12 @@ export function useMobileTerminalInteraction(
             mode: 'input',
         })
         terminal.focus()
-    }, [cancelTouch, clearChoiceBlurTimer, updateOverlay])
+    }, [
+        cancelTouch,
+        clearChoiceBlurTimer,
+        clearChoiceRevealTimer,
+        updateOverlay,
+    ])
 
     const onSelect = useCallback(() => {
         const seedCell = seedCellRef.current
@@ -457,12 +506,18 @@ export function useMobileTerminalInteraction(
     const onSelectAll = useCallback(() => {
         const terminal = terminalRef.current
         if (!terminal || !activeRef.current) return
+        clearChoiceRevealTimer()
         clearFeedbackTimer()
         selectionLifecycleRef.current.selectionMutated()
         updateOverlay({ mode: 'select', feedback: null })
         terminal.selectAll()
         if (overlayRef.current.mode === 'select') syncSelectionOverlay()
-    }, [clearFeedbackTimer, syncSelectionOverlay, updateOverlay])
+    }, [
+        clearChoiceRevealTimer,
+        clearFeedbackTimer,
+        syncSelectionOverlay,
+        updateOverlay,
+    ])
 
     const edgeDirection = useCallback((clientY: number): -1 | 0 | 1 => {
         const terminal = terminalRef.current
@@ -572,6 +627,7 @@ export function useMobileTerminalInteraction(
                 cancelTouch()
                 return
             }
+            clearChoiceRevealTimer()
             const touch = event.touches[0]
             clearFeedbackTimer()
             if (overlayRef.current.feedback) {
@@ -639,6 +695,7 @@ export function useMobileTerminalInteraction(
             }
             if (!session.scrolling) {
                 session.scrolling = true
+                clearChoiceRevealTimer()
                 clearLongPressTimer()
                 updateOverlay(IDLE_OVERLAY)
             }
@@ -669,12 +726,7 @@ export function useMobileTerminalInteraction(
             if (session.scrolling || session.longPressed) {
                 event.preventDefault()
             } else {
-                updateOverlay({
-                    ...IDLE_OVERLAY,
-                    mode: 'choice',
-                })
-                syncChoiceAnchor()
-                settleChoiceFocus(terminal)
+                scheduleChoiceReveal(terminal)
             }
             touchRef.current = null
             touchPixelRemainderRef.current = 0
@@ -749,6 +801,7 @@ export function useMobileTerminalInteraction(
         options.terminal,
         cancelTouch,
         cancelTransientWork,
+        clearChoiceRevealTimer,
         clearLongPressTimer,
         clearTerminalSelection,
         clearFeedbackTimer,
@@ -756,8 +809,8 @@ export function useMobileTerminalInteraction(
         getMetrics,
         pointToCell,
         reset,
+        scheduleChoiceReveal,
         selectWord,
-        settleChoiceFocus,
         syncChoiceAnchor,
         syncSelectionOverlay,
         updateOverlay,

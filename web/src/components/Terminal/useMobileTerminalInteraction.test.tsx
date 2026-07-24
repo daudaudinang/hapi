@@ -319,10 +319,14 @@ afterEach(() => {
 })
 
 describe('useMobileTerminalInteraction', () => {
-    it('shows choice after a short tap without making the textarea writable', () => {
+    it('reveals choice in the next task after the original TUI click', () => {
         const fixture = createTerminalFixture()
         const { result } = renderInteraction(fixture)
         const point = touch(1, 55, 130)
+        const clickModes: string[] = []
+        fixture.terminalElement.addEventListener('click', () => {
+            clickModes.push(result.current.overlayProps.mode)
+        })
         fixture.textarea.focus()
 
         let endEvent: TouchEvent
@@ -337,12 +341,136 @@ describe('useMobileTerminalInteraction', () => {
         })
 
         expect(endEvent!.defaultPrevented).toBe(false)
+        expect(result.current.overlayProps.mode).toBe('idle')
+        expect(fixture.blur).not.toHaveBeenCalled()
+
+        act(() => fixture.terminalElement.click())
+        expect(clickModes).toEqual(['idle'])
+        expect(result.current.overlayProps.mode).toBe('idle')
+
+        act(() => vi.runOnlyPendingTimers())
         expect(result.current.overlayProps.mode).toBe('choice')
         expect(result.current.overlayProps.choiceAnchor).toEqual({ x: 45, y: 60 })
         expect(fixture.textarea.readOnly).toBe(true)
         expect(fixture.focus).not.toHaveBeenCalled()
         expect(fixture.blur).toHaveBeenCalledOnce()
         expect(document.activeElement).not.toBe(fixture.textarea)
+    })
+
+    it.each([
+        'reset',
+        'dismiss',
+        'new touch',
+        'scroll',
+        'disable',
+        'unmount',
+    ])('cancels a pending choice reveal on %s', (action) => {
+        const fixture = createTerminalFixture()
+        const interaction = renderInteraction(fixture)
+        const point = touch(1, 55, 130)
+
+        act(() => {
+            dispatchTouch(fixture.terminalElement, 'touchstart', [point])
+            dispatchTouch(fixture.terminalElement, 'touchend', [], [point])
+        })
+        expect(interaction.result.current.overlayProps.mode).toBe('idle')
+
+        act(() => {
+            if (action === 'reset') {
+                interaction.result.current.reset()
+            } else if (action === 'dismiss') {
+                interaction.rerender({
+                    dismissRequested: true,
+                    enabled: true,
+                })
+            } else if (action === 'new touch') {
+                dispatchTouch(fixture.terminalElement, 'touchstart', [point])
+            } else if (action === 'scroll') {
+                dispatchTouch(fixture.terminalElement, 'touchstart', [point])
+                dispatchTouch(
+                    fixture.terminalElement,
+                    'touchmove',
+                    [touch(1, 55, 80)],
+                )
+            } else if (action === 'disable') {
+                interaction.rerender({
+                    dismissRequested: false,
+                    enabled: false,
+                })
+            } else {
+                interaction.unmount()
+            }
+        })
+        const blurCallsAfterCancellation = fixture.blur.mock.calls.length
+        act(() => vi.advanceTimersByTime(0))
+
+        if (action !== 'unmount') {
+            expect(interaction.result.current.overlayProps.mode).toBe('idle')
+        }
+        expect(fixture.blur).toHaveBeenCalledTimes(blurCallsAfterCancellation)
+    })
+
+    it('cancels a pending choice reveal when the terminal is replaced', () => {
+        const first = createTerminalFixture()
+        const second = createTerminalFixture()
+        const { result, rerender } = renderHook(
+            ({ fixture }) => useMobileTerminalInteraction({
+                terminal: fixture.terminal,
+                root: fixture.root,
+                enabled: true,
+                mobile: true,
+                dismissRequested: false,
+            }),
+            { initialProps: { fixture: first } },
+        )
+        const point = touch(1, 55, 130)
+
+        act(() => {
+            dispatchTouch(first.terminalElement, 'touchstart', [point])
+            dispatchTouch(first.terminalElement, 'touchend', [], [point])
+        })
+        act(() => rerender({ fixture: second }))
+        const firstBlurCallsAfterReplacement = first.blur.mock.calls.length
+        const secondBlurCallsAfterReplacement = second.blur.mock.calls.length
+        act(() => vi.advanceTimersByTime(0))
+
+        expect(result.current.overlayProps.mode).toBe('idle')
+        expect(first.blur).toHaveBeenCalledTimes(firstBlurCallsAfterReplacement)
+        expect(second.blur).toHaveBeenCalledTimes(secondBlurCallsAfterReplacement)
+    })
+
+    it('keeps explicit Input active when chosen before a pending reveal', () => {
+        const fixture = createTerminalFixture()
+        const { result } = renderInteraction(fixture)
+        const point = touch(1, 55, 130)
+
+        act(() => {
+            dispatchTouch(fixture.terminalElement, 'touchstart', [point])
+            dispatchTouch(fixture.terminalElement, 'touchend', [], [point])
+            result.current.overlayProps.onInput()
+            vi.runOnlyPendingTimers()
+        })
+
+        expect(result.current.overlayProps.mode).toBe('input')
+        expect(fixture.textarea.readOnly).toBe(false)
+        expect(fixture.focus).toHaveBeenCalledOnce()
+        expect(fixture.blur).not.toHaveBeenCalled()
+    })
+
+    it('lets a new long press enter selection without a stale choice reveal', () => {
+        const fixture = createTerminalFixture()
+        const { result } = renderInteraction(fixture)
+        const point = touch(1, 55, 130)
+
+        act(() => {
+            dispatchTouch(fixture.terminalElement, 'touchstart', [point])
+            dispatchTouch(fixture.terminalElement, 'touchend', [], [point])
+            dispatchTouch(fixture.terminalElement, 'touchstart', [point])
+            vi.advanceTimersByTime(450)
+        })
+
+        expect(result.current.overlayProps.mode).toBe('select')
+        expect(fixture.select).toHaveBeenCalledOnce()
     })
 
     it('turns a 40px swipe into scrollback and does not show choice', () => {
@@ -416,6 +544,7 @@ describe('useMobileTerminalInteraction', () => {
         act(() => {
             dispatchTouch(fixture.terminalElement, 'touchstart', [point])
             dispatchTouch(fixture.terminalElement, 'touchend', [], [point])
+            vi.advanceTimersToNextTimer()
         })
         expect(fixture.textarea.readOnly).toBe(true)
         expect(fixture.focus).not.toHaveBeenCalled()
@@ -483,6 +612,7 @@ describe('useMobileTerminalInteraction', () => {
         act(() => {
             dispatchTouch(fixture.terminalElement, 'touchstart', [point])
             dispatchTouch(fixture.terminalElement, 'touchend', [], [point])
+            vi.advanceTimersToNextTimer()
         })
         expect(result.current.overlayProps.mode).toBe('choice')
         expect(fixture.textarea.readOnly).toBe(true)
@@ -583,6 +713,7 @@ describe('useMobileTerminalInteraction', () => {
             dispatchTouch(fixture.terminalElement, 'touchstart', [point])
             dispatchTouch(fixture.terminalElement, 'touchend', [], [point])
             result.current.overlayProps.onSelect()
+            vi.advanceTimersByTime(0)
         })
 
         expect(fixture.select).toHaveBeenLastCalledWith(4, 35, 6)

@@ -178,7 +178,7 @@ describe('TerminalView mobile interaction integration', () => {
         })
     }
 
-    it('opens xterm in its own host and shows mobile actions only after a tap', () => {
+    it('opens xterm in its own host and defers mobile actions until after the tap task', async () => {
         const rendered = render(<TerminalView />)
 
         const root = rendered.container.firstElementChild
@@ -191,7 +191,8 @@ describe('TerminalView mobile interaction integration', () => {
 
         tapTerminal()
 
-        expect(screen.getByRole('toolbar', { name: 'Terminal action' })).toBeInTheDocument()
+        expect(screen.queryByRole('toolbar', { name: 'Terminal action' })).not.toBeInTheDocument()
+        expect(await screen.findByRole('toolbar', { name: 'Terminal action' })).toBeInTheDocument()
         fireEvent.click(screen.getByRole('button', { name: 'Input' }))
         expect(mocks.terminal.textarea).toHaveProperty('readOnly', false)
         expect(screen.queryByRole('toolbar', { name: 'Terminal action' })).not.toBeInTheDocument()
@@ -208,10 +209,10 @@ describe('TerminalView mobile interaction integration', () => {
         expect(mocks.terminal.onCursorMove).not.toHaveBeenCalled()
     })
 
-    it('clears a visible mobile choice when dismissal is requested', () => {
+    it('clears a visible mobile choice when dismissal is requested', async () => {
         const rendered = render(<TerminalView dismissMobileInteraction={false} />)
         tapTerminal()
-        expect(screen.getByRole('toolbar', { name: 'Terminal action' })).toBeInTheDocument()
+        expect(await screen.findByRole('toolbar', { name: 'Terminal action' })).toBeInTheDocument()
 
         rendered.rerender(<TerminalView dismissMobileInteraction={true} />)
 
