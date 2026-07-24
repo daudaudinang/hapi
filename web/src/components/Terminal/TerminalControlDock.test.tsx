@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
     TerminalControlDock,
@@ -101,6 +101,16 @@ describe('TerminalControlDock', () => {
         expect(onFocusTerminal).toHaveBeenCalledTimes(1)
     })
 
+    it('keeps xterm focused when Paste is pressed from the mobile keyboard', () => {
+        const onFocusTerminal = vi.fn()
+        renderDock({ onFocusTerminal })
+
+        const eventAccepted = fireEvent.pointerDown(screen.getByRole('button', { name: 'Paste' }))
+
+        expect(eventAccepted).toBe(false)
+        expect(onFocusTerminal).toHaveBeenCalledTimes(1)
+    })
+
     it('keeps Paste immediate and falls back to manual input', async () => {
         vi.stubGlobal('navigator', {
             clipboard: { readText: vi.fn().mockRejectedValue(new Error('denied')) },
@@ -111,6 +121,25 @@ describe('TerminalControlDock', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Paste' }))
         expect(await screen.findByRole('dialog', { name: 'Paste input' })).toBeInTheDocument()
         expect(onActiveToolChange).not.toHaveBeenCalled()
+    })
+
+    it('returns focus to xterm after the manual paste dialog closes', async () => {
+        vi.stubGlobal('navigator', {
+            clipboard: { readText: vi.fn().mockRejectedValue(new Error('denied')) },
+        })
+        const onFocusTerminal = vi.fn()
+        const onWritePlainInput = vi.fn(() => true)
+        renderDock({ onFocusTerminal, onWritePlainInput })
+
+        fireEvent.click(screen.getByRole('button', { name: 'Paste' }))
+        const dialog = await screen.findByRole('dialog', { name: 'Paste input' })
+        fireEvent.change(within(dialog).getByPlaceholderText('Paste terminal input here…'), {
+            target: { value: 'pwd' },
+        })
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Paste' }))
+
+        await waitFor(() => expect(onFocusTerminal).toHaveBeenCalledTimes(1))
+        expect(onWritePlainInput).toHaveBeenCalledWith('pwd')
     })
 
     it('announces a successful direct paste without selecting a tool', async () => {

@@ -259,12 +259,19 @@ function ManualPasteDialog(props: {
     onTextChange: (text: string) => void
     onOpenChange: (open: boolean) => void
     onSubmit: () => void
+    onReturnFocus: () => void
 }) {
     const { t } = useTranslation()
 
     return (
         <AppDialog open={props.open} onOpenChange={props.onOpenChange}>
-            <AppDialogContent className="max-w-md">
+            <AppDialogContent
+                className="max-w-md"
+                onCloseAutoFocus={(event) => {
+                    event.preventDefault()
+                    props.onReturnFocus()
+                }}
+            >
                 <AppDialogHeader
                     title={t('terminal.paste.fallbackTitle')}
                     subtitle={t('terminal.paste.fallbackDescription')}
@@ -358,7 +365,7 @@ export function TerminalControlDock(props: TerminalControlDockProps) {
         }
     }, [])
 
-    const handleKeyboardPointerDown = (event: PointerEvent<HTMLButtonElement>) => {
+    const handleTerminalFocusPointerDown = (event: PointerEvent<HTMLButtonElement>) => {
         event.preventDefault()
         if (!props.disabled) {
             props.onFocusTerminal()
@@ -407,6 +414,7 @@ export function TerminalControlDock(props: TerminalControlDockProps) {
                     tool="paste"
                     label={t('terminal.controls.paste')}
                     disabled={props.disabled}
+                    onPointerDown={handleTerminalFocusPointerDown}
                     onClick={() => void handlePasteAction()}
                 />
                 <DockButton tool="snippets" label={t('terminal.controls.snippets')} disabled />
@@ -417,7 +425,7 @@ export function TerminalControlDock(props: TerminalControlDockProps) {
                     label={t('terminal.controls.keyboard')}
                     active={props.activeTool === 'keyboard'}
                     disabled={props.disabled}
-                    onPointerDown={handleKeyboardPointerDown}
+                    onPointerDown={handleTerminalFocusPointerDown}
                     onClick={() => toggleTool(props.activeTool, 'keyboard', props.onActiveToolChange)}
                 />
                 <DockButton
@@ -435,6 +443,7 @@ export function TerminalControlDock(props: TerminalControlDockProps) {
                 onTextChange={setManualPasteText}
                 onOpenChange={handlePasteDialogOpenChange}
                 onSubmit={handleManualPasteSubmit}
+                onReturnFocus={props.onFocusTerminal}
             />
             {pasteFeedback ? (
                 <span role="status" className="sr-only">

@@ -66,6 +66,85 @@ export function TerminalView(props: {
         terminal.loadAddon(canvasAddon)
         terminal.open(container)
 
+        const terminalElement = terminal.element
+        let touchIdentifier: number | null = null
+        let touchStartX = 0
+        let touchStartY = 0
+        let touchLastY = 0
+        let touchPixelRemainder = 0
+        let touchScrolling = false
+
+        const resetTouchScroll = () => {
+            touchIdentifier = null
+            touchPixelRemainder = 0
+            touchScrolling = false
+        }
+
+        const handleTouchStart = (event: TouchEvent) => {
+            if (event.touches.length !== 1) {
+                resetTouchScroll()
+                return
+            }
+            const touch = event.touches[0]
+            touchIdentifier = touch.identifier
+            touchStartX = touch.clientX
+            touchStartY = touch.clientY
+            touchLastY = touch.clientY
+            touchPixelRemainder = 0
+            touchScrolling = false
+        }
+
+        const handleTouchMove = (event: TouchEvent) => {
+            if (touchIdentifier === null) {
+                return
+            }
+            const touch = Array.from(event.touches).find((item) => item.identifier === touchIdentifier)
+            if (!touch) {
+                resetTouchScroll()
+                return
+            }
+
+            const totalX = touch.clientX - touchStartX
+            const totalY = touch.clientY - touchStartY
+            if (!touchScrolling) {
+                if (Math.abs(totalY) < 4 || Math.abs(totalX) > Math.abs(totalY)) {
+                    touchLastY = touch.clientY
+                    return
+                }
+                touchScrolling = true
+            }
+
+            event.preventDefault()
+            const screenHeight = terminalElement
+                ?.querySelector<HTMLElement>('.xterm-screen')
+                ?.getBoundingClientRect().height ?? 0
+            const lineHeight = screenHeight > 0 && terminal.rows > 0
+                ? screenHeight / terminal.rows
+                : 16
+            touchPixelRemainder += touchLastY - touch.clientY
+            touchLastY = touch.clientY
+            const lines = Math.trunc(touchPixelRemainder / lineHeight)
+            if (lines !== 0) {
+                terminal.scrollLines(lines)
+                touchPixelRemainder -= lines * lineHeight
+            }
+        }
+
+        terminalElement?.addEventListener('touchstart', handleTouchStart, {
+            passive: true,
+            signal: abortController.signal,
+        })
+        terminalElement?.addEventListener('touchmove', handleTouchMove, {
+            passive: false,
+            signal: abortController.signal,
+        })
+        terminalElement?.addEventListener('touchend', resetTouchScroll, {
+            signal: abortController.signal,
+        })
+        terminalElement?.addEventListener('touchcancel', resetTouchScroll, {
+            signal: abortController.signal,
+        })
+
         const observer = new ResizeObserver(() => {
             requestAnimationFrame(() => {
                 fitAddon.fit()
