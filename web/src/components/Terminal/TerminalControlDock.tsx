@@ -22,7 +22,6 @@ export type TerminalControlDockProps = {
     disabled: boolean
     activeTool: TerminalDockTool | null
     onActiveToolChange: (tool: TerminalDockTool | null) => void
-    onFocusTerminal: () => void
     ctrlActive: boolean
     altActive: boolean
     onQuickInput: (sequence: string) => void
@@ -108,7 +107,6 @@ function DockButton(props: {
     label: string
     active?: boolean
     disabled?: boolean
-    onPointerDown?: (event: PointerEvent<HTMLButtonElement>) => void
     onClick?: () => void
 }) {
     return (
@@ -117,7 +115,6 @@ function DockButton(props: {
             aria-label={props.label}
             aria-pressed={props.active ?? undefined}
             disabled={props.disabled}
-            onPointerDown={props.onPointerDown}
             onClick={props.onClick}
             className={`flex min-h-12 min-w-12 flex-col items-center justify-center gap-0.5 px-1 py-1 text-[10px] font-medium leading-tight transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-500 disabled:cursor-not-allowed disabled:opacity-35 ${
                 props.active

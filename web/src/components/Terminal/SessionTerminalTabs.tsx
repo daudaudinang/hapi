@@ -469,7 +469,6 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
                 disabled={quickInputDisabled}
                 activeTool={activeDockTool}
                 onActiveToolChange={setActiveDockTool}
-                onFocusTerminal={() => terminalRef.current?.focus()}
                 ctrlActive={quickInput.ctrlActive}
                 altActive={quickInput.altActive}
                 onQuickInput={quickInput.sendQuickInput}

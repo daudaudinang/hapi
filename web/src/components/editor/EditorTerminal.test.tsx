@@ -1,5 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EditorTab } from '@/hooks/useEditorState'
 import { EditorTerminal } from './EditorTerminal'
@@ -176,6 +175,7 @@ describe('EditorTerminal', () => {
 
     afterEach(() => {
         cleanup()
+        vi.unstubAllGlobals()
     })
 
     it('shows an empty state when no terminal tabs exist', () => {
@@ -434,6 +434,52 @@ describe('EditorTerminal', () => {
         fireEvent.pointerDown(screen.getByRole('button', { name: 'Keys' }))
         fireEvent.click(screen.getByRole('button', { name: 'Keys' }))
 
+        expect(focus).not.toHaveBeenCalled()
+    })
+
+    it('does not focus xterm during direct Paste', async () => {
+        vi.stubGlobal('navigator', {
+            clipboard: { readText: vi.fn().mockResolvedValue('pwd') },
+        })
+        setDockViewport(true)
+        renderMachineTerminal({ mobileMode: true })
+        const { focus } = mountLastTerminal()
+
+        const pasteButton = screen.getByRole('button', { name: 'Paste' })
+        fireEvent.pointerDown(pasteButton)
+        fireEvent.click(pasteButton)
+
+        await waitFor(() => expectTerminalWrite('term-machine', 'pwd'))
+        expect(focus).not.toHaveBeenCalled()
+        expect(screen.queryByRole('dialog', { name: 'Paste input' })).not.toBeInTheDocument()
+    })
+
+    it('does not focus xterm when manual Paste is cancelled or submitted', async () => {
+        vi.stubGlobal('navigator', {
+            clipboard: { readText: vi.fn().mockRejectedValue(new Error('denied')) },
+        })
+        setDockViewport(true)
+        renderMachineTerminal({ mobileMode: true })
+        const { focus } = mountLastTerminal()
+
+        const pasteButton = screen.getByRole('button', { name: 'Paste' })
+        fireEvent.pointerDown(pasteButton)
+        fireEvent.click(pasteButton)
+        fireEvent.click(within(await screen.findByRole('dialog', { name: 'Paste input' }))
+            .getByRole('button', { name: 'Cancel' }))
+        await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Paste input' })).not.toBeInTheDocument())
+        expect(focus).not.toHaveBeenCalled()
+
+        fireEvent.pointerDown(pasteButton)
+        fireEvent.click(pasteButton)
+        const dialog = await screen.findByRole('dialog', { name: 'Paste input' })
+        fireEvent.change(within(dialog).getByPlaceholderText('Paste terminal input here…'), {
+            target: { value: 'pwd' },
+        })
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Paste' }))
+
+        await waitFor(() => expectTerminalWrite('term-machine', 'pwd'))
+        await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Paste input' })).not.toBeInTheDocument())
         expect(focus).not.toHaveBeenCalled()
     })
 
