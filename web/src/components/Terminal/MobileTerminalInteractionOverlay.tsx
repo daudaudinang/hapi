@@ -1,4 +1,12 @@
-import type { PointerEvent, PointerEventHandler } from 'react'
+import {
+    useCallback,
+    useLayoutEffect,
+    useRef,
+    useState,
+    type PointerEvent,
+    type PointerEventHandler,
+    type ReactNode,
+} from 'react'
 import { useTranslation } from '@/lib/use-translation'
 
 type ScreenPoint = {
@@ -6,18 +14,128 @@ type ScreenPoint = {
     y: number
 }
 
-const MOBILE_TOOLBAR_SAFE_TOP = 64
+const MOBILE_TOOLBAR_MARGIN = 8
+const MOBILE_TOOLBAR_GAP = 8
 
-function getToolbarAnchorStyle(point: ScreenPoint | null): {
-    left: string
+type ToolbarPlacement = 'above' | 'below' | 'clamped'
+
+type ToolbarLayout = {
+    left: number
     top: number
-} | undefined {
-    if (!point) return undefined
+    placement: ToolbarPlacement
+}
 
-    return {
-        left: '50%',
-        top: Math.max(MOBILE_TOOLBAR_SAFE_TOP, point.y),
+function clamp(value: number, minimum: number, maximum: number): number {
+    return Math.min(Math.max(value, minimum), maximum)
+}
+
+function calculateToolbarLayout(
+    anchor: ScreenPoint,
+    rootRect: DOMRect,
+    toolbarRect: DOMRect,
+    belowAnchorY = anchor.y,
+): ToolbarLayout {
+    const maximumLeft = Math.max(
+        MOBILE_TOOLBAR_MARGIN,
+        rootRect.width - MOBILE_TOOLBAR_MARGIN - toolbarRect.width,
+    )
+    const left = clamp(
+        anchor.x - (toolbarRect.width / 2),
+        MOBILE_TOOLBAR_MARGIN,
+        maximumLeft,
+    )
+    const maximumTop = Math.max(
+        MOBILE_TOOLBAR_MARGIN,
+        rootRect.height - MOBILE_TOOLBAR_MARGIN - toolbarRect.height,
+    )
+    const aboveTop = anchor.y - MOBILE_TOOLBAR_GAP - toolbarRect.height
+    const belowTop = belowAnchorY + MOBILE_TOOLBAR_GAP
+
+    if (aboveTop >= MOBILE_TOOLBAR_MARGIN && aboveTop <= maximumTop) {
+        return { left, top: aboveTop, placement: 'above' }
     }
+    if (belowTop >= MOBILE_TOOLBAR_MARGIN && belowTop <= maximumTop) {
+        return { left, top: belowTop, placement: 'below' }
+    }
+
+    const clampedAbove = clamp(aboveTop, MOBILE_TOOLBAR_MARGIN, maximumTop)
+    const clampedBelow = clamp(belowTop, MOBILE_TOOLBAR_MARGIN, maximumTop)
+    return {
+        left,
+        top: Math.abs(clampedAbove - aboveTop) <= Math.abs(clampedBelow - belowTop)
+            ? clampedAbove
+            : clampedBelow,
+        placement: 'clamped',
+    }
+}
+
+type PositionedToolbarProps = {
+    anchor: ScreenPoint
+    belowAnchorY?: number
+    label: string
+    className?: string
+    children: ReactNode
+    onPointerDown?: PointerEventHandler<HTMLDivElement>
+}
+
+function PositionedToolbar(props: PositionedToolbarProps) {
+    const toolbarRef = useRef<HTMLDivElement>(null)
+    const [layout, setLayout] = useState<ToolbarLayout | null>(null)
+
+    const measure = useCallback(() => {
+        const toolbar = toolbarRef.current
+        const root = toolbar?.closest<HTMLElement>(
+            '[data-mobile-terminal-overlay-root]',
+        )
+        if (!root || !toolbar) return
+        const next = calculateToolbarLayout(
+            props.anchor,
+            root.getBoundingClientRect(),
+            toolbar.getBoundingClientRect(),
+            props.belowAnchorY,
+        )
+        setLayout((current) => (
+            current?.left === next.left
+            && current.top === next.top
+            && current.placement === next.placement
+                ? current
+                : next
+        ))
+    }, [props.anchor, props.belowAnchorY])
+
+    useLayoutEffect(() => {
+        measure()
+        window.addEventListener('resize', measure)
+        const resizeObserver = typeof ResizeObserver === 'undefined'
+            ? null
+            : new ResizeObserver(measure)
+        const root = toolbarRef.current?.closest<HTMLElement>(
+            '[data-mobile-terminal-overlay-root]',
+        )
+        if (root) resizeObserver?.observe(root)
+        if (toolbarRef.current) resizeObserver?.observe(toolbarRef.current)
+
+        return () => {
+            window.removeEventListener('resize', measure)
+            resizeObserver?.disconnect()
+        }
+    }, [measure])
+
+    return (
+        <div
+            ref={toolbarRef}
+            role="toolbar"
+            aria-label={props.label}
+            data-placement={layout?.placement}
+            className={props.className}
+            style={layout
+                ? { left: layout.left, top: layout.top }
+                : { visibility: 'hidden' }}
+            onPointerDown={props.onPointerDown}
+        >
+            {props.children}
+        </div>
+    )
 }
 
 export type MobileTerminalOverlayProps = {
@@ -67,7 +185,12 @@ function SelectionHandle(props: SelectionHandleProps) {
 
 type SelectionToolbarProps = Pick<
     MobileTerminalOverlayProps,
-    'toolbarAnchor' | 'onCopy' | 'onSelectAll' | 'onCancel'
+    | 'toolbarAnchor'
+    | 'startHandle'
+    | 'endHandle'
+    | 'onCopy'
+    | 'onSelectAll'
+    | 'onCancel'
 > & {
     toolbarLabel: string
     copyLabel: string
@@ -76,14 +199,18 @@ type SelectionToolbarProps = Pick<
 }
 
 function SelectionToolbar(props: SelectionToolbarProps) {
-    const anchorStyle = getToolbarAnchorStyle(props.toolbarAnchor)
+    if (!props.toolbarAnchor) return null
+    const belowAnchorY = Math.max(
+        props.startHandle?.y ?? props.toolbarAnchor.y,
+        props.endHandle?.y ?? props.toolbarAnchor.y,
+    )
 
     return (
-        <div
-            role="toolbar"
-            aria-label={props.toolbarLabel}
-            className="absolute flex -translate-x-1/2 -translate-y-full overflow-hidden rounded-full border border-[var(--app-border)] bg-[var(--app-bg)]/95 p-1 shadow-xl backdrop-blur"
-            style={anchorStyle}
+        <PositionedToolbar
+            anchor={props.toolbarAnchor}
+            belowAnchorY={belowAnchorY}
+            label={props.toolbarLabel}
+            className="absolute flex overflow-hidden rounded-full border border-[var(--app-border)] bg-[var(--app-bg)]/95 p-1 shadow-xl backdrop-blur"
             onPointerDown={(event) => event.stopPropagation()}
         >
             <button
@@ -109,7 +236,7 @@ function SelectionToolbar(props: SelectionToolbarProps) {
             >
                 {props.cancelLabel}
             </button>
-        </div>
+        </PositionedToolbar>
     )
 }
 
@@ -119,13 +246,16 @@ export function MobileTerminalInteractionOverlay(props: MobileTerminalOverlayPro
     if (props.mode === 'idle' || props.mode === 'input') return null
 
     return (
-        <div className="pointer-events-none absolute inset-0 z-20 lg:hidden">
+        <div
+            data-mobile-terminal-overlay-root=""
+            data-testid="mobile-terminal-overlay-root"
+            className="pointer-events-none absolute inset-0 z-20 lg:hidden"
+        >
             {props.mode === 'choice' && props.choiceAnchor ? (
-                <div
-                    role="toolbar"
-                    aria-label={t('terminal.interaction.choice')}
-                    className="pointer-events-auto absolute flex -translate-x-1/2 -translate-y-full overflow-hidden rounded-full border border-[var(--app-border)] bg-[var(--app-bg)]/95 p-1 shadow-xl backdrop-blur"
-                    style={getToolbarAnchorStyle(props.choiceAnchor)}
+                <PositionedToolbar
+                    anchor={props.choiceAnchor}
+                    label={t('terminal.interaction.choice')}
+                    className="pointer-events-auto absolute flex overflow-hidden rounded-full border border-[var(--app-border)] bg-[var(--app-bg)]/95 p-1 shadow-xl backdrop-blur"
                 >
                     <button
                         type="button"
@@ -142,7 +272,7 @@ export function MobileTerminalInteractionOverlay(props: MobileTerminalOverlayPro
                     >
                         {t('terminal.interaction.select')}
                     </button>
-                </div>
+                </PositionedToolbar>
             ) : null}
 
             {props.mode === 'select' ? (
@@ -165,6 +295,8 @@ export function MobileTerminalInteractionOverlay(props: MobileTerminalOverlayPro
                     />
                     <SelectionToolbar
                         toolbarAnchor={props.toolbarAnchor}
+                        startHandle={props.startHandle}
+                        endHandle={props.endHandle}
                         toolbarLabel={t('terminal.interaction.selectionToolbar')}
                         copyLabel={t('terminal.interaction.copy')}
                         selectAllLabel={t('terminal.interaction.selectAll')}

@@ -95,6 +95,7 @@ export function useMobileTerminalInteraction(
     const touchRef = useRef<TouchSession | null>(null)
     const touchPixelRemainderRef = useRef(0)
     const longPressTimerRef = useRef<number | null>(null)
+    const choiceBlurTimerRef = useRef<number | null>(null)
     const seedCellRef = useRef<TerminalCell | null>(null)
     const fallbackChoicePointRef = useRef<{ x: number; y: number } | null>(null)
     const selectionRangeRef = useRef<TerminalCellRange | null>(null)
@@ -124,6 +125,12 @@ export function useMobileTerminalInteraction(
         longPressTimerRef.current = null
     }, [])
 
+    const clearChoiceBlurTimer = useCallback(() => {
+        if (choiceBlurTimerRef.current === null) return
+        window.clearTimeout(choiceBlurTimerRef.current)
+        choiceBlurTimerRef.current = null
+    }, [])
+
     const cancelTouch = useCallback(() => {
         clearLongPressTimer()
         touchRef.current = null
@@ -132,12 +139,13 @@ export function useMobileTerminalInteraction(
 
     const cancelTransientWork = useCallback(() => {
         cancelTouch()
+        clearChoiceBlurTimer()
         selectionLifecycleRef.current.reset()
         coordinateAdapterRef.current.reset()
         seedCellRef.current = null
         fallbackChoicePointRef.current = null
         selectionRangeRef.current = null
-    }, [cancelTouch])
+    }, [cancelTouch, clearChoiceBlurTimer])
 
     const clearTerminalSelection = useCallback((terminal: Terminal) => {
         suppressSelectionEventRef.current = true
@@ -269,7 +277,7 @@ export function useMobileTerminalInteraction(
                     rootRect.width,
                 ),
                 y: clamp(
-                    Math.min(startHandle.y, endHandle.y) - 8,
+                    Math.min(startHandle.y, endHandle.y),
                     0,
                     rootRect.height,
                 ),
@@ -292,6 +300,22 @@ export function useMobileTerminalInteraction(
             choiceAnchor: cursorPoint ?? fallbackChoicePointRef.current,
         })
     }, [cellToRootPoint, updateOverlay])
+
+    const settleChoiceFocus = useCallback((terminal: Terminal) => {
+        clearChoiceBlurTimer()
+        if (terminal.textarea) terminal.textarea.readOnly = true
+        terminal.blur()
+        choiceBlurTimerRef.current = window.setTimeout(() => {
+            choiceBlurTimerRef.current = null
+            if (
+                !activeRef.current
+                || terminalRef.current !== terminal
+                || overlayRef.current.mode !== 'choice'
+            ) return
+            if (terminal.textarea) terminal.textarea.readOnly = true
+            terminal.blur()
+        }, 0)
+    }, [clearChoiceBlurTimer])
 
     const applySelection = useCallback((range: TerminalCellRange): boolean => {
         const terminal = terminalRef.current
@@ -347,13 +371,14 @@ export function useMobileTerminalInteraction(
         const terminal = terminalRef.current
         if (!terminal || !activeRef.current || !terminal.textarea) return
         cancelTouch()
+        clearChoiceBlurTimer()
         terminal.textarea.readOnly = false
         updateOverlay({
             ...IDLE_OVERLAY,
             mode: 'input',
         })
         terminal.focus()
-    }, [cancelTouch, updateOverlay])
+    }, [cancelTouch, clearChoiceBlurTimer, updateOverlay])
 
     const onSelect = useCallback(() => {
         const seedCell = seedCellRef.current
@@ -608,6 +633,7 @@ export function useMobileTerminalInteraction(
                     mode: 'choice',
                 })
                 syncChoiceAnchor()
+                settleChoiceFocus(terminal)
             }
             touchRef.current = null
             touchPixelRemainderRef.current = 0
@@ -690,6 +716,7 @@ export function useMobileTerminalInteraction(
         pointToCell,
         reset,
         selectWord,
+        settleChoiceFocus,
         syncChoiceAnchor,
         syncSelectionOverlay,
         updateOverlay,

@@ -28,6 +28,7 @@ type TerminalFixture = {
     selectAll: ReturnType<typeof vi.fn>
     clearSelection: ReturnType<typeof vi.fn>
     focus: ReturnType<typeof vi.fn>
+    blur: ReturnType<typeof vi.fn>
     scrollLines: ReturnType<typeof vi.fn>
     onBlur: ReturnType<typeof vi.fn>
     onResize: ReturnType<typeof vi.fn>
@@ -121,7 +122,8 @@ function createTerminalFixture(
         selectionPosition = undefined
         listeners.selection.forEach((listener) => listener())
     })
-    const focus = vi.fn()
+    const focus = vi.fn(() => textarea.focus())
+    const blur = vi.fn(() => textarea.blur())
     const scrollLines = vi.fn((amount: number) => {
         activeBuffer.viewportY = Math.max(
             0,
@@ -160,7 +162,7 @@ function createTerminalFixture(
         element: terminalElement,
         buffer: { active: activeBuffer },
         focus,
-        blur: vi.fn(),
+        blur,
         scrollLines,
         select,
         selectAll,
@@ -191,6 +193,7 @@ function createTerminalFixture(
         selectAll,
         clearSelection,
         focus,
+        blur,
         scrollLines,
         onBlur,
         onResize,
@@ -312,16 +315,26 @@ describe('useMobileTerminalInteraction', () => {
         const fixture = createTerminalFixture()
         const { result } = renderInteraction(fixture)
         const point = touch(1, 55, 130)
+        fixture.textarea.focus()
 
+        let endEvent: TouchEvent
         act(() => {
             dispatchTouch(fixture.terminalElement, 'touchstart', [point])
-            dispatchTouch(fixture.terminalElement, 'touchend', [], [point])
+            endEvent = dispatchTouch(
+                fixture.terminalElement,
+                'touchend',
+                [],
+                [point],
+            )
         })
 
+        expect(endEvent!.defaultPrevented).toBe(false)
         expect(result.current.overlayProps.mode).toBe('choice')
         expect(result.current.overlayProps.choiceAnchor).toEqual({ x: 45, y: 60 })
         expect(fixture.textarea.readOnly).toBe(true)
         expect(fixture.focus).not.toHaveBeenCalled()
+        expect(fixture.blur).toHaveBeenCalledOnce()
+        expect(document.activeElement).not.toBe(fixture.textarea)
     })
 
     it('turns a 40px swipe into scrollback and does not show choice', () => {
@@ -398,11 +411,17 @@ describe('useMobileTerminalInteraction', () => {
         })
         expect(fixture.textarea.readOnly).toBe(true)
         expect(fixture.focus).not.toHaveBeenCalled()
+        expect(fixture.blur).toHaveBeenCalledOnce()
+        expect(document.activeElement).not.toBe(fixture.textarea)
 
-        act(() => result.current.overlayProps.onInput())
+        act(() => {
+            result.current.overlayProps.onInput()
+            vi.advanceTimersByTime(1)
+        })
         expect(fixture.textarea.readOnly).toBe(false)
         expect(result.current.overlayProps.mode).toBe('input')
         expect(fixture.focus).toHaveBeenCalledOnce()
+        expect(document.activeElement).toBe(fixture.textarea)
 
         act(() => fixture.emitBlur())
         expect(fixture.textarea.readOnly).toBe(true)
@@ -449,9 +468,33 @@ describe('useMobileTerminalInteraction', () => {
         act(() => {
             dispatchTouch(fixture.terminalElement, 'touchstart', [point])
             fixture.terminalElement.dispatchEvent(cancelEvent)
+            vi.advanceTimersByTime(451)
         })
 
         expect(preventDefault).not.toHaveBeenCalled()
+        expect(fixture.select).not.toHaveBeenCalled()
+        expect(result.current.overlayProps.mode).toBe('idle')
+    })
+
+    it('prevents a cancelable touchcancel and clears its timer and state', () => {
+        const fixture = createTerminalFixture()
+        const { result } = renderInteraction(fixture)
+        const point = touch(1, 55, 130)
+
+        let cancelEvent: TouchEvent
+        act(() => {
+            dispatchTouch(fixture.terminalElement, 'touchstart', [point])
+            cancelEvent = dispatchTouch(
+                fixture.terminalElement,
+                'touchcancel',
+                [],
+                [point],
+            )
+            vi.advanceTimersByTime(451)
+        })
+
+        expect(cancelEvent!.defaultPrevented).toBe(true)
+        expect(fixture.select).not.toHaveBeenCalled()
         expect(result.current.overlayProps.mode).toBe('idle')
     })
 

@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
     MobileTerminalInteractionOverlay,
     type MobileTerminalOverlayProps,
@@ -39,13 +39,41 @@ const baseProps: MobileTerminalOverlayProps = {
     onHandlePointerDown: vi.fn(),
 }
 
+const rect = (width: number, height: number): DOMRect => ({
+    x: 0,
+    y: 0,
+    top: 0,
+    right: width,
+    bottom: height,
+    left: 0,
+    width,
+    height,
+    toJSON: () => undefined,
+})
+
+let rootSize = rect(320, 480)
+let toolbarSize = rect(160, 52)
+
+beforeEach(() => {
+    rootSize = rect(320, 480)
+    toolbarSize = rect(160, 52)
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+        function getBoundingClientRect(this: HTMLElement) {
+            return this.dataset.testid === 'mobile-terminal-overlay-root'
+                ? rootSize
+                : toolbarSize
+        },
+    )
+})
+
 afterEach(() => {
     cleanup()
     vi.clearAllMocks()
+    vi.restoreAllMocks()
 })
 
 describe('MobileTerminalInteractionOverlay', () => {
-    it('renders the choice actions at the supplied vertical anchor', () => {
+    it('renders the choice actions at the supplied anchor', () => {
         render(
             <MobileTerminalInteractionOverlay
                 {...baseProps}
@@ -55,7 +83,8 @@ describe('MobileTerminalInteractionOverlay', () => {
         )
 
         const toolbar = screen.getByRole('toolbar', { name: 'Terminal action' })
-        expect(toolbar).toHaveStyle({ left: '50%', top: '80px' })
+        expect(toolbar).toHaveStyle({ left: '40px', top: '20px' })
+        expect(toolbar).toHaveAttribute('data-placement', 'above')
 
         const inputAction = screen.getByRole('button', { name: 'Input' })
         const selectAction = screen.getByRole('button', { name: 'Select' })
@@ -68,19 +97,21 @@ describe('MobileTerminalInteractionOverlay', () => {
         expect(baseProps.onSelect).toHaveBeenCalledOnce()
     })
 
-    it('keeps top-edge choice actions centered inside the terminal overlay', () => {
+    it('preserves a valid centered selection anchor', () => {
         render(
             <MobileTerminalInteractionOverlay
                 {...baseProps}
-                mode="choice"
-                choiceAnchor={{ x: 4, y: 0 }}
+                mode="select"
+                toolbarAnchor={{ x: 180, y: 200 }}
             />,
         )
 
-        expect(screen.getByRole('toolbar', { name: 'Terminal action' })).toHaveStyle({
-            left: '50%',
-            top: '64px',
+        const toolbar = screen.getByRole('toolbar', { name: 'Selection actions' })
+        expect(toolbar).toHaveStyle({
+            left: '100px',
+            top: '140px',
         })
+        expect(toolbar).toHaveAttribute('data-placement', 'above')
     })
 
     it('renders handles and routes all selection actions in select mode', () => {
@@ -131,21 +162,51 @@ describe('MobileTerminalInteractionOverlay', () => {
         expect(toolbar).toBeVisible()
     })
 
-    it('keeps top-edge selection actions centered inside the terminal overlay', () => {
+    it.each([
+        ['left', 20, 8],
+        ['right', 300, 152],
+    ])('clamps a %s-edge selection toolbar within the overlay', (_, anchorX, left) => {
         render(
             <MobileTerminalInteractionOverlay
                 {...baseProps}
                 mode="select"
-                startHandle={{ x: 4, y: 8 }}
-                endHandle={{ x: 44, y: 8 }}
-                toolbarAnchor={{ x: 24, y: 0 }}
+                toolbarAnchor={{ x: anchorX, y: 200 }}
             />,
         )
 
-        expect(screen.getByRole('toolbar', { name: 'Selection actions' })).toHaveStyle({
-            left: '50%',
-            top: '64px',
-        })
+        const toolbar = screen.getByRole('toolbar', { name: 'Selection actions' })
+        expect(toolbar).toHaveStyle({ left: `${left}px`, top: '140px' })
+        expect(toolbar).toHaveAttribute('data-placement', 'above')
+    })
+
+    it('flips a near-top selection toolbar below its anchor', () => {
+        render(
+            <MobileTerminalInteractionOverlay
+                {...baseProps}
+                mode="select"
+                startHandle={{ x: 140, y: 20 }}
+                endHandle={{ x: 180, y: 20 }}
+                toolbarAnchor={{ x: 160, y: 20 }}
+            />,
+        )
+
+        const toolbar = screen.getByRole('toolbar', { name: 'Selection actions' })
+        expect(toolbar).toHaveStyle({ left: '80px', top: '28px' })
+        expect(toolbar).toHaveAttribute('data-placement', 'below')
+    })
+
+    it('keeps a near-bottom selection toolbar above its anchor', () => {
+        render(
+            <MobileTerminalInteractionOverlay
+                {...baseProps}
+                mode="select"
+                toolbarAnchor={{ x: 160, y: 460 }}
+            />,
+        )
+
+        const toolbar = screen.getByRole('toolbar', { name: 'Selection actions' })
+        expect(toolbar).toHaveStyle({ left: '80px', top: '400px' })
+        expect(toolbar).toHaveAttribute('data-placement', 'above')
     })
 
     it('routes selection pointer-down without letting toolbar presses bubble', () => {
@@ -171,6 +232,7 @@ describe('MobileTerminalInteractionOverlay', () => {
                 {...baseProps}
                 mode="select"
                 feedback="copy-error"
+                toolbarAnchor={{ x: 160, y: 200 }}
             />,
         )
 
