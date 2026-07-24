@@ -25,7 +25,12 @@ var mocks: {
         onWarning: ReturnType<typeof vi.fn>
         clearLastError: ReturnType<typeof vi.fn>
     }
-    terminalMounts: Array<{ onMount?: (terminal: unknown) => void; onResize?: (cols: number, rows: number) => void }>
+    terminalMounts: Array<{
+        onMount?: (terminal: unknown) => void
+        onResize?: (cols: number, rows: number) => void
+        mobileInteractionEnabled?: boolean
+        dismissMobileInteraction?: boolean
+    }>
     autoMountTerminal: null | (() => unknown)
     emittedEvents: string[]
 } = {
@@ -45,7 +50,12 @@ vi.mock('@/hooks/useTerminalSocket', () => ({
 }))
 
 vi.mock('@/components/Terminal/TerminalView', () => ({
-    TerminalView: (props: { onMount?: (terminal: unknown) => void; onResize?: (cols: number, rows: number) => void }) => {
+    TerminalView: (props: {
+        onMount?: (terminal: unknown) => void
+        onResize?: (cols: number, rows: number) => void
+        mobileInteractionEnabled?: boolean
+        dismissMobileInteraction?: boolean
+    }) => {
         mocks.terminalMounts.push(props)
         useEffect(() => {
             const terminal = mocks.autoMountTerminal?.()
@@ -202,6 +212,31 @@ describe('SessionTerminalTabs', () => {
         fireEvent.click(screen.getByRole('button', { name: 't2' }))
 
         expect(screen.queryByRole('region', { name: 'More terminal keys' })).not.toBeInTheDocument()
+    })
+
+    it('coordinates mobile terminal interaction with terminal availability and dock tools', () => {
+        mocks.controller = makeController([state('t1')])
+        const rendered = renderTabs()
+
+        expect(mocks.terminalMounts.at(-1)).toMatchObject({
+            mobileInteractionEnabled: true,
+            dismissMobileInteraction: false,
+        })
+
+        fireEvent.click(screen.getByRole('button', { name: 'More' }))
+        expect(mocks.terminalMounts.at(-1)).toMatchObject({
+            mobileInteractionEnabled: true,
+            dismissMobileInteraction: true,
+        })
+
+        rendered.rerender(
+            <SessionTerminalTabs
+                sessionId="session-1"
+                active={false}
+                terminalSupported={true}
+            />,
+        )
+        expect(mocks.terminalMounts.at(-1)?.mobileInteractionEnabled).toBe(false)
     })
 
     it('renders count n/3 from CLI list', () => {

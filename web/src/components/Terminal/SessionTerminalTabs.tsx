@@ -454,6 +454,8 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
                         onMount={handleTerminalMount}
                         onResize={handleResize}
                         compactFontSize={props.compactFontSize}
+                        mobileInteractionEnabled={!quickInputDisabled}
+                        dismissMobileInteraction={activeDockTool !== null}
                         className={controller.terminals.length === 0 ? 'opacity-0' : 'h-full w-full'}
                     />
                 ) : (

@@ -1,11 +1,14 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { CanvasAddon } from '@xterm/addon-canvas'
 import '@xterm/xterm/css/xterm.css'
 import { ensureBuiltinFontLoaded, getFontProvider } from '@/lib/terminalFont'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { getCompactTerminalFontSize, getInitialTerminalFontSize } from '@/hooks/useTerminalFontSize'
+import { MobileTerminalInteractionOverlay } from './MobileTerminalInteractionOverlay'
+import { useMobileTerminalInteraction } from './useMobileTerminalInteraction'
 
 function resolveThemeColors(): { background: string; foreground: string; selectionBackground: string } {
     const styles = getComputedStyle(document.documentElement)
@@ -20,10 +23,22 @@ export function TerminalView(props: {
     onResize?: (cols: number, rows: number) => void
     className?: string
     compactFontSize?: boolean
+    mobileInteractionEnabled?: boolean
+    dismissMobileInteraction?: boolean
 }) {
-    const containerRef = useRef<HTMLDivElement | null>(null)
+    const mobile = useMediaQuery('(max-width: 1023px)')
+    const [terminal, setTerminal] = useState<Terminal | null>(null)
+    const [root, setRoot] = useState<HTMLDivElement | null>(null)
+    const xtermHostRef = useRef<HTMLDivElement | null>(null)
     const onMountRef = useRef(props.onMount)
     const onResizeRef = useRef(props.onResize)
+    const interaction = useMobileTerminalInteraction({
+        terminal,
+        root,
+        mobile,
+        enabled: props.mobileInteractionEnabled ?? true,
+        dismissRequested: props.dismissMobileInteraction ?? false,
+    })
 
     useEffect(() => {
         onMountRef.current = props.onMount
@@ -34,8 +49,8 @@ export function TerminalView(props: {
     }, [props.onResize])
 
     useEffect(() => {
-        const container = containerRef.current
-        if (!container) return
+        const xtermHost = xtermHostRef.current
+        if (!xtermHost) return
 
         const abortController = new AbortController()
 
@@ -64,86 +79,8 @@ export function TerminalView(props: {
         terminal.loadAddon(fitAddon)
         terminal.loadAddon(webLinksAddon)
         terminal.loadAddon(canvasAddon)
-        terminal.open(container)
-
-        const terminalElement = terminal.element
-        let touchIdentifier: number | null = null
-        let touchStartX = 0
-        let touchStartY = 0
-        let touchLastY = 0
-        let touchPixelRemainder = 0
-        let touchScrolling = false
-
-        const resetTouchScroll = () => {
-            touchIdentifier = null
-            touchPixelRemainder = 0
-            touchScrolling = false
-        }
-
-        const handleTouchStart = (event: TouchEvent) => {
-            if (event.touches.length !== 1) {
-                resetTouchScroll()
-                return
-            }
-            const touch = event.touches[0]
-            touchIdentifier = touch.identifier
-            touchStartX = touch.clientX
-            touchStartY = touch.clientY
-            touchLastY = touch.clientY
-            touchPixelRemainder = 0
-            touchScrolling = false
-        }
-
-        const handleTouchMove = (event: TouchEvent) => {
-            if (touchIdentifier === null) {
-                return
-            }
-            const touch = Array.from(event.touches).find((item) => item.identifier === touchIdentifier)
-            if (!touch) {
-                resetTouchScroll()
-                return
-            }
-
-            const totalX = touch.clientX - touchStartX
-            const totalY = touch.clientY - touchStartY
-            if (!touchScrolling) {
-                if (Math.abs(totalY) < 4 || Math.abs(totalX) > Math.abs(totalY)) {
-                    touchLastY = touch.clientY
-                    return
-                }
-                touchScrolling = true
-            }
-
-            event.preventDefault()
-            const screenHeight = terminalElement
-                ?.querySelector<HTMLElement>('.xterm-screen')
-                ?.getBoundingClientRect().height ?? 0
-            const lineHeight = screenHeight > 0 && terminal.rows > 0
-                ? screenHeight / terminal.rows
-                : 16
-            touchPixelRemainder += touchLastY - touch.clientY
-            touchLastY = touch.clientY
-            const lines = Math.trunc(touchPixelRemainder / lineHeight)
-            if (lines !== 0) {
-                terminal.scrollLines(lines)
-                touchPixelRemainder -= lines * lineHeight
-            }
-        }
-
-        terminalElement?.addEventListener('touchstart', handleTouchStart, {
-            passive: true,
-            signal: abortController.signal,
-        })
-        terminalElement?.addEventListener('touchmove', handleTouchMove, {
-            passive: false,
-            signal: abortController.signal,
-        })
-        terminalElement?.addEventListener('touchend', resetTouchScroll, {
-            signal: abortController.signal,
-        })
-        terminalElement?.addEventListener('touchcancel', resetTouchScroll, {
-            signal: abortController.signal,
-        })
+        terminal.open(xtermHost)
+        setTerminal(terminal)
 
         const observer = new ResizeObserver(() => {
             requestAnimationFrame(() => {
@@ -151,7 +88,7 @@ export function TerminalView(props: {
                 onResizeRef.current?.(terminal.cols, terminal.rows)
             })
         })
-        observer.observe(container)
+        observer.observe(xtermHost)
 
         const refreshFont = (forceRemeasure = false) => {
             if (abortController.signal.aborted) return
@@ -191,6 +128,7 @@ export function TerminalView(props: {
             webLinksAddon.dispose()
             canvasAddon.dispose()
             terminal.dispose()
+            setTerminal(null)
         })
 
         requestAnimationFrame(() => {
@@ -204,8 +142,11 @@ export function TerminalView(props: {
 
     return (
         <div
-            ref={containerRef}
-            className={`h-full w-full ${props.className ?? ''}`}
-        />
+            ref={setRoot}
+            className={`relative h-full w-full overflow-hidden ${props.className ?? ''}`}
+        >
+            <div ref={xtermHostRef} className="h-full w-full" />
+            <MobileTerminalInteractionOverlay {...interaction.overlayProps} />
+        </div>
     )
 }
