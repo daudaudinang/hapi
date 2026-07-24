@@ -243,7 +243,8 @@ function SelectionToolbar(props: SelectionToolbarProps) {
 export function MobileTerminalInteractionOverlay(props: MobileTerminalOverlayProps) {
     const { t } = useTranslation()
 
-    if (props.mode === 'idle' || props.mode === 'input') return null
+    const hasInteraction = props.mode === 'choice' || props.mode === 'select'
+    if (!hasInteraction && !props.feedback) return null
 
     return (
         <div
@@ -308,13 +309,22 @@ export function MobileTerminalInteractionOverlay(props: MobileTerminalOverlayPro
                 </div>
             ) : null}
 
-            <span role="status" aria-live="polite" className="sr-only">
-                {props.feedback === 'copied'
-                    ? t('terminal.interaction.copied')
-                    : props.feedback === 'copy-error'
-                        ? t('terminal.interaction.copyFailed')
-                        : ''}
-            </span>
+            {props.feedback ? (
+                <div
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="true"
+                    className={`pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full border px-3 py-1.5 text-sm shadow-lg backdrop-blur ${
+                        props.feedback === 'copy-error'
+                            ? 'border-red-500/40 bg-red-500/15 text-red-700 dark:text-red-300'
+                            : 'border-[var(--app-border)] bg-[var(--app-bg)]/95 text-[var(--app-fg)]'
+                    }`}
+                >
+                    {props.feedback === 'copied'
+                        ? t('terminal.interaction.copied')
+                        : t('terminal.interaction.copyFailed')}
+                </div>
+            ) : null}
         </div>
     )
 }

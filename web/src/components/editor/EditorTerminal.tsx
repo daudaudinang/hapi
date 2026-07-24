@@ -66,6 +66,7 @@ function EditorSessionTerminalBody(props: {
 function EditorTerminalBody(props: {
     api: ApiClient | null
     tab: EditorTab
+    isActive: boolean
     onAddToChat?: (text: string) => void
     onRegisterClose?: (tabId: string, close: (() => void) | null) => void
     compactFontSize?: boolean
@@ -281,6 +282,12 @@ function EditorTerminalBody(props: {
                         onResize={handleResize}
                         className="h-full w-full"
                         compactFontSize={props.compactFontSize}
+                        mobileInteractionEnabled={
+                            props.isActive && !quickInputDisabled
+                        }
+                        dismissMobileInteraction={
+                            activeDockTool !== null || !props.isActive
+                        }
                     />
                 ) : (
                     <div className="flex h-full items-center justify-center rounded border border-[var(--app-border)] text-xs text-[var(--app-hint)]">
@@ -454,6 +461,7 @@ export function EditorTerminal(props: {
                                 <EditorTerminalBody
                                     api={props.api}
                                     tab={tab}
+                                    isActive={isActive}
                                     onAddToChat={props.onAddToChat}
                                     onRegisterClose={handleRegisterClose}
                                     compactFontSize={props.mobileMode}

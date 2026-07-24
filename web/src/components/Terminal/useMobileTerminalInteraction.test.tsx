@@ -24,6 +24,7 @@ type TerminalFixture = {
     emitSelectionChange: () => void
     emitResize: () => void
     dropSelectionPosition: () => void
+    setViewportY: (viewportY: number) => void
     select: ReturnType<typeof vi.fn>
     selectAll: ReturnType<typeof vi.fn>
     clearSelection: ReturnType<typeof vi.fn>
@@ -188,6 +189,9 @@ function createTerminalFixture(
         dropSelectionPosition: () => {
             selectionPosition = undefined
             listeners.selection.forEach((listener) => listener())
+        },
+        setViewportY: (viewportY) => {
+            activeBuffer.viewportY = viewportY
         },
         select,
         selectAll,
@@ -567,6 +571,122 @@ describe('useMobileTerminalInteraction', () => {
         expect(fixture.clearSelection).not.toHaveBeenCalled()
         expect(result.current.overlayProps.mode).toBe('select')
         expect(result.current.overlayProps.feedback).toBe('copy-error')
+    })
+
+    it('keeps copied feedback visible briefly and clears it on a deterministic timeout', async () => {
+        const fixture = createTerminalFixture()
+        const { result } = renderInteraction(fixture)
+        const point = touch(1, 55, 130)
+
+        act(() => {
+            dispatchTouch(fixture.terminalElement, 'touchstart', [point])
+            vi.advanceTimersByTime(450)
+        })
+        await act(async () => result.current.overlayProps.onCopy())
+
+        expect(result.current.overlayProps.mode).toBe('idle')
+        expect(result.current.overlayProps.feedback).toBe('copied')
+
+        act(() => vi.advanceTimersByTime(1_599))
+        expect(result.current.overlayProps.feedback).toBe('copied')
+
+        act(() => vi.advanceTimersByTime(1))
+        expect(result.current.overlayProps.mode).toBe('idle')
+        expect(result.current.overlayProps.feedback).toBeNull()
+    })
+
+    it('cancels copied-feedback cleanup when the interaction lifecycle resets', async () => {
+        const fixture = createTerminalFixture()
+        const { result, rerender, unmount } = renderInteraction(fixture)
+        const point = touch(1, 55, 130)
+
+        act(() => {
+            dispatchTouch(fixture.terminalElement, 'touchstart', [point])
+            vi.advanceTimersByTime(450)
+        })
+        await act(async () => result.current.overlayProps.onCopy())
+        expect(result.current.overlayProps.feedback).toBe('copied')
+        expect(vi.getTimerCount()).toBe(1)
+
+        act(() => rerender({ dismissRequested: false, enabled: false }))
+        expect(result.current.overlayProps.feedback).toBeNull()
+        expect(vi.getTimerCount()).toBe(0)
+
+        unmount()
+        act(() => vi.advanceTimersByTime(1_600))
+        expect(vi.getTimerCount()).toBe(0)
+    })
+
+    it('cancels copied feedback when a new touch action starts', async () => {
+        const fixture = createTerminalFixture()
+        const { result } = renderInteraction(fixture)
+        const point = touch(1, 55, 130)
+
+        act(() => {
+            dispatchTouch(fixture.terminalElement, 'touchstart', [point])
+            vi.advanceTimersByTime(450)
+        })
+        await act(async () => result.current.overlayProps.onCopy())
+        expect(result.current.overlayProps.feedback).toBe('copied')
+
+        act(() => {
+            dispatchTouch(fixture.terminalElement, 'touchstart', [point])
+        })
+        expect(result.current.overlayProps.feedback).toBeNull()
+        expect(vi.getTimerCount()).toBe(1)
+
+        act(() => {
+            dispatchTouch(fixture.terminalElement, 'touchcancel', [], [point])
+        })
+        expect(vi.getTimerCount()).toBe(0)
+    })
+
+    it('clears the copied-feedback timeout on unmount', async () => {
+        const fixture = createTerminalFixture()
+        const { result, unmount } = renderInteraction(fixture)
+        const point = touch(1, 55, 130)
+
+        act(() => {
+            dispatchTouch(fixture.terminalElement, 'touchstart', [point])
+            vi.advanceTimersByTime(450)
+        })
+        await act(async () => result.current.overlayProps.onCopy())
+        expect(vi.getTimerCount()).toBe(1)
+
+        unmount()
+        expect(vi.getTimerCount()).toBe(0)
+    })
+
+    it('keeps select-all actions reachable when both selection ends are offscreen', async () => {
+        const fixture = createTerminalFixture()
+        fixture.setViewportY(15)
+        const { result } = renderInteraction(fixture)
+        const point = touch(1, 55, 130)
+
+        act(() => {
+            dispatchTouch(fixture.terminalElement, 'touchstart', [point])
+            vi.advanceTimersByTime(450)
+            result.current.overlayProps.onSelectAll()
+        })
+
+        expect(result.current.overlayProps.mode).toBe('select')
+        expect(result.current.overlayProps.startHandle).toBeNull()
+        expect(result.current.overlayProps.endHandle).toBeNull()
+        expect(result.current.overlayProps.toolbarAnchor).not.toBeNull()
+
+        act(() => result.current.overlayProps.onCancel())
+        expect(result.current.overlayProps.mode).toBe('idle')
+        expect(fixture.clearSelection).toHaveBeenCalled()
+
+        act(() => {
+            dispatchTouch(fixture.terminalElement, 'touchstart', [point])
+            vi.advanceTimersByTime(450)
+            result.current.overlayProps.onSelectAll()
+        })
+        await act(async () => result.current.overlayProps.onCopy())
+
+        expect(safeCopyToClipboard).toHaveBeenCalledWith('status')
+        expect(result.current.overlayProps.mode).toBe('idle')
     })
 
     it('supports the one-based selection positions declared by xterm typings', () => {

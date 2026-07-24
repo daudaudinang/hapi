@@ -237,6 +237,23 @@ describe('MobileTerminalInteractionOverlay', () => {
         )
 
         expect(screen.getByRole('status')).toHaveTextContent('Could not copy')
+        expect(screen.getByRole('status')).toBeVisible()
         expect(screen.getByRole('button', { name: 'Copy' })).toBeVisible()
+    })
+
+    it('shows copied feedback after selection has returned to idle', () => {
+        render(
+            <MobileTerminalInteractionOverlay
+                {...baseProps}
+                mode="idle"
+                feedback="copied"
+            />,
+        )
+
+        const status = screen.getByRole('status')
+        expect(status).toHaveTextContent('Copied')
+        expect(status).toHaveAttribute('aria-live', 'polite')
+        expect(status).toBeVisible()
+        expect(screen.queryByRole('toolbar')).not.toBeInTheDocument()
     })
 })

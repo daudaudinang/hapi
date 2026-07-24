@@ -9,11 +9,16 @@ var mocks = {
     isRemoteTerminalSupported: vi.fn(),
     onMountTerminal: vi.fn(),
     onResizeTerminal: vi.fn(),
-    terminalViewProps: [] as Array<{ compactFontSize?: boolean }>,
+    terminalViewProps: [] as Array<{
+        compactFontSize?: boolean
+        mobileInteractionEnabled?: boolean
+        dismissMobileInteraction?: boolean
+    }>,
     sessionTabsProps: [] as unknown[],
     disconnectsByTerminalId: new Map<string, ReturnType<typeof vi.fn>>(),
     closesByTerminalId: new Map<string, ReturnType<typeof vi.fn>>(),
-    writesByTerminalId: new Map<string, ReturnType<typeof vi.fn>>()
+    writesByTerminalId: new Map<string, ReturnType<typeof vi.fn>>(),
+    terminalStatusesById: new Map<string, string>(),
 }
 
 vi.mock('@/lib/app-context', () => ({
@@ -65,11 +70,27 @@ vi.mock('@/components/Terminal/SessionTerminalTabs', () => ({
 }))
 
 vi.mock('@/components/Terminal/TerminalView', () => ({
-    TerminalView: (props: { onMount?: (terminal: unknown) => void; onResize?: (cols: number, rows: number) => void; compactFontSize?: boolean }) => {
-        mocks.terminalViewProps.push({ compactFontSize: props.compactFontSize })
+    TerminalView: (props: {
+        onMount?: (terminal: unknown) => void
+        onResize?: (cols: number, rows: number) => void
+        compactFontSize?: boolean
+        mobileInteractionEnabled?: boolean
+        dismissMobileInteraction?: boolean
+    }) => {
+        mocks.terminalViewProps.push({
+            compactFontSize: props.compactFontSize,
+            mobileInteractionEnabled: props.mobileInteractionEnabled,
+            dismissMobileInteraction: props.dismissMobileInteraction,
+        })
         mocks.onMountTerminal(props.onMount)
         mocks.onResizeTerminal(props.onResize)
-        return <div data-testid="terminal-view" />
+        return (
+            <div
+                data-testid="terminal-view"
+                data-mobile-interaction-enabled={String(props.mobileInteractionEnabled)}
+                data-dismiss-mobile-interaction={String(props.dismissMobileInteraction)}
+            />
+        )
     }
 }))
 
@@ -152,6 +173,7 @@ describe('EditorTerminal', () => {
         mocks.disconnectsByTerminalId.clear()
         mocks.closesByTerminalId.clear()
         mocks.writesByTerminalId.clear()
+        mocks.terminalStatusesById.clear()
         mocks.useTerminalSocket.mockImplementation((options: { terminalId: string }) => {
             const disconnect = vi.fn()
             const close = vi.fn()
@@ -160,7 +182,10 @@ describe('EditorTerminal', () => {
             mocks.closesByTerminalId.set(options.terminalId, close)
             mocks.writesByTerminalId.set(options.terminalId, write)
             return {
-            state: { status: 'connected' },
+            state: {
+                status: mocks.terminalStatusesById.get(options.terminalId)
+                    ?? 'connected',
+            },
             connect: vi.fn(),
             write,
             resize: vi.fn(),
@@ -296,6 +321,89 @@ describe('EditorTerminal', () => {
         expect(screen.queryByTestId('session-terminal-tabs')).not.toBeInTheDocument()
         expect(mocks.sessionTabsProps).toHaveLength(0)
         expect(screen.queryByText(/\b[0-9]+\/3\b/)).not.toBeInTheDocument()
+    })
+
+    it('enables mobile interaction only for the active editor terminal body', () => {
+        const machineTabs: EditorTab[] = [
+            { id: 'term-machine-1', type: 'terminal', label: 'Terminal: bash', shell: 'bash', machineId: 'machine-1', cwd: '/repo' },
+            { id: 'term-machine-2', type: 'terminal', label: 'Terminal: zsh', shell: 'zsh', machineId: 'machine-1', cwd: '/repo' },
+        ]
+        const commonProps = {
+            tabs: machineTabs,
+            isCollapsed: false,
+            api: null,
+            onSelectTab: vi.fn(),
+            onCloseTab: vi.fn(),
+            onOpenTerminal: vi.fn(),
+            onToggleCollapsed: vi.fn(),
+        }
+        const { rerender } = render(
+            <EditorTerminal {...commonProps} activeTabId="term-machine-1" />,
+        )
+
+        let terminalViews = screen.getAllByTestId('terminal-view')
+        expect(terminalViews[0]).toHaveAttribute('data-mobile-interaction-enabled', 'true')
+        expect(terminalViews[0]).toHaveAttribute('data-dismiss-mobile-interaction', 'false')
+        expect(terminalViews[1]).toHaveAttribute('data-mobile-interaction-enabled', 'false')
+        expect(terminalViews[1]).toHaveAttribute('data-dismiss-mobile-interaction', 'true')
+
+        rerender(
+            <EditorTerminal {...commonProps} activeTabId="term-machine-2" />,
+        )
+
+        terminalViews = screen.getAllByTestId('terminal-view')
+        expect(terminalViews[0]).toHaveAttribute('data-mobile-interaction-enabled', 'false')
+        expect(terminalViews[0]).toHaveAttribute('data-dismiss-mobile-interaction', 'true')
+        expect(terminalViews[1]).toHaveAttribute('data-mobile-interaction-enabled', 'true')
+        expect(terminalViews[1]).toHaveAttribute('data-dismiss-mobile-interaction', 'false')
+    })
+
+    it('dismisses active terminal interaction when an editor dock tool opens', () => {
+        renderMachineTerminal({ mobileMode: true })
+
+        expect(screen.getByTestId('terminal-view')).toHaveAttribute(
+            'data-dismiss-mobile-interaction',
+            'false',
+        )
+        fireEvent.click(screen.getByRole('button', { name: 'Keys' }))
+
+        expect(screen.getByTestId('terminal-view')).toHaveAttribute(
+            'data-dismiss-mobile-interaction',
+            'true',
+        )
+    })
+
+    it('disables terminal interaction while the editor terminal is disconnected', () => {
+        const props = {
+            mobileMode: true,
+        }
+        mocks.terminalStatusesById.set('term-machine', 'disconnected')
+        const { rerender } = renderMachineTerminal(props)
+
+        expect(screen.getByTestId('terminal-view')).toHaveAttribute(
+            'data-mobile-interaction-enabled',
+            'false',
+        )
+
+        mocks.terminalStatusesById.set('term-machine', 'connected')
+        rerender(
+            <EditorTerminal
+                tabs={[{ id: 'term-machine', type: 'terminal', label: 'Terminal: bash', shell: 'bash', machineId: 'machine-1', cwd: '/repo' }]}
+                activeTabId="term-machine"
+                isCollapsed={false}
+                api={null}
+                onSelectTab={vi.fn()}
+                onCloseTab={vi.fn()}
+                onOpenTerminal={vi.fn()}
+                onToggleCollapsed={vi.fn()}
+                {...props}
+            />,
+        )
+
+        expect(screen.getByTestId('terminal-view')).toHaveAttribute(
+            'data-mobile-interaction-enabled',
+            'true',
+        )
     })
 
     it('keeps a mixed active machine editor terminal on the legacy hook path', () => {

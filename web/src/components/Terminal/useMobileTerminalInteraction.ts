@@ -35,6 +35,7 @@ import {
 const MOVE_THRESHOLD_PX = 6
 const LONG_PRESS_MS = 450
 const EDGE_SCROLL_PX = 28
+const COPIED_FEEDBACK_MS = 1_600
 
 type InteractionMode = 'idle' | 'choice' | 'input' | 'select'
 
@@ -96,8 +97,10 @@ export function useMobileTerminalInteraction(
     const touchPixelRemainderRef = useRef(0)
     const longPressTimerRef = useRef<number | null>(null)
     const choiceBlurTimerRef = useRef<number | null>(null)
+    const feedbackTimerRef = useRef<number | null>(null)
     const seedCellRef = useRef<TerminalCell | null>(null)
     const fallbackChoicePointRef = useRef<{ x: number; y: number } | null>(null)
+    const lastUsableAnchorRef = useRef<{ x: number; y: number } | null>(null)
     const selectionRangeRef = useRef<TerminalCellRange | null>(null)
     const suppressSelectionEventRef = useRef(false)
     const coordinateAdapterRef = useRef(new XtermSelectionCoordinateAdapter())
@@ -131,6 +134,12 @@ export function useMobileTerminalInteraction(
         choiceBlurTimerRef.current = null
     }, [])
 
+    const clearFeedbackTimer = useCallback(() => {
+        if (feedbackTimerRef.current === null) return
+        window.clearTimeout(feedbackTimerRef.current)
+        feedbackTimerRef.current = null
+    }, [])
+
     const cancelTouch = useCallback(() => {
         clearLongPressTimer()
         touchRef.current = null
@@ -140,12 +149,14 @@ export function useMobileTerminalInteraction(
     const cancelTransientWork = useCallback(() => {
         cancelTouch()
         clearChoiceBlurTimer()
+        clearFeedbackTimer()
         selectionLifecycleRef.current.reset()
         coordinateAdapterRef.current.reset()
         seedCellRef.current = null
         fallbackChoicePointRef.current = null
+        lastUsableAnchorRef.current = null
         selectionRangeRef.current = null
-    }, [cancelTouch, clearChoiceBlurTimer])
+    }, [cancelTouch, clearChoiceBlurTimer, clearFeedbackTimer])
 
     const clearTerminalSelection = useCallback((terminal: Terminal) => {
         suppressSelectionEventRef.current = true
@@ -269,7 +280,7 @@ export function useMobileTerminalInteraction(
         const startHandle = cellToRootPoint(range.start)
         const endHandle = cellToRootPoint(range.end)
         const rootRect = rootRef.current?.getBoundingClientRect()
-        const toolbarAnchor = startHandle && endHandle && rootRect
+        const selectionAnchor = startHandle && endHandle && rootRect
             ? {
                 x: clamp(
                     (startHandle.x + endHandle.x) / 2,
@@ -283,6 +294,21 @@ export function useMobileTerminalInteraction(
                 ),
             }
             : startHandle ?? endHandle
+        if (selectionAnchor) {
+            lastUsableAnchorRef.current = selectionAnchor
+        }
+        const fallbackAnchor = rootRect
+            ? lastUsableAnchorRef.current ?? {
+                x: rootRect.width / 2,
+                y: rootRect.height / 2,
+            }
+            : null
+        const toolbarAnchor = fallbackAnchor && rootRect
+            ? {
+                x: clamp(fallbackAnchor.x, 0, rootRect.width),
+                y: clamp(fallbackAnchor.y, 0, rootRect.height),
+            }
+            : null
         updateOverlay({ startHandle, endHandle, toolbarAnchor })
         return true
     }, [cellToRootPoint, resolveTerminalRange, updateOverlay])
@@ -296,9 +322,11 @@ export function useMobileTerminalInteraction(
             column: clamp(buffer.cursorX, 0, Math.max(terminal.cols - 1, 0)),
             row: buffer.baseY + buffer.cursorY,
         })
-        updateOverlay({
-            choiceAnchor: cursorPoint ?? fallbackChoicePointRef.current,
-        })
+        const choiceAnchor = cursorPoint ?? fallbackChoicePointRef.current
+        if (choiceAnchor) {
+            lastUsableAnchorRef.current = choiceAnchor
+        }
+        updateOverlay({ choiceAnchor })
     }, [cellToRootPoint, updateOverlay])
 
     const settleChoiceFocus = useCallback((terminal: Terminal) => {
@@ -346,12 +374,13 @@ export function useMobileTerminalInteraction(
         )
         if (terminal.textarea) terminal.textarea.readOnly = true
         terminal.blur()
+        clearFeedbackTimer()
         updateOverlay({
             ...IDLE_OVERLAY,
             mode: 'select',
         })
         applySelection(wordRangeAt(cells, seedCell))
-    }, [applySelection, updateOverlay])
+    }, [applySelection, clearFeedbackTimer, updateOverlay])
 
     const reset = useCallback(() => {
         const wasInput = overlayRef.current.mode === 'input'
@@ -388,6 +417,10 @@ export function useMobileTerminalInteraction(
     const onCopy = useCallback(async () => {
         const terminal = terminalRef.current
         if (!terminal || !activeRef.current) return
+        clearFeedbackTimer()
+        if (overlayRef.current.feedback) {
+            updateOverlay({ feedback: null })
+        }
         const token = selectionLifecycleRef.current.beginCopy()
         try {
             await safeCopyToClipboard(terminal.getSelection())
@@ -413,16 +446,23 @@ export function useMobileTerminalInteraction(
             feedback: 'copied',
         })
         clearTerminalSelection(terminal)
-    }, [clearTerminalSelection, updateOverlay])
+        feedbackTimerRef.current = window.setTimeout(() => {
+            feedbackTimerRef.current = null
+            if (overlayRef.current.feedback === 'copied') {
+                updateOverlay({ feedback: null })
+            }
+        }, COPIED_FEEDBACK_MS)
+    }, [clearFeedbackTimer, clearTerminalSelection, updateOverlay])
 
     const onSelectAll = useCallback(() => {
         const terminal = terminalRef.current
         if (!terminal || !activeRef.current) return
+        clearFeedbackTimer()
         selectionLifecycleRef.current.selectionMutated()
         updateOverlay({ mode: 'select', feedback: null })
         terminal.selectAll()
         if (overlayRef.current.mode === 'select') syncSelectionOverlay()
-    }, [syncSelectionOverlay, updateOverlay])
+    }, [clearFeedbackTimer, syncSelectionOverlay, updateOverlay])
 
     const edgeDirection = useCallback((clientY: number): -1 | 0 | 1 => {
         const terminal = terminalRef.current
@@ -537,6 +577,10 @@ export function useMobileTerminalInteraction(
                 return
             }
             const touch = event.touches[0]
+            clearFeedbackTimer()
+            if (overlayRef.current.feedback) {
+                updateOverlay({ feedback: null })
+            }
             const seedCell = pointToCell(touch.clientX, touch.clientY)
             if (!seedCell) {
                 cancelTouch()
@@ -558,6 +602,7 @@ export function useMobileTerminalInteraction(
                 touch.clientX,
                 touch.clientY,
             )
+            lastUsableAnchorRef.current = fallbackChoicePointRef.current
             longPressTimerRef.current = window.setTimeout(() => {
                 longPressTimerRef.current = null
                 if (
@@ -711,6 +756,7 @@ export function useMobileTerminalInteraction(
         cancelTransientWork,
         clearLongPressTimer,
         clearTerminalSelection,
+        clearFeedbackTimer,
         clientToRootPoint,
         getMetrics,
         pointToCell,
