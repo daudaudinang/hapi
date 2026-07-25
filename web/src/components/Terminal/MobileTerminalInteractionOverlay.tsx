@@ -3,6 +3,7 @@ import {
     useLayoutEffect,
     useRef,
     useState,
+    type MouseEvent,
     type PointerEvent,
     type PointerEventHandler,
     type ReactNode,
@@ -240,6 +241,46 @@ function SelectionToolbar(props: SelectionToolbarProps) {
     )
 }
 
+function ChoiceAction(props: {
+    children: ReactNode
+    onActivate: () => void
+}) {
+    const pointerArmedRef = useRef(false)
+    const pointerArmedAtRef = useRef(0)
+
+    const handleClick = (event: MouseEvent<HTMLButtonElement>) => {
+        const keyboardActivation = event.detail === 0
+        const pointerAge = event.timeStamp - pointerArmedAtRef.current
+        const freshPointerActivation = pointerArmedRef.current
+            && pointerAge >= 0
+            && pointerAge <= 1_000
+        if (!keyboardActivation && !freshPointerActivation) {
+            event.preventDefault()
+            event.stopPropagation()
+            return
+        }
+        pointerArmedRef.current = false
+        props.onActivate()
+    }
+
+    return (
+        <button
+            type="button"
+            className="min-h-[44px] min-w-[44px] px-4 text-sm font-medium"
+            onPointerDown={(event) => {
+                pointerArmedRef.current = true
+                pointerArmedAtRef.current = event.timeStamp
+            }}
+            onPointerCancel={() => {
+                pointerArmedRef.current = false
+            }}
+            onClick={handleClick}
+        >
+            {props.children}
+        </button>
+    )
+}
+
 export function MobileTerminalInteractionOverlay(props: MobileTerminalOverlayProps) {
     const { t } = useTranslation()
 
@@ -258,21 +299,13 @@ export function MobileTerminalInteractionOverlay(props: MobileTerminalOverlayPro
                     label={t('terminal.interaction.choice')}
                     className="pointer-events-auto absolute flex overflow-hidden rounded-full border border-[var(--app-border)] bg-[var(--app-bg)]/95 p-1 shadow-xl backdrop-blur"
                 >
-                    <button
-                        type="button"
-                        className="min-h-[44px] min-w-[44px] px-4 text-sm font-medium"
-                        onClick={props.onInput}
-                    >
+                    <ChoiceAction onActivate={props.onInput}>
                         {t('terminal.interaction.input')}
-                    </button>
+                    </ChoiceAction>
                     <span aria-hidden="true" className="my-2 w-px bg-[var(--app-border)]" />
-                    <button
-                        type="button"
-                        className="min-h-[44px] min-w-[44px] px-4 text-sm font-medium"
-                        onClick={props.onSelect}
-                    >
+                    <ChoiceAction onActivate={props.onSelect}>
                         {t('terminal.interaction.select')}
-                    </button>
+                    </ChoiceAction>
                 </PositionedToolbar>
             ) : null}
 

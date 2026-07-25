@@ -97,6 +97,66 @@ describe('MobileTerminalInteractionOverlay', () => {
         expect(baseProps.onSelect).toHaveBeenCalledOnce()
     })
 
+    it('ignores a delayed compatibility click until a fresh pointer gesture arms the action', () => {
+        render(
+            <MobileTerminalInteractionOverlay
+                {...baseProps}
+                mode="choice"
+                choiceAnchor={{ x: 120, y: 80 }}
+            />,
+        )
+
+        const inputAction = screen.getByRole('button', { name: 'Input' })
+        fireEvent(
+            inputAction,
+            new MouseEvent('click', {
+                bubbles: true,
+                cancelable: true,
+                detail: 1,
+            }),
+        )
+        expect(baseProps.onInput).not.toHaveBeenCalled()
+
+        fireEvent.pointerDown(inputAction, {
+            pointerId: 2,
+            pointerType: 'touch',
+        })
+        fireEvent(
+            inputAction,
+            new MouseEvent('click', {
+                bubbles: true,
+                cancelable: true,
+                detail: 1,
+            }),
+        )
+        expect(baseProps.onInput).toHaveBeenCalledOnce()
+
+        const selectAction = screen.getByRole('button', { name: 'Select' })
+        fireEvent(
+            selectAction,
+            new MouseEvent('click', {
+                bubbles: true,
+                cancelable: true,
+                detail: 1,
+            }),
+        )
+        expect(baseProps.onSelect).not.toHaveBeenCalled()
+
+        fireEvent.pointerDown(selectAction, {
+            pointerId: 3,
+            pointerType: 'touch',
+        })
+        fireEvent(
+            selectAction,
+            new MouseEvent('click', {
+                bubbles: true,
+                cancelable: true,
+                detail: 1,
+            }),
+        )
+        expect(baseProps.onSelect).toHaveBeenCalledOnce()
+    })
+
     it('preserves a valid centered selection anchor', () => {
         render(
             <MobileTerminalInteractionOverlay

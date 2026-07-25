@@ -144,7 +144,11 @@ function createTerminalFixture(
         viewportY: 30,
         length: 40,
         getLine: (row: number) => {
-            const text = row === 35 ? 'git status --short' : ''
+            const text = row === 35
+                ? 'git status --short'
+                : row === 12
+                    ? 'old command output'
+                    : ''
             return {
                 getCell: (column: number) => ({
                     getChars: () => text[column] ?? '',
@@ -534,6 +538,56 @@ describe('useMobileTerminalInteraction', () => {
         expect(result.current.overlayProps.mode).toBe('select')
         expect(fixture.scrollLines).not.toHaveBeenCalled()
         expect(fixture.textarea.readOnly).toBe(true)
+    })
+
+    it('keeps historical-output selection usable after touch cancel and recovers the choice bubble', async () => {
+        const fixture = createTerminalFixture()
+        fixture.setViewportY(10)
+        const { result } = renderInteraction(fixture)
+        const oldOutputPoint = touch(1, 35, 70)
+
+        act(() => {
+            dispatchTouch(
+                fixture.terminalElement,
+                'touchstart',
+                [oldOutputPoint],
+            )
+            vi.advanceTimersByTime(450)
+        })
+
+        expect(fixture.select).toHaveBeenCalledWith(0, 12, 3)
+        expect(result.current.overlayProps.mode).toBe('select')
+        fixture.clearSelection.mockClear()
+
+        act(() => {
+            dispatchTouch(
+                fixture.terminalElement,
+                'touchcancel',
+                [],
+                [oldOutputPoint],
+            )
+        })
+
+        expect(result.current.overlayProps.mode).toBe('select')
+        expect(result.current.overlayProps.toolbarAnchor).not.toBeNull()
+        expect(fixture.clearSelection).not.toHaveBeenCalled()
+
+        await act(async () => result.current.overlayProps.onCopy())
+        expect(safeCopyToClipboard).toHaveBeenCalledWith('status')
+
+        const inputPoint = touch(2, 55, 130)
+        act(() => {
+            dispatchTouch(fixture.terminalElement, 'touchstart', [inputPoint])
+            dispatchTouch(
+                fixture.terminalElement,
+                'touchend',
+                [],
+                [inputPoint],
+            )
+            vi.advanceTimersToNextTimer()
+        })
+
+        expect(result.current.overlayProps.mode).toBe('choice')
     })
 
     it('makes textarea writable and focuses only when Input is chosen', () => {

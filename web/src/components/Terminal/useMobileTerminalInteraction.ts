@@ -737,6 +737,11 @@ export function useMobileTerminalInteraction(
             if (event.cancelable) {
                 event.preventDefault()
             }
+            const session = touchRef.current
+            if (session?.longPressed && overlayRef.current.mode === 'select') {
+                cancelTouch()
+                return
+            }
             reset()
         }
         const handleBlur = () => {
