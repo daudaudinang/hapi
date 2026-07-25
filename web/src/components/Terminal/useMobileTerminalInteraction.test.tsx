@@ -310,6 +310,22 @@ function deferred<T = void>() {
     return { promise, resolve, reject }
 }
 
+function installVisualViewport(initialHeight: number) {
+    let height = initialHeight
+    const viewport = new EventTarget()
+    Object.defineProperty(viewport, 'height', {
+        configurable: true,
+        get: () => height,
+    })
+    vi.stubGlobal('visualViewport', viewport)
+    return {
+        setHeight(nextHeight: number) {
+            height = nextHeight
+            viewport.dispatchEvent(new Event('resize'))
+        },
+    }
+}
+
 beforeEach(() => {
     vi.useFakeTimers()
     safeCopyToClipboard.mockReset()
@@ -319,6 +335,7 @@ beforeEach(() => {
 afterEach(() => {
     vi.runOnlyPendingTimers()
     vi.useRealTimers()
+    vi.unstubAllGlobals()
     document.body.replaceChildren()
 })
 
@@ -708,6 +725,46 @@ describe('useMobileTerminalInteraction', () => {
         expect(result.current.overlayProps.mode).toBe('input')
         expect(fixture.textarea.readOnly).toBe(false)
         expect(fixture.scrollLines).not.toHaveBeenCalled()
+    })
+
+    it('leaves input mode when the observed soft keyboard viewport closes', () => {
+        const viewport = installVisualViewport(700)
+        const fixture = createTerminalFixture()
+        const { result } = renderInteraction(fixture)
+        const point = touch(1, 55, 130)
+
+        act(() => {
+            dispatchTouch(fixture.terminalElement, 'touchstart', [point])
+            dispatchTouch(fixture.terminalElement, 'touchend', [], [point])
+            vi.advanceTimersToNextTimer()
+            result.current.overlayProps.onInput()
+        })
+        expect(result.current.overlayProps.mode).toBe('input')
+        expect(fixture.textarea.readOnly).toBe(false)
+
+        act(() => viewport.setHeight(380))
+        expect(result.current.overlayProps.mode).toBe('input')
+        expect(fixture.textarea.readOnly).toBe(false)
+
+        act(() => viewport.setHeight(700))
+        expect(result.current.overlayProps.mode).toBe('idle')
+        expect(fixture.textarea.readOnly).toBe(true)
+        expect(document.activeElement).not.toBe(fixture.textarea)
+
+        const nextPoint = touch(2, 55, 130)
+        act(() => {
+            dispatchTouch(fixture.terminalElement, 'touchstart', [nextPoint])
+            dispatchTouch(
+                fixture.terminalElement,
+                'touchend',
+                [],
+                [nextPoint],
+            )
+            vi.advanceTimersToNextTimer()
+        })
+
+        expect(result.current.overlayProps.mode).toBe('choice')
+        expect(fixture.textarea.readOnly).toBe(true)
     })
 
     it('resets on a non-cancelable touchcancel without trying to prevent it', () => {

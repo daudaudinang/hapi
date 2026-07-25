@@ -36,6 +36,8 @@ const MOVE_THRESHOLD_PX = 6
 const LONG_PRESS_MS = 450
 const EDGE_SCROLL_PX = 28
 const COPIED_FEEDBACK_MS = 1_600
+const SOFT_KEYBOARD_MIN_DELTA_PX = 80
+const SOFT_KEYBOARD_CLOSE_TOLERANCE_PX = 32
 
 type InteractionMode = 'idle' | 'choice' | 'input' | 'select'
 
@@ -46,6 +48,11 @@ type TouchSession = {
     seedCell: TerminalCell
     scrolling: boolean
     longPressed: boolean
+}
+
+type InputViewportSession = {
+    closedHeight: number
+    keyboardObserved: boolean
 }
 
 export type UseMobileTerminalInteractionOptions = {
@@ -83,6 +90,10 @@ function clamp(value: number, minimum: number, maximum: number): number {
     return Math.min(Math.max(value, minimum), maximum)
 }
 
+function viewportHeight(): number {
+    return window.visualViewport?.height ?? window.innerHeight
+}
+
 export function useMobileTerminalInteraction(
     options: UseMobileTerminalInteractionOptions,
 ): MobileTerminalInteraction {
@@ -103,6 +114,7 @@ export function useMobileTerminalInteraction(
     const fallbackChoicePointRef = useRef<{ x: number; y: number } | null>(null)
     const lastUsableAnchorRef = useRef<{ x: number; y: number } | null>(null)
     const selectionRangeRef = useRef<TerminalCellRange | null>(null)
+    const inputViewportRef = useRef<InputViewportSession | null>(null)
     const suppressSelectionEventRef = useRef(false)
     const coordinateAdapterRef = useRef(new XtermSelectionCoordinateAdapter())
     const selectionLifecycleRef = useRef(new MobileTerminalSelectionLifecycle())
@@ -164,6 +176,7 @@ export function useMobileTerminalInteraction(
         fallbackChoicePointRef.current = null
         lastUsableAnchorRef.current = null
         selectionRangeRef.current = null
+        inputViewportRef.current = null
     }, [
         cancelTouch,
         clearChoiceBlurTimer,
@@ -445,6 +458,10 @@ export function useMobileTerminalInteraction(
         cancelTouch()
         clearChoiceRevealTimer()
         clearChoiceBlurTimer()
+        inputViewportRef.current = {
+            closedHeight: viewportHeight(),
+            keyboardObserved: false,
+        }
         terminal.textarea.readOnly = false
         updateOverlay({
             ...IDLE_OVERLAY,
@@ -747,8 +764,26 @@ export function useMobileTerminalInteraction(
         const handleBlur = () => {
             if (terminal.textarea) terminal.textarea.readOnly = true
             if (overlayRef.current.mode === 'input') {
+                inputViewportRef.current = null
                 updateOverlay(IDLE_OVERLAY)
             }
+        }
+        const reconcileInputViewport = (): boolean => {
+            if (overlayRef.current.mode !== 'input') return false
+            const session = inputViewportRef.current
+            if (!session) return true
+            const keyboardDelta = session.closedHeight - viewportHeight()
+            if (keyboardDelta >= SOFT_KEYBOARD_MIN_DELTA_PX) {
+                session.keyboardObserved = true
+                return true
+            }
+            if (
+                session.keyboardObserved
+                && keyboardDelta <= SOFT_KEYBOARD_CLOSE_TOLERANCE_PX
+            ) {
+                reset()
+            }
+            return true
         }
         const refreshOverlay = () => {
             syncChoiceAnchor()
@@ -760,6 +795,7 @@ export function useMobileTerminalInteraction(
             syncSelectionOverlay()
         }
         const handleEnvironmentChange = () => {
+            if (reconcileInputViewport()) return
             cancelTouch()
             selectionLifecycleRef.current.cancelPointer()
             refreshOverlay()
@@ -778,6 +814,10 @@ export function useMobileTerminalInteraction(
             passive: false,
         })
         textarea?.addEventListener('blur', handleBlur)
+        window.visualViewport?.addEventListener(
+            'resize',
+            handleEnvironmentChange,
+        )
         window.addEventListener('resize', handleEnvironmentChange)
         window.addEventListener('orientationchange', handleEnvironmentChange)
         const cursorDisposable = terminal.onCursorMove(refreshOverlay)
@@ -794,6 +834,10 @@ export function useMobileTerminalInteraction(
             terminalElement.removeEventListener('touchend', handleTouchEnd)
             terminalElement.removeEventListener('touchcancel', handleTouchCancel)
             textarea?.removeEventListener('blur', handleBlur)
+            window.visualViewport?.removeEventListener(
+                'resize',
+                handleEnvironmentChange,
+            )
             window.removeEventListener('resize', handleEnvironmentChange)
             window.removeEventListener('orientationchange', handleEnvironmentChange)
             cursorDisposable.dispose()
