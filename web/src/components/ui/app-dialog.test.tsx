@@ -56,6 +56,19 @@ describe('AppDialog', () => {
         expect(document.querySelector('[data-app-dialog-footer]')).not.toBeInTheDocument()
     })
 
+    it('suppresses the native outline when focus falls back to the dialog frame', () => {
+        render(
+            <AppDialog open>
+                <AppDialogContent data-testid="content">
+                    <AppDialogHeader title="Terminal" />
+                    <AppDialogBody>Body</AppDialogBody>
+                </AppDialogContent>
+            </AppDialog>
+        )
+
+        expect(screen.getByTestId('content')).toHaveClass('outline-none')
+    })
+
     it('lets non-dismissible feature dialogs keep their existing Escape behavior', () => {
         function Harness() {
             const [open, setOpen] = useState(true)
