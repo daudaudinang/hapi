@@ -218,6 +218,7 @@ export function HappyComposer(props: {
     const [showSettings, setShowSettings] = useState(false)
     const [isAborting, setIsAborting] = useState(false)
     const [isSwitching, setIsSwitching] = useState(false)
+    const [isRuntimeChanging, setIsRuntimeChanging] = useState(false)
     const [showContinueHint, setShowContinueHint] = useState(false)
     const [composerMultiline, setComposerMultiline] = useState(false)
     const [compactSendLifecycle, setCompactSendLifecycle] = useState<CompactSendLifecycle>({ phase: 'idle' })
@@ -230,6 +231,8 @@ export function HappyComposer(props: {
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const prevControlledByUser = useRef(controlledByUser)
     const composerTextRef = useRef(composerText)
+    const isSwitchingRef = useRef(false)
+    const runtimePendingRef = useRef(false)
 
     useEffect(() => {
         composerTextRef.current = composerText
@@ -415,7 +418,7 @@ export function HappyComposer(props: {
     const abortDisabled = (compactComposerMode ? sessionControlsDisabled : controlsDisabled)
         || isAborting
         || !threadIsRunning
-    const switchDisabled = controlsDisabled || isSwitching || !controlledByUser
+    const switchDisabled = controlsDisabled || isSwitching || isRuntimeChanging || !controlledByUser
     const showSwitchButton = Boolean(controlledByUser && onSwitchToRemote)
     const showTerminalButton = Boolean(onTerminal || terminalUnsupported)
     const terminalDisabled = controlsDisabled || terminalUnsupported
@@ -430,6 +433,7 @@ export function HappyComposer(props: {
     useEffect(() => {
         if (!isSwitching) return
         if (controlledByUser) return
+        isSwitchingRef.current = false
         setIsSwitching(false)
     }, [isSwitching, controlledByUser])
 
@@ -441,15 +445,24 @@ export function HappyComposer(props: {
     }, [abortDisabled, api, haptic])
 
     const handleSwitch = useCallback(async () => {
-        if (switchDisabled || !onSwitchToRemote) return
+        if (switchDisabled || isSwitchingRef.current || runtimePendingRef.current || !onSwitchToRemote) return
+        isSwitchingRef.current = true
         haptic('light')
         setIsSwitching(true)
         try {
             await onSwitchToRemote()
         } catch {
+            isSwitchingRef.current = false
             setIsSwitching(false)
         }
     }, [switchDisabled, onSwitchToRemote, haptic])
+
+    const handleRuntimePendingChange = useCallback((nextPending: boolean) => {
+        runtimePendingRef.current = nextPending
+        setIsRuntimeChanging(nextPending)
+    }, [])
+
+    const isRuntimeChangeBlocked = useCallback(() => isSwitchingRef.current, [])
 
     const permissionModeOptions = useMemo(
         () => getPermissionModeOptionsForFlavor(agentFlavor),
@@ -816,7 +829,7 @@ export function HappyComposer(props: {
             voiceStatus={voiceStatus}
             compactControls={compactComposerMode ? (
                 <CompactRuntimeControls
-                    disabled={controlsDisabled}
+                    disabled={controlsDisabled || isSwitching}
                     model={model}
                     modelOptions={showModelSettings ? modelOptions : []}
                     effort={compactEffort}
@@ -831,8 +844,10 @@ export function HappyComposer(props: {
                     onPermissionModeChange={showPermissionSettings ? handlePermissionChange : undefined}
                     onCollaborationModeChange={showCollaborationSettings ? handleCollaborationChange : undefined}
                     onCompactRuntimeChange={onCompactRuntimeChange}
+                    onPendingChange={handleRuntimePendingChange}
+                    changeBlocked={isRuntimeChangeBlocked}
                     onSwitchToRemote={showSwitchButton ? handleSwitch : undefined}
-                    switchDisabled={switchDisabled}
+                    switchDisabled={switchDisabled || isRuntimeChanging}
                     isSwitching={isSwitching}
                 />
             ) : undefined}

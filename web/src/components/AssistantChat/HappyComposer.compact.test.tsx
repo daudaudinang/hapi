@@ -359,6 +359,83 @@ describe('HappyComposer compact Agent mode', () => {
         await waitFor(() => expect(switchButton).toBeEnabled())
     })
 
+    it('prevents switching to remote while a runtime change is pending', async () => {
+        let rejectRuntime: ((reason?: unknown) => void) | undefined
+        const onSwitchToRemote = vi.fn()
+        const onCompactRuntimeChange = vi.fn(() => new Promise<void>((_resolve, reject) => {
+            rejectRuntime = reject
+        }))
+
+        render(
+            <HappyComposer
+                compactComposerMode
+                controlledByUser
+                agentFlavor="claude"
+                model={null}
+                availableModelOptions={[
+                    { value: null, label: 'Default' },
+                    { value: 'model-a', label: 'Model A' }
+                ]}
+                onModelChange={vi.fn()}
+                onCompactRuntimeChange={onCompactRuntimeChange}
+                onSwitchToRemote={onSwitchToRemote}
+            />
+        )
+
+        const model = screen.getByLabelText('misc.model')
+        const modelA = screen.getByRole('option', { name: 'Model A' }) as HTMLOptionElement
+        const switchButton = screen.getByRole('button', { name: 'composer.switchRemote' })
+        fireEvent.change(model, { target: { value: modelA.value } })
+
+        expect(switchButton).toBeDisabled()
+        fireEvent.click(switchButton)
+        expect(onSwitchToRemote).not.toHaveBeenCalled()
+
+        await act(async () => {
+            rejectRuntime?.(new Error('runtime failed'))
+            await Promise.resolve()
+        })
+        await waitFor(() => expect(switchButton).toBeEnabled())
+    })
+
+    it('blocks runtime changes synchronously while switching to remote', async () => {
+        let rejectSwitch: ((reason?: unknown) => void) | undefined
+        const onSwitchToRemote = vi.fn(() => new Promise<void>((_resolve, reject) => {
+            rejectSwitch = reject
+        }))
+        const onCompactRuntimeChange = vi.fn(() => Promise.resolve())
+
+        render(
+            <HappyComposer
+                compactComposerMode
+                controlledByUser
+                agentFlavor="claude"
+                model={null}
+                availableModelOptions={[
+                    { value: null, label: 'Default' },
+                    { value: 'model-a', label: 'Model A' }
+                ]}
+                onModelChange={vi.fn()}
+                onCompactRuntimeChange={onCompactRuntimeChange}
+                onSwitchToRemote={onSwitchToRemote}
+            />
+        )
+
+        const model = screen.getByLabelText('misc.model')
+        const modelA = screen.getByRole('option', { name: 'Model A' }) as HTMLOptionElement
+        fireEvent.click(screen.getByRole('button', { name: 'composer.switchRemote' }))
+
+        expect(model).toBeDisabled()
+        fireEvent.change(model, { target: { value: modelA.value } })
+        expect(onCompactRuntimeChange).not.toHaveBeenCalled()
+
+        await act(async () => {
+            rejectSwitch?.(new Error('switch failed'))
+            await Promise.resolve()
+        })
+        await waitFor(() => expect(model).toBeEnabled())
+    })
+
     it('updates adaptive radius for explicit newlines, wrapping, resize, and observer cleanup', async () => {
         let resizeCallback: ResizeObserverCallback | undefined
         const disconnect = vi.fn()

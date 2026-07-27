@@ -14,7 +14,15 @@ vi.mock('@/lib/use-translation', () => ({
 
 afterEach(() => {
     cleanup()
+    vi.useRealTimers()
 })
+
+function optionValue(select: HTMLElement, label: string): string {
+    const option = Array.from((select as HTMLSelectElement).options)
+        .find((candidate) => candidate.textContent === label)
+    if (!option) throw new Error(`Missing option: ${label}`)
+    return option.value
+}
 
 describe('CompactComposerActionButton', () => {
     it('shows a neutral disabled send action without content', () => {
@@ -111,14 +119,14 @@ describe('CompactRuntimeControls', () => {
 
         const model = screen.getByLabelText('misc.model')
         const effort = screen.getByLabelText('misc.reasoningEffort')
-        const mode = screen.getByLabelText('misc.permissionMode')
-        fireEvent.change(model, { target: { value: 'model-a' } })
+        const mode = screen.getByLabelText('misc.sessionMode')
+        fireEvent.change(model, { target: { value: optionValue(model, 'Model A') } })
         await waitFor(() => expect(model).toBeEnabled())
-        fireEvent.change(effort, { target: { value: 'high' } })
+        fireEvent.change(effort, { target: { value: optionValue(effort, 'High') } })
         await waitFor(() => expect(effort).toBeEnabled())
         fireEvent.change(mode, { target: { value: 'collaboration:plan' } })
         await waitFor(() => expect(mode).toBeEnabled())
-        fireEvent.change(model, { target: { value: '__hapi_default__' } })
+        fireEvent.change(model, { target: { value: optionValue(model, 'Auto') } })
         await waitFor(() => expect(model).toBeEnabled())
 
         expect(onModelChange).toHaveBeenNthCalledWith(1, 'model-a')
@@ -144,8 +152,35 @@ describe('CompactRuntimeControls', () => {
         )
 
         const model = screen.getByLabelText('misc.model') as HTMLSelectElement
-        expect(model.value).toBe('__hapi_default__')
         expect(model.selectedOptions[0]?.textContent).toBe('Default')
+    })
+
+    it('round-trips a provider value that matches the old null sentinel', async () => {
+        const onModelChange = vi.fn()
+        render(
+            <CompactRuntimeControls
+                disabled={false}
+                model={null}
+                modelOptions={[
+                    { value: null, label: 'Default' },
+                    { value: '__hapi_default__', label: 'Literal sentinel model' }
+                ]}
+                effort={null}
+                effortLabel="misc.reasoningEffort"
+                effortOptions={[]}
+                permissionMode="default"
+                permissionModeOptions={[]}
+                onModelChange={onModelChange}
+            />
+        )
+
+        const model = screen.getByLabelText('misc.model') as HTMLSelectElement
+        const literalOption = screen.getByRole('option', { name: 'Literal sentinel model' }) as HTMLOptionElement
+        expect(literalOption.value).not.toBe('__hapi_default__')
+
+        fireEvent.change(model, { target: { value: literalOption.value } })
+        await waitFor(() => expect(model).toBeEnabled())
+        expect(onModelChange).toHaveBeenCalledWith('__hapi_default__')
     })
 
     it('shows an unmatched active Plan as read-only when collaboration cannot be changed', () => {
@@ -171,7 +206,7 @@ describe('CompactRuntimeControls', () => {
             />
         )
 
-        const mode = screen.getByLabelText('misc.permissionMode') as HTMLSelectElement
+        const mode = screen.getByLabelText('misc.sessionMode') as HTMLSelectElement
         expect(mode).toBeDisabled()
         expect(mode.value).toBe('collaboration:plan')
         expect(mode.selectedOptions[0]?.textContent).toBe('Plan')
@@ -208,6 +243,43 @@ describe('CompactRuntimeControls', () => {
         ])
     })
 
+    it('rejects malformed and unrendered mode values without dispatching', () => {
+        const onPermissionModeChange = vi.fn()
+        const onCollaborationModeChange = vi.fn()
+        render(
+            <CompactRuntimeControls
+                disabled={false}
+                model={null}
+                modelOptions={[]}
+                effort={null}
+                effortLabel="misc.reasoningEffort"
+                effortOptions={[]}
+                permissionMode="default"
+                permissionModeOptions={[
+                    { mode: 'default', label: 'Default' },
+                    { mode: 'yolo', label: 'Yolo' }
+                ]}
+                collaborationMode="default"
+                collaborationModeOptions={[
+                    { mode: 'default', label: 'Default' },
+                    { mode: 'plan', label: 'Plan' }
+                ]}
+                onPermissionModeChange={onPermissionModeChange}
+                onCollaborationModeChange={onCollaborationModeChange}
+            />
+        )
+
+        const mode = screen.getByLabelText('misc.sessionMode') as HTMLSelectElement
+        const rogue = document.createElement('option')
+        rogue.value = 'permission:not-rendered'
+        rogue.textContent = 'Rogue'
+        mode.append(rogue)
+        fireEvent.change(mode, { target: { value: rogue.value } })
+
+        expect(onPermissionModeChange).not.toHaveBeenCalled()
+        expect(onCollaborationModeChange).not.toHaveBeenCalled()
+    })
+
     it('renders a collaboration-only selector with only the valid current permission state', () => {
         const onCollaborationModeChange = vi.fn()
 
@@ -233,7 +305,7 @@ describe('CompactRuntimeControls', () => {
             />
         )
 
-        const mode = screen.getByLabelText('misc.permissionMode')
+        const mode = screen.getByLabelText('misc.sessionMode')
         expect(mode).toBeEnabled()
         expect(screen.getByRole('option', { name: 'Default' })).toBeInTheDocument()
         expect(screen.queryByRole('option', { name: 'Yolo' })).not.toBeInTheDocument()
@@ -273,7 +345,7 @@ describe('CompactRuntimeControls', () => {
             />
         )
 
-        fireEvent.change(screen.getByLabelText('misc.permissionMode'), { target: { value: 'permission:yolo' } })
+        fireEvent.change(screen.getByLabelText('misc.sessionMode'), { target: { value: 'permission:yolo' } })
 
         expect(onCollaborationModeChange).toHaveBeenCalledWith('default')
         expect(onPermissionModeChange).not.toHaveBeenCalled()
@@ -313,7 +385,7 @@ describe('CompactRuntimeControls', () => {
             />
         )
 
-        const mode = screen.getByLabelText('misc.permissionMode') as HTMLSelectElement
+        const mode = screen.getByLabelText('misc.sessionMode') as HTMLSelectElement
         fireEvent.change(mode, { target: { value: 'permission:yolo' } })
 
         await waitFor(() => expect(mode).toBeEnabled())
@@ -351,12 +423,12 @@ describe('CompactRuntimeControls', () => {
 
         const model = screen.getByLabelText('misc.model') as HTMLSelectElement
         const effort = screen.getByLabelText('misc.reasoningEffort') as HTMLSelectElement
-        fireEvent.change(model, { target: { value: 'model-a' } })
-        fireEvent.change(effort, { target: { value: 'high' } })
+        fireEvent.change(model, { target: { value: optionValue(model, 'Model A') } })
+        fireEvent.change(effort, { target: { value: optionValue(effort, 'High') } })
 
         expect(model).toBeDisabled()
         expect(effort).toBeDisabled()
-        expect(model.value).toBe('model-a')
+        expect(model.selectedOptions[0]?.textContent).toBe('Model A')
         expect(onModelChange).toHaveBeenCalledTimes(1)
         expect(onEffortChange).not.toHaveBeenCalled()
 
@@ -366,7 +438,7 @@ describe('CompactRuntimeControls', () => {
         })
 
         await waitFor(() => expect(model).toBeEnabled())
-        expect(model.value).toBe('__hapi_default__')
+        expect(model.selectedOptions[0]?.textContent).toBe('Auto')
 
         view.rerender(
             <CompactRuntimeControls
@@ -389,9 +461,9 @@ describe('CompactRuntimeControls', () => {
             />
         )
 
-        fireEvent.change(model, { target: { value: 'model-a' } })
+        fireEvent.change(model, { target: { value: optionValue(model, 'Model A') } })
         await waitFor(() => expect(model).toBeEnabled())
-        expect(model.value).toBe('model-a')
+        expect(model.selectedOptions[0]?.textContent).toBe('Model A')
     })
 
     it('keeps an optimistic permission visible through an intermediate refresh', async () => {
@@ -426,7 +498,7 @@ describe('CompactRuntimeControls', () => {
             />
         )
 
-        const mode = screen.getByLabelText('misc.permissionMode') as HTMLSelectElement
+        const mode = screen.getByLabelText('misc.sessionMode') as HTMLSelectElement
         fireEvent.change(mode, { target: { value: 'permission:yolo' } })
         view.rerender(
             <CompactRuntimeControls
@@ -446,6 +518,124 @@ describe('CompactRuntimeControls', () => {
 
         await waitFor(() => expect(mode).toBeEnabled())
         expect(mode.value).toBe('permission:default')
+    })
+
+    it('keeps settled optimistic values independently across controls', async () => {
+        const view = render(
+            <CompactRuntimeControls
+                disabled={false}
+                model={null}
+                modelOptions={[
+                    { value: null, label: 'Default' },
+                    { value: 'model-a', label: 'Model A' }
+                ]}
+                effort={null}
+                effortLabel="misc.reasoningEffort"
+                effortOptions={[
+                    { value: null, label: 'Default' },
+                    { value: 'high', label: 'High' }
+                ]}
+                permissionMode="default"
+                permissionModeOptions={[]}
+                onModelChange={() => Promise.resolve()}
+                onEffortChange={() => Promise.resolve()}
+            />
+        )
+        const model = screen.getByLabelText('misc.model') as HTMLSelectElement
+        const effort = screen.getByLabelText('misc.reasoningEffort') as HTMLSelectElement
+
+        fireEvent.change(model, { target: { value: optionValue(model, 'Model A') } })
+        await waitFor(() => expect(model).toBeEnabled())
+        fireEvent.change(effort, { target: { value: optionValue(effort, 'High') } })
+        await waitFor(() => expect(effort).toBeEnabled())
+
+        expect(model.selectedOptions[0]?.textContent).toBe('Model A')
+        expect(effort.selectedOptions[0]?.textContent).toBe('High')
+
+        view.rerender(
+            <CompactRuntimeControls
+                disabled={false}
+                model="model-b"
+                modelOptions={[
+                    { value: null, label: 'Default' },
+                    { value: 'model-a', label: 'Model A' },
+                    { value: 'model-b', label: 'Model B' }
+                ]}
+                effort={null}
+                effortLabel="misc.reasoningEffort"
+                effortOptions={[
+                    { value: null, label: 'Default' },
+                    { value: 'high', label: 'High' }
+                ]}
+                permissionMode="default"
+                permissionModeOptions={[]}
+                onModelChange={() => Promise.resolve()}
+                onEffortChange={() => Promise.resolve()}
+            />
+        )
+
+        await waitFor(() => expect(model.selectedOptions[0]?.textContent).toBe('Model B'))
+        expect(effort.selectedOptions[0]?.textContent).toBe('High')
+    })
+
+    it('expires settled optimistic values when no authoritative refresh arrives', async () => {
+        vi.useFakeTimers()
+        render(
+            <CompactRuntimeControls
+                disabled={false}
+                model={null}
+                modelOptions={[
+                    { value: null, label: 'Default' },
+                    { value: 'model-a', label: 'Model A' }
+                ]}
+                effort={null}
+                effortLabel="misc.reasoningEffort"
+                effortOptions={[]}
+                permissionMode="default"
+                permissionModeOptions={[]}
+                onModelChange={() => Promise.resolve()}
+            />
+        )
+        const model = screen.getByLabelText('misc.model') as HTMLSelectElement
+
+        fireEvent.change(model, { target: { value: optionValue(model, 'Model A') } })
+        await act(async () => {
+            await Promise.resolve()
+        })
+        expect(model.selectedOptions[0]?.textContent).toBe('Model A')
+
+        act(() => vi.advanceTimersByTime(2_000))
+        expect(model.selectedOptions[0]?.textContent).toBe('Default')
+    })
+
+    it('marks runtime selectors busy during an in-flight change and uses a neutral mode label', () => {
+        render(
+            <CompactRuntimeControls
+                disabled={false}
+                model={null}
+                modelOptions={[
+                    { value: null, label: 'Default' },
+                    { value: 'model-a', label: 'Model A' }
+                ]}
+                effort={null}
+                effortLabel="misc.reasoningEffort"
+                effortOptions={[]}
+                permissionMode="default"
+                permissionModeOptions={[
+                    { mode: 'default', label: 'Default' },
+                    { mode: 'yolo', label: 'Yolo' }
+                ]}
+                onModelChange={() => new Promise<void>(() => undefined)}
+                onPermissionModeChange={vi.fn()}
+            />
+        )
+
+        const model = screen.getByLabelText('misc.model')
+        expect(screen.getByLabelText('misc.sessionMode')).toBeInTheDocument()
+        fireEvent.change(model, { target: { value: optionValue(model, 'Model A') } })
+
+        expect(document.querySelector('.compact-runtime-controls__selectors')).toHaveAttribute('aria-busy', 'true')
+        expect(model).toHaveAttribute('aria-busy', 'true')
     })
 
     it('reports the number of rendered selectors for responsive layout', () => {

@@ -1040,6 +1040,43 @@ html[data-theme="dark"] .shiki span {
     }
 }
 
+/* Fallback for browsers without container query support. */
+@media (max-width: 520px) {
+    .compact-composer__telemetry {
+        width: 100%;
+        min-height: 18px;
+        flex: 1 0 100%;
+        padding: 0 2px;
+    }
+
+    .compact-runtime-controls {
+        width: 100%;
+        flex: 1 0 100%;
+        gap: 6px;
+    }
+
+    .compact-runtime-controls__selectors {
+        display: grid;
+        min-width: 0;
+        flex: 1 1 auto;
+        grid-template-columns: repeat(var(--compact-runtime-control-count), minmax(0, 1fr));
+        gap: 6px;
+    }
+
+    .compact-runtime-controls__switch {
+        width: 30px;
+        height: 30px;
+        flex-basis: 30px;
+    }
+
+    .compact-runtime-controls select {
+        max-width: none;
+        height: 30px;
+        padding-right: 18px;
+        font-size: 0.6875rem;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
     .compact-composer,
     .compact-composer__attachment,

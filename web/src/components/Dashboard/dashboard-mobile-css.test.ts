@@ -38,6 +38,7 @@ describe('mobile dashboard CSS', () => {
     it('adapts compact runtime controls to their panel width and rendered control count', () => {
         expect(indexCss).toMatch(/\.compact-composer__status\s*\{[\s\S]*container-type:\s*inline-size;/)
         expect(indexCss).toMatch(/@container \(max-width: 520px\)[\s\S]*\.compact-runtime-controls__selectors\s*\{[\s\S]*grid-template-columns:\s*repeat\(var\(--compact-runtime-control-count\),\s*minmax\(0,\s*1fr\)\);/)
+        expect(indexCss).toMatch(/@media \(max-width: 520px\)[\s\S]*\.compact-runtime-controls__selectors\s*\{[\s\S]*grid-template-columns:\s*repeat\(var\(--compact-runtime-control-count\),\s*minmax\(0,\s*1fr\)\);/)
         expect(indexCss).not.toMatch(/@media \(max-width: 520px\)[\s\S]*\.compact-runtime-controls\s*\{[\s\S]*grid-template-columns:\s*repeat\(3,/)
     })
 })

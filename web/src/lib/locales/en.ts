@@ -471,6 +471,7 @@ export default {
   'misc.machine': 'Machine',
   'misc.collaborationMode': 'Collaboration Mode',
   'misc.permissionMode': 'Permission Mode',
+  'misc.sessionMode': 'Session Mode',
   'misc.model': 'Model',
   'misc.reasoningEffort': 'Reasoning Effort',
   'misc.effort': 'Effort',

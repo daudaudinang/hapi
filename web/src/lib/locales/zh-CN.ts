@@ -470,6 +470,7 @@ export default {
   'misc.machine': '机器',
   'misc.collaborationMode': '协作模式',
   'misc.permissionMode': '权限模式',
+  'misc.sessionMode': '会话模式',
   'misc.model': '模型',
   'misc.reasoningEffort': '推理强度',
   'misc.effort': '思考强度',

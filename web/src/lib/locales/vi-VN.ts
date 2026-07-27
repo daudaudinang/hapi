@@ -465,6 +465,7 @@ export default {
   'misc.machine': 'Máy',
   'misc.collaborationMode': 'Chế độ cộng tác',
   'misc.permissionMode': 'Chế độ quyền',
+  'misc.sessionMode': 'Chế độ phiên',
   'misc.model': 'Mô hình',
   'misc.reasoningEffort': 'Cường độ suy luận',
   'misc.effort': 'Cường độ',
