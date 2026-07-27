@@ -114,6 +114,7 @@ vi.mock('@/components/AssistantChat/HappyComposer', () => ({
         compactComposerMode?: boolean
         disabled?: boolean
         sendDisabled?: boolean
+        compactSendStatus?: { attemptId: number; state: string }
     }) => {
         happyComposerMock(props)
         return <div data-testid="happy-composer" />
@@ -203,7 +204,8 @@ function makeCodexGoalMessage(): DecryptedMessage {
 function renderChat(
     session: Session = makeSession(),
     compactComposerMode?: boolean,
-    isSending = false
+    isSending = false,
+    compactSendStatus?: { attemptId: number; state: 'idle' | 'pending' | 'accepted' | 'error' }
 ) {
     return render(
         <SessionChat
@@ -224,6 +226,7 @@ function renderChat(
             onFlushPending={vi.fn()}
             onAtBottomChange={vi.fn()}
             compactComposerMode={compactComposerMode}
+            compactSendStatus={compactSendStatus}
         />
     )
 }
@@ -268,6 +271,16 @@ describe('SessionChat Codex goal header control', () => {
             sendDisabled: true
         }))
         expect(happyComposerMock.mock.calls.at(-1)?.[0].disabled).toBeUndefined()
+    })
+
+    it('forwards compact send outcome only to the Agent composer lifecycle', () => {
+        const compactSendStatus = { attemptId: 3, state: 'accepted' } as const
+        renderChat(makeSession(), true, false, compactSendStatus)
+
+        expect(happyComposerMock).toHaveBeenCalledWith(expect.objectContaining({
+            compactComposerMode: true,
+            compactSendStatus
+        }))
     })
 
     it('keeps a loaded Codex goal viewable on non-Codex sessions but disables goal actions', () => {

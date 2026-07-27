@@ -54,6 +54,7 @@ vi.mock('@/hooks/mutations/useSendMessage', () => ({
         sendMessage: vi.fn(),
         retryMessage: vi.fn(),
         isSending: false,
+        sendStatus: { attemptId: 7, state: 'accepted' },
     })
 }))
 
@@ -76,6 +77,7 @@ vi.mock('@/components/SessionChat', async () => {
             compactCloseButtonRef?: React.Ref<HTMLButtonElement>
             compactMode?: boolean
             compactComposerMode?: boolean
+            compactSendStatus?: { attemptId: number; state: string }
         }) => {
             sessionChatMock(props)
             const instanceId = React.useId()
@@ -296,7 +298,8 @@ describe('Dashboard session context menu', () => {
         expect(sessionStorage.getItem('mc-pinned-ids')).toBe(JSON.stringify(['session-1']))
         expect(sessionChatMock).toHaveBeenCalledWith(expect.objectContaining({
             compactMode: true,
-            compactComposerMode: true
+            compactComposerMode: true,
+            compactSendStatus: { attemptId: 7, state: 'accepted' }
         }))
     })
 

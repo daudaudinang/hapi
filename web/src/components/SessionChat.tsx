@@ -13,6 +13,7 @@ import type {
 } from '@/types/api'
 import type { ChatBlock, NormalizedMessage } from '@/chat/types'
 import type { Suggestion } from '@/hooks/useActiveSuggestions'
+import type { SendStatus } from '@/hooks/mutations/useSendMessage'
 import { normalizeDecryptedMessage } from '@/chat/normalize'
 import { reduceChatBlocks } from '@/chat/reducer'
 import { reconcileChatBlocks } from '@/chat/reconcile'
@@ -75,6 +76,7 @@ export function SessionChat(props: {
     hideHeader?: boolean
     compactMode?: boolean
     compactComposerMode?: boolean
+    compactSendStatus?: SendStatus
     pinIndex?: number
     composerAppendText?: string
     onComposerAppendTextConsumed?: () => void
@@ -676,6 +678,7 @@ export function SessionChat(props: {
                         appendText={props.composerAppendText}
                         onAppendTextConsumed={props.onComposerAppendTextConsumed}
                         compactComposerMode={props.compactComposerMode}
+                        compactSendStatus={props.compactComposerMode ? props.compactSendStatus : undefined}
                     />
                 </div>
             </AssistantRuntimeProvider>

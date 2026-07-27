@@ -269,7 +269,7 @@ function PinnedPanel({ sessionId, api, onUnpin, onSessionResolved, pinIndex, com
         return await getSlashSuggestions(query)
     }, [getSkillSuggestions, getSlashSuggestions])
 
-    const { sendMessage, retryMessage, isSending } = useSendMessage(api, sessionId, {
+    const { sendMessage, retryMessage, isSending, sendStatus } = useSendMessage(api, sessionId, {
         isSessionThinking: session?.thinking ?? false,
         onSuccess: (sentSessionId) => {
             clearDraftsAfterSend(sentSessionId, sessionId)
@@ -331,6 +331,7 @@ function PinnedPanel({ sessionId, api, onUnpin, onSessionResolved, pinIndex, com
                 isLoadingMessages={messagesLoading}
                 isLoadingMoreMessages={messagesLoadingMore}
                 isSending={isSending}
+                compactSendStatus={sendStatus}
                 pendingCount={pendingCount}
                 messagesVersion={messagesVersion}
                 onBack={onCloseFocus ?? onUnpin}

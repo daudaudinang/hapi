@@ -24,6 +24,7 @@ import { usePWAInstall } from '@/hooks/usePWAInstall'
 import { supportsEffort, supportsModelChange } from '@hapi/protocol'
 import { markSkillUsed } from '@/lib/recent-skills'
 import { useComposerDraft } from '@/hooks/useComposerDraft'
+import type { SendStatus } from '@/hooks/mutations/useSendMessage'
 import { FloatingOverlay } from '@/components/ChatInput/FloatingOverlay'
 import { Autocomplete } from '@/components/ChatInput/Autocomplete'
 import { StatusBar } from '@/components/AssistantChat/StatusBar'
@@ -87,9 +88,11 @@ function getCompactComposerSingleLineHeight(input: HTMLTextAreaElement): number 
 }
 
 const defaultSuggestionHandler = async (): Promise<Suggestion[]> => []
-const COMPACT_SEND_RUN_GRACE_MS = 1_500
 
-type CompactSendLifecycle = 'idle' | 'submitting' | 'awaiting-run'
+type CompactSendLifecycle =
+    | { phase: 'idle' }
+    | { phase: 'pre-run'; afterAttemptId: number }
+    | { phase: 'running'; attemptId: number }
 
 export function HappyComposer(props: {
     sessionId?: string
@@ -130,6 +133,7 @@ export function HappyComposer(props: {
     appendText?: string
     onAppendTextConsumed?: () => void
     compactComposerMode?: boolean
+    compactSendStatus?: SendStatus
 }) {
     const { t } = useTranslation()
     const {
@@ -169,7 +173,8 @@ export function HappyComposer(props: {
         onVoiceMicToggle,
         appendText,
         onAppendTextConsumed,
-        compactComposerMode = false
+        compactComposerMode = false,
+        compactSendStatus
     } = props
 
     // Use ?? so missing values fall back to default (destructuring defaults only handle undefined)
@@ -212,8 +217,8 @@ export function HappyComposer(props: {
     const [isSwitching, setIsSwitching] = useState(false)
     const [showContinueHint, setShowContinueHint] = useState(false)
     const [composerMultiline, setComposerMultiline] = useState(false)
-    const [compactSendLifecycle, setCompactSendLifecycle] = useState<CompactSendLifecycle>('idle')
-    const compactSendLocked = compactComposerMode && compactSendLifecycle !== 'idle'
+    const [compactSendLifecycle, setCompactSendLifecycle] = useState<CompactSendLifecycle>({ phase: 'idle' })
+    const compactSendLocked = compactComposerMode && compactSendLifecycle.phase !== 'idle'
     const canSend = (hasText || hasAttachments)
         && attachmentsReady
         && !controlsDisabled
@@ -229,34 +234,39 @@ export function HappyComposer(props: {
 
     useEffect(() => {
         if (!compactComposerMode) {
-            if (compactSendLifecycle !== 'idle') setCompactSendLifecycle('idle')
+            if (compactSendLifecycle.phase !== 'idle') {
+                setCompactSendLifecycle({ phase: 'idle' })
+            }
             return
         }
-        if (compactSendLifecycle === 'idle') return
-        if (threadIsRunning) {
-            setCompactSendLifecycle('idle')
-            return
-        }
+        if (compactSendLifecycle.phase === 'idle') return
 
-        if (sendDisabled || threadIsDisabled) {
-            if (compactSendLifecycle !== 'submitting') {
-                setCompactSendLifecycle('submitting')
+        if (compactSendLifecycle.phase === 'running') {
+            if (!threadIsRunning) {
+                setCompactSendLifecycle({ phase: 'idle' })
             }
             return
         }
 
-        if (compactSendLifecycle !== 'awaiting-run') {
-            setCompactSendLifecycle('awaiting-run')
+        if (threadIsRunning) {
+            setCompactSendLifecycle({
+                phase: 'running',
+                attemptId: compactSendStatus?.attemptId ?? compactSendLifecycle.afterAttemptId
+            })
+            return
         }
-        const timer = window.setTimeout(() => {
-            setCompactSendLifecycle('idle')
-        }, COMPACT_SEND_RUN_GRACE_MS)
-        return () => window.clearTimeout(timer)
+
+        if (
+            compactSendStatus
+            && compactSendStatus.attemptId > compactSendLifecycle.afterAttemptId
+            && compactSendStatus.state === 'error'
+        ) {
+            setCompactSendLifecycle({ phase: 'idle' })
+        }
     }, [
         compactComposerMode,
         compactSendLifecycle,
-        sendDisabled,
-        threadIsDisabled,
+        compactSendStatus,
         threadIsRunning
     ])
 
@@ -467,9 +477,12 @@ export function HappyComposer(props: {
 
     const beginCompactSend = useCallback(() => {
         if (compactComposerMode) {
-            setCompactSendLifecycle('submitting')
+            setCompactSendLifecycle({
+                phase: 'pre-run',
+                afterAttemptId: compactSendStatus?.attemptId ?? 0
+            })
         }
-    }, [compactComposerMode])
+    }, [compactComposerMode, compactSendStatus?.attemptId])
 
     const handleKeyDown = useCallback((e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
         const key = e.key

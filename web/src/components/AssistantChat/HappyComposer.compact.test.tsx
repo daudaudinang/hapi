@@ -228,22 +228,94 @@ describe('HappyComposer compact Agent mode', () => {
         expect(assistant.send).not.toHaveBeenCalled()
     })
 
-    it('keeps send latched through the POST-to-run gap and releases after a no-run timeout', () => {
+    it('keeps send latched indefinitely after acceptance while SSE is slow or missing', () => {
         vi.useFakeTimers()
         assistant.state.composer.text = 'first request'
-        const view = render(<HappyComposer compactComposerMode />)
+        const view = render(
+            <HappyComposer
+                compactComposerMode
+                compactSendStatus={{ attemptId: 0, state: 'idle' }}
+            />
+        )
 
         fireEvent.click(screen.getByRole('button', { name: 'composer.send' }))
         expect(assistant.send).toHaveBeenCalledTimes(1)
         expect(screen.getByRole('button', { name: 'composer.send' })).toBeDisabled()
 
-        view.rerender(<HappyComposer compactComposerMode sendDisabled />)
+        view.rerender(
+            <HappyComposer
+                compactComposerMode
+                sendDisabled
+                compactSendStatus={{ attemptId: 1, state: 'pending' }}
+            />
+        )
         expect(screen.getByRole('button', { name: 'composer.send' })).toBeDisabled()
 
-        view.rerender(<HappyComposer compactComposerMode />)
+        view.rerender(
+            <HappyComposer
+                compactComposerMode
+                compactSendStatus={{ attemptId: 1, state: 'accepted' }}
+            />
+        )
         expect(screen.getByRole('button', { name: 'composer.send' })).toBeDisabled()
 
-        act(() => vi.advanceTimersByTime(2_000))
+        act(() => vi.advanceTimersByTime(60_000))
+        expect(screen.getByRole('button', { name: 'composer.send' })).toBeDisabled()
+    })
+
+    it('releases the pre-run latch on an explicit send error', () => {
+        assistant.state.composer.text = 'retryable request'
+        const view = render(
+            <HappyComposer
+                compactComposerMode
+                compactSendStatus={{ attemptId: 0, state: 'idle' }}
+            />
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: 'composer.send' }))
+        view.rerender(
+            <HappyComposer
+                compactComposerMode
+                compactSendStatus={{ attemptId: 1, state: 'error' }}
+            />
+        )
+
+        expect(screen.getByRole('button', { name: 'composer.send' })).toBeEnabled()
+    })
+
+    it('releases the accepted latch only after an observed running-to-done lifecycle', () => {
+        assistant.state.composer.text = 'tracked request'
+        const view = render(
+            <HappyComposer
+                compactComposerMode
+                compactSendStatus={{ attemptId: 0, state: 'idle' }}
+            />
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: 'composer.send' }))
+        view.rerender(
+            <HappyComposer
+                compactComposerMode
+                compactSendStatus={{ attemptId: 1, state: 'accepted' }}
+            />
+        )
+
+        assistant.state.thread.isRunning = true
+        view.rerender(
+            <HappyComposer
+                compactComposerMode
+                compactSendStatus={{ attemptId: 1, state: 'accepted' }}
+            />
+        )
+        expect(screen.getByRole('button', { name: 'composer.stop' })).toBeEnabled()
+
+        assistant.state.thread.isRunning = false
+        view.rerender(
+            <HappyComposer
+                compactComposerMode
+                compactSendStatus={{ attemptId: 1, state: 'accepted' }}
+            />
+        )
         expect(screen.getByRole('button', { name: 'composer.send' })).toBeEnabled()
     })
 
