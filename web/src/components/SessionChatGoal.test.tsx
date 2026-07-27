@@ -110,7 +110,11 @@ vi.mock('@/components/AssistantChat/HappyThread', () => ({
 }))
 
 vi.mock('@/components/AssistantChat/HappyComposer', () => ({
-    HappyComposer: (props: { compactComposerMode?: boolean }) => {
+    HappyComposer: (props: {
+        compactComposerMode?: boolean
+        disabled?: boolean
+        sendDisabled?: boolean
+    }) => {
         happyComposerMock(props)
         return <div data-testid="happy-composer" />
     }
@@ -196,7 +200,11 @@ function makeCodexGoalMessage(): DecryptedMessage {
     }
 }
 
-function renderChat(session: Session = makeSession(), compactComposerMode?: boolean) {
+function renderChat(
+    session: Session = makeSession(),
+    compactComposerMode?: boolean,
+    isSending = false
+) {
     return render(
         <SessionChat
             api={null as never}
@@ -206,7 +214,7 @@ function renderChat(session: Session = makeSession(), compactComposerMode?: bool
             hasMoreMessages={false}
             isLoadingMessages={false}
             isLoadingMoreMessages={false}
-            isSending={false}
+            isSending={isSending}
             pendingCount={0}
             messagesVersion={1}
             onBack={vi.fn()}
@@ -250,6 +258,16 @@ describe('SessionChat Codex goal header control', () => {
         expect(happyComposerMock).toHaveBeenCalledWith(expect.objectContaining({
             compactComposerMode: true
         }))
+    })
+
+    it('treats an in-flight message mutation as send-disabled rather than hard-disabling a running composer', () => {
+        renderChat(makeSession({ thinking: true }), true, true)
+
+        expect(happyComposerMock).toHaveBeenCalledWith(expect.objectContaining({
+            compactComposerMode: true,
+            sendDisabled: true
+        }))
+        expect(happyComposerMock.mock.calls.at(-1)?.[0].disabled).toBeUndefined()
     })
 
     it('keeps a loaded Codex goal viewable on non-Codex sessions but disables goal actions', () => {

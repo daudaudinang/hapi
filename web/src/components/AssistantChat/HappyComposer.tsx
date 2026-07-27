@@ -91,6 +91,7 @@ const defaultSuggestionHandler = async (): Promise<Suggestion[]> => []
 export function HappyComposer(props: {
     sessionId?: string
     disabled?: boolean
+    sendDisabled?: boolean
     permissionMode?: PermissionMode
     collaborationMode?: CodexCollaborationMode
     model?: string | null
@@ -131,6 +132,7 @@ export function HappyComposer(props: {
     const {
         sessionId,
         disabled = false,
+        sendDisabled = false,
         permissionMode: rawPermissionMode,
         collaborationMode: rawCollaborationMode,
         model: rawModel,
@@ -181,7 +183,7 @@ export function HappyComposer(props: {
     const threadIsDisabled = useAssistantState(({ thread }) => thread.isDisabled)
 
     const sessionControlsDisabled = disabled || (!active && !allowSendWhenInactive)
-    const controlsDisabled = sessionControlsDisabled || threadIsDisabled
+    const controlsDisabled = sessionControlsDisabled || sendDisabled || threadIsDisabled
     const composerInputDisabled = compactComposerMode && threadIsRunning
         ? sessionControlsDisabled
         : controlsDisabled
@@ -587,12 +589,12 @@ export function HappyComposer(props: {
     }, [haptic])
 
     const handleSubmit = useCallback((event?: ReactFormEvent<HTMLFormElement>) => {
-        if (event && (!attachmentsReady || (compactComposerMode && threadIsRunning))) {
+        if (event && !canSend) {
             event.preventDefault()
             return
         }
         setShowContinueHint(false)
-    }, [attachmentsReady, compactComposerMode, threadIsRunning])
+    }, [canSend])
 
     const handlePermissionChange = useCallback((mode: PermissionMode) => {
         if (!onPermissionModeChange || controlsDisabled) return

@@ -615,7 +615,7 @@ export function SessionChat(props: {
                     <HappyComposer
                         key={`composer-${props.session.id}`}
                         sessionId={props.session.id}
-                        disabled={props.isSending}
+                        sendDisabled={props.isSending}
                         permissionMode={props.session.permissionMode}
                         collaborationMode={codexCollaborationModeSupported ? props.session.collaborationMode : undefined}
                         model={props.session.model}

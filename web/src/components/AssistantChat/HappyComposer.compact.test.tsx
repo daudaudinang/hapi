@@ -19,6 +19,11 @@ const assistant = vi.hoisted(() => ({
     addAttachment: vi.fn()
 }))
 
+const platform = vi.hoisted(() => ({
+    isTouch: false,
+    hasCoarsePointer: false
+}))
+
 vi.mock('@assistant-ui/react', async () => {
     const React = await vi.importActual<typeof import('react')>('react')
 
@@ -73,7 +78,7 @@ vi.mock('@assistant-ui/react', async () => {
 
 vi.mock('@/hooks/usePlatform', () => ({
     usePlatform: () => ({
-        isTouch: false,
+        isTouch: platform.isTouch,
         haptic: {
             impact: vi.fn(),
             notification: vi.fn()
@@ -82,7 +87,7 @@ vi.mock('@/hooks/usePlatform', () => ({
 }))
 
 vi.mock('@/hooks/useMediaQuery', () => ({
-    useMediaQuery: () => false
+    useMediaQuery: () => platform.hasCoarsePointer
 }))
 
 vi.mock('@/hooks/usePWAInstall', () => ({
@@ -114,6 +119,8 @@ describe('HappyComposer compact Agent mode', () => {
         assistant.state.composer.attachments = []
         assistant.state.thread.isRunning = false
         assistant.state.thread.isDisabled = false
+        platform.isTouch = false
+        platform.hasCoarsePointer = false
         window.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
             callback(0)
             return 1
@@ -129,7 +136,7 @@ describe('HappyComposer compact Agent mode', () => {
     it('keeps drafting enabled and blocks desktop Enter while Stop is the only running action', () => {
         assistant.state.thread.isRunning = true
         assistant.state.thread.isDisabled = true
-        const view = render(<HappyComposer compactComposerMode />)
+        const view = render(<HappyComposer compactComposerMode sendDisabled />)
         const input = screen.getByRole('textbox')
 
         expect(input).toBeEnabled()
@@ -143,17 +150,51 @@ describe('HappyComposer compact Agent mode', () => {
         expect(enterEvent.defaultPrevented).toBe(false)
         expect(assistant.send).not.toHaveBeenCalled()
 
+        const submitEvent = createEvent.submit(input.closest('form')!)
+        fireEvent(input.closest('form')!, submitEvent)
+        expect(submitEvent.defaultPrevented).toBe(true)
+        expect(assistant.send).not.toHaveBeenCalled()
+
         fireEvent.click(screen.getByRole('button', { name: 'composer.stop' }))
         expect(assistant.cancelRun).toHaveBeenCalledTimes(1)
 
         assistant.state.thread.isRunning = false
         assistant.state.thread.isDisabled = false
+        view.rerender(<HappyComposer compactComposerMode sendDisabled />)
+
+        expect(screen.getByRole('button', { name: 'composer.send' })).toBeDisabled()
+        expect(assistant.send).not.toHaveBeenCalled()
+
         view.rerender(<HappyComposer compactComposerMode />)
 
         const send = screen.getByRole('button', { name: 'composer.send' })
         expect(send).toBeEnabled()
         fireEvent.click(send)
         expect(assistant.send).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps the same stop-only drafting behavior on touch devices with coarse pointers', () => {
+        platform.isTouch = true
+        platform.hasCoarsePointer = true
+        assistant.state.thread.isRunning = true
+        assistant.state.thread.isDisabled = true
+
+        render(<HappyComposer compactComposerMode sendDisabled />)
+        const input = screen.getByRole('textbox')
+
+        expect(input).toBeEnabled()
+        expect(screen.getByRole('button', { name: 'composer.stop' })).toBeEnabled()
+        expect(screen.queryByRole('button', { name: 'composer.send' })).not.toBeInTheDocument()
+
+        fireEvent.change(input, { target: { value: 'mobile draft' } })
+        const enterEvent = createEvent.keyDown(input, { key: 'Enter' })
+        fireEvent(input, enterEvent)
+
+        expect(enterEvent.defaultPrevented).toBe(false)
+        expect(assistant.send).not.toHaveBeenCalled()
+
+        fireEvent.click(screen.getByRole('button', { name: 'composer.stop' }))
+        expect(assistant.cancelRun).toHaveBeenCalledTimes(1)
     })
 
     it('keeps the legacy composer and Terminal action outside Agent compact composer mode', () => {
