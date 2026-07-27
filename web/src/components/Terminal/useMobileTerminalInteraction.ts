@@ -305,21 +305,30 @@ export function useMobileTerminalInteraction(
         if (!range) return false
         const startHandle = cellToRootPoint(range.start)
         const endHandle = cellToRootPoint(range.end)
+        const geometry = getMetrics()
         const rootRect = rootRef.current?.getBoundingClientRect()
-        const selectionAnchor = startHandle && endHandle && rootRect
+        const rowHeight = geometry
+            ? geometry.screenRect.height / geometry.metrics.rows
+            : 0
+        const visibleHandle = startHandle ?? endHandle
+        const selectionAnchor = rootRect && visibleHandle
             ? {
                 x: clamp(
-                    (startHandle.x + endHandle.x) / 2,
+                    startHandle && endHandle
+                        ? (startHandle.x + endHandle.x) / 2
+                        : visibleHandle.x,
                     0,
                     rootRect.width,
                 ),
                 y: clamp(
-                    Math.min(startHandle.y, endHandle.y),
+                    (startHandle && endHandle
+                        ? Math.min(startHandle.y, endHandle.y)
+                        : visibleHandle.y) - rowHeight,
                     0,
                     rootRect.height,
                 ),
             }
-            : startHandle ?? endHandle
+            : null
         if (selectionAnchor) {
             lastUsableAnchorRef.current = selectionAnchor
         }
@@ -337,7 +346,7 @@ export function useMobileTerminalInteraction(
             : null
         updateOverlay({ startHandle, endHandle, toolbarAnchor })
         return true
-    }, [cellToRootPoint, resolveTerminalRange, updateOverlay])
+    }, [cellToRootPoint, getMetrics, resolveTerminalRange, updateOverlay])
 
     const syncChoiceAnchor = useCallback(() => {
         if (overlayRef.current.mode !== 'choice') return

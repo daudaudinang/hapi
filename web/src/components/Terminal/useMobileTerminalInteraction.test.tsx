@@ -831,6 +831,10 @@ describe('useMobileTerminalInteraction', () => {
         expect(result.current.overlayProps.mode).toBe('select')
         expect(result.current.overlayProps.startHandle).toEqual({ x: 45, y: 120 })
         expect(result.current.overlayProps.endHandle).toEqual({ x: 105, y: 120 })
+        expect(result.current.overlayProps.toolbarAnchor).toEqual({
+            x: 75,
+            y: 100,
+        })
 
         const layer = document.createElement('div')
         layer.setPointerCapture = vi.fn()
