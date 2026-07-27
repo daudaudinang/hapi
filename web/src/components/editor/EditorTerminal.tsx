@@ -383,7 +383,24 @@ export function EditorTerminal(props: {
 
     return (
         <div className="flex h-full min-h-0 flex-col border-t border-[var(--app-border)] bg-[var(--app-bg)]">
-            <div className="flex h-8 shrink-0 items-center border-b border-[var(--app-border)] bg-[var(--app-subtle-bg)]">
+            <div
+                className={`flex h-8 shrink-0 items-center border-b border-[var(--app-border)] bg-[var(--app-subtle-bg)] ${
+                    props.mobileMode ? '' : 'cursor-pointer'
+                }`}
+                onClick={(event) => {
+                    const target = event.target
+                    if (
+                        props.mobileMode
+                        || (
+                            target instanceof Element
+                            && target.closest('button, [data-terminal-header-control]')
+                        )
+                    ) {
+                        return
+                    }
+                    props.onToggleCollapsed()
+                }}
+            >
                 {!props.mobileMode ? (
                     <button
                         type="button"
@@ -399,7 +416,10 @@ export function EditorTerminal(props: {
                 {activeSessionTerminal ? (
                     <div className="min-w-0 flex-1" />
                 ) : (
-                    <div className="flex min-w-0 flex-1 items-center overflow-x-auto">
+                    <div
+                        data-terminal-header-control
+                        className="flex min-w-0 flex-1 items-center overflow-x-auto"
+                    >
                         {legacyTerminalTabs.map((tab) => {
                             const isActive = tab.id === activeTerminal?.id
                             return (

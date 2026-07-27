@@ -457,6 +457,52 @@ describe('EditorTerminal', () => {
         expect(screen.getByRole('button', { name: 'Expand terminal' })).toBeInTheDocument()
     })
 
+    it('toggles the desktop panel from the terminal header background', () => {
+        const onToggleCollapsed = vi.fn()
+        renderMachineTerminal({ onToggleCollapsed })
+
+        fireEvent.click(screen.getByText('Terminal'))
+        fireEvent.click(screen.getByText('Terminal'))
+
+        expect(onToggleCollapsed).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not toggle the panel from terminal header controls', () => {
+        const onToggleCollapsed = vi.fn()
+        const onSelectTab = vi.fn()
+        const onCloseTab = vi.fn()
+        const onOpenTerminal = vi.fn()
+        renderMachineTerminal({
+            onToggleCollapsed,
+            onSelectTab,
+            onCloseTab,
+            onOpenTerminal,
+        })
+
+        fireEvent.click(screen.getByRole('button', { name: 'Collapse terminal' }))
+        expect(onToggleCollapsed).toHaveBeenCalledTimes(1)
+
+        const selectTab = screen.getByRole('button', { name: 'Select terminal Terminal: bash' })
+        fireEvent.click(selectTab)
+        fireEvent.click(selectTab.parentElement!)
+        fireEvent.click(screen.getByRole('button', { name: 'Close terminal Terminal: bash' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Open terminal' }))
+
+        expect(onSelectTab).toHaveBeenCalledWith('term-machine')
+        expect(onCloseTab).toHaveBeenCalledWith('term-machine')
+        expect(onOpenTerminal).toHaveBeenCalledTimes(1)
+        expect(onToggleCollapsed).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not add terminal header collapse behavior on mobile', () => {
+        const onToggleCollapsed = vi.fn()
+        renderMachineTerminal({ mobileMode: true, onToggleCollapsed })
+
+        fireEvent.click(screen.getByText('Terminal'))
+
+        expect(onToggleCollapsed).not.toHaveBeenCalled()
+    })
+
     it('hides chrome-only controls and uses compact terminal font in mobile mode', () => {
         render(
             <EditorTerminal
