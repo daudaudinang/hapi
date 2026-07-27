@@ -1,4 +1,6 @@
 import { ComposerPrimitive } from '@assistant-ui/react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 import type { CodexCollaborationMode, PermissionMode } from '@/types/api'
 import { useTranslation } from '@/lib/use-translation'
 
@@ -17,6 +19,17 @@ type PermissionOption = {
 type CollaborationOption = {
     mode: CodexCollaborationMode
     label: string
+}
+
+export type CompactRuntimeChange =
+    | { type: 'model'; value: string | null }
+    | { type: 'effort'; value: string | null }
+    | { type: 'permission'; value: PermissionMode }
+    | { type: 'collaboration'; value: CodexCollaborationMode }
+
+type OptimisticSelection = {
+    control: 'model' | 'effort' | 'mode'
+    value: string | null
 }
 
 function AttachmentIcon() {
@@ -122,6 +135,10 @@ function ValueSelect(props: {
     disabled: boolean
     onChange: (value: string | null) => void
 }) {
+    const options = props.options.some((option) => option.value === props.value)
+        ? props.options
+        : [{ value: props.value, label: props.value ?? 'Default' }, ...props.options]
+
     return (
         <label className="compact-runtime-controls__field" title={props.label}>
             <span className="sr-only">{props.label}</span>
@@ -131,7 +148,7 @@ function ValueSelect(props: {
                 disabled={props.disabled}
                 onChange={(event) => props.onChange(event.target.value === DEFAULT_VALUE ? null : event.target.value)}
             >
-                {props.options.map((option) => (
+                {options.map((option) => (
                     <option key={option.value ?? DEFAULT_VALUE} value={option.value ?? DEFAULT_VALUE}>
                         {option.label}
                     </option>
@@ -152,42 +169,159 @@ export function CompactRuntimeControls(props: {
     permissionModeOptions: PermissionOption[]
     collaborationMode?: CodexCollaborationMode
     collaborationModeOptions?: CollaborationOption[]
-    onModelChange?: (model: string | null) => void
-    onEffortChange?: (effort: string | null) => void
-    onPermissionModeChange?: (mode: PermissionMode) => void
-    onCollaborationModeChange?: (mode: CodexCollaborationMode) => void
+    onModelChange?: (model: string | null) => void | Promise<void>
+    onEffortChange?: (effort: string | null) => void | Promise<void>
+    onPermissionModeChange?: (mode: PermissionMode) => void | Promise<void>
+    onCollaborationModeChange?: (mode: CodexCollaborationMode) => void | Promise<void>
+    onCompactRuntimeChange?: (change: CompactRuntimeChange) => Promise<void>
     onSwitchToRemote?: () => void
     switchDisabled?: boolean
     isSwitching?: boolean
 }) {
     const { t } = useTranslation()
+    const [pending, setPending] = useState(false)
+    const [optimistic, setOptimistic] = useState<OptimisticSelection | null>(null)
+    const pendingRef = useRef(false)
     const showModel = Boolean(props.onModelChange && props.modelOptions.length > 0)
     const showEffort = Boolean(props.onEffortChange && props.effortOptions.length > 0)
-    const collaborationOptions = props.onCollaborationModeChange
-        ? (props.collaborationModeOptions ?? []).filter((option) => option.mode !== 'default')
-        : []
-    const showPermission = Boolean(
-        (props.onPermissionModeChange && props.permissionModeOptions.length > 0)
-        || collaborationOptions.length > 0
-    )
-    const showSwitch = Boolean(props.onSwitchToRemote)
-    const selectedMode = props.collaborationMode && props.collaborationMode !== 'default'
-        ? `collaboration:${props.collaborationMode}`
+    const currentCollaborationMode = props.collaborationMode ?? 'default'
+    const collaborationActive = currentCollaborationMode !== 'default'
+    const authoritativeMode = collaborationActive
+        ? `collaboration:${currentCollaborationMode}`
         : `permission:${props.permissionMode}`
 
-    const handleModeChange = (value: string) => {
-        if (value.startsWith('collaboration:')) {
-            props.onCollaborationModeChange?.(value.slice('collaboration:'.length) as CodexCollaborationMode)
-            return
+    const modeOptions = useMemo(() => {
+        const permissionOptions = collaborationActive && !props.onCollaborationModeChange
+            ? []
+            : props.onPermissionModeChange
+                ? props.permissionModeOptions
+                : props.permissionModeOptions.filter((option) => option.mode === props.permissionMode)
+        const collaborationOptions = props.onCollaborationModeChange
+            ? (props.collaborationModeOptions ?? []).filter((option) => option.mode !== 'default')
+            : (props.collaborationModeOptions ?? []).filter((option) => option.mode === currentCollaborationMode)
+        const options = [
+            ...permissionOptions.map((option) => ({
+                value: `permission:${option.mode}`,
+                label: option.label
+            })),
+            ...collaborationOptions.map((option) => ({
+                value: `collaboration:${option.mode}`,
+                label: option.label
+            }))
+        ]
+
+        if (!options.some((option) => option.value === authoritativeMode)) {
+            const label = collaborationActive
+                ? (props.collaborationModeOptions ?? []).find((option) => option.mode === currentCollaborationMode)?.label
+                    ?? currentCollaborationMode
+                : props.permissionModeOptions.find((option) => option.mode === props.permissionMode)?.label
+                    ?? props.permissionMode
+            options.unshift({ value: authoritativeMode, label })
         }
 
-        if (props.collaborationMode && props.collaborationMode !== 'default') {
-            props.onCollaborationModeChange?.('default')
+        return options.filter((option, index) =>
+            options.findIndex((candidate) => candidate.value === option.value) === index
+        )
+    }, [
+        authoritativeMode,
+        collaborationActive,
+        currentCollaborationMode,
+        props.collaborationModeOptions,
+        props.onCollaborationModeChange,
+        props.onPermissionModeChange,
+        props.permissionMode,
+        props.permissionModeOptions
+    ])
+    const showMode = Boolean(
+        props.onPermissionModeChange
+        || props.onCollaborationModeChange
+    )
+    const showSwitch = Boolean(props.onSwitchToRemote)
+    const selectedModel = optimistic?.control === 'model' ? optimistic.value : props.model
+    const selectedEffort = optimistic?.control === 'effort' ? optimistic.value : props.effort
+    const selectedMode = optimistic?.control === 'mode' ? optimistic.value ?? authoritativeMode : authoritativeMode
+    const selectorCount = Number(showModel) + Number(showEffort) + Number(showMode)
+    const selectorsDisabled = props.disabled || pending
+    const canChangeMode = modeOptions.some((option) => option.value !== selectedMode)
+
+    useEffect(() => {
+        if (!optimistic) return
+
+        const authoritativeValue = optimistic.control === 'model'
+            ? props.model
+            : optimistic.control === 'effort'
+                ? props.effort
+                : authoritativeMode
+        if (authoritativeValue === optimistic.value) {
+            setOptimistic(null)
         }
-        props.onPermissionModeChange?.(value.slice('permission:'.length) as PermissionMode)
+    }, [authoritativeMode, optimistic, props.effort, props.model])
+
+    const runChange = (
+        control: OptimisticSelection['control'],
+        value: string | null,
+        operation: () => void | Promise<void>
+    ) => {
+        if (props.disabled || pendingRef.current) return
+
+        pendingRef.current = true
+        setPending(true)
+        setOptimistic({ control, value })
+        void (async () => {
+            try {
+                await operation()
+            } catch {
+                setOptimistic(null)
+            } finally {
+                pendingRef.current = false
+                setPending(false)
+            }
+        })()
     }
 
-    if (!showModel && !showEffort && !showPermission && !showSwitch) return null
+    const handleModelChange = (model: string | null) => {
+        runChange('model', model, () =>
+            props.onCompactRuntimeChange
+                ? props.onCompactRuntimeChange({ type: 'model', value: model })
+                : props.onModelChange?.(model)
+        )
+    }
+
+    const handleEffortChange = (effort: string | null) => {
+        runChange('effort', effort, () =>
+            props.onCompactRuntimeChange
+                ? props.onCompactRuntimeChange({ type: 'effort', value: effort })
+                : props.onEffortChange?.(effort)
+        )
+    }
+
+    const handleModeChange = (value: string) => {
+        runChange('mode', value, async () => {
+            if (value.startsWith('collaboration:')) {
+                const mode = value.slice('collaboration:'.length) as CodexCollaborationMode
+                if (props.onCompactRuntimeChange) {
+                    await props.onCompactRuntimeChange({ type: 'collaboration', value: mode })
+                } else {
+                    await props.onCollaborationModeChange?.(mode)
+                }
+                return
+            }
+
+            const mode = value.slice('permission:'.length) as PermissionMode
+            if (props.onCompactRuntimeChange) {
+                await props.onCompactRuntimeChange({ type: 'permission', value: mode })
+                return
+            }
+
+            if (collaborationActive) {
+                await props.onCollaborationModeChange?.('default')
+            }
+            if (!props.onPermissionModeChange) return
+            await props.onPermissionModeChange?.(mode)
+        })
+    }
+
+    if (!showModel && !showEffort && !showMode && !showSwitch) return null
 
     return (
         <div className="compact-runtime-controls">
@@ -205,47 +339,50 @@ export function CompactRuntimeControls(props: {
                 </button>
             ) : null}
 
-            {showModel && props.onModelChange ? (
-                <ValueSelect
-                    label={t('misc.model')}
-                    value={props.model}
-                    options={props.modelOptions}
-                    disabled={props.disabled}
-                    onChange={props.onModelChange}
-                />
-            ) : null}
+            {selectorCount > 0 ? (
+                <div
+                    className="compact-runtime-controls__selectors"
+                    data-control-count={selectorCount}
+                    style={{ '--compact-runtime-control-count': selectorCount } as CSSProperties}
+                >
+                    {showModel && props.onModelChange ? (
+                        <ValueSelect
+                            label={t('misc.model')}
+                            value={selectedModel}
+                            options={props.modelOptions}
+                            disabled={selectorsDisabled}
+                            onChange={handleModelChange}
+                        />
+                    ) : null}
 
-            {showEffort && props.onEffortChange ? (
-                <ValueSelect
-                    label={t(props.effortLabel)}
-                    value={props.effort}
-                    options={props.effortOptions}
-                    disabled={props.disabled}
-                    onChange={props.onEffortChange}
-                />
-            ) : null}
+                    {showEffort && props.onEffortChange ? (
+                        <ValueSelect
+                            label={t(props.effortLabel)}
+                            value={selectedEffort}
+                            options={props.effortOptions}
+                            disabled={selectorsDisabled}
+                            onChange={handleEffortChange}
+                        />
+                    ) : null}
 
-            {showPermission && props.onPermissionModeChange ? (
-                <label className="compact-runtime-controls__field" title={t('misc.permissionMode')}>
-                    <span className="sr-only">{t('misc.permissionMode')}</span>
-                    <select
-                        aria-label={t('misc.permissionMode')}
-                        value={selectedMode}
-                        disabled={props.disabled}
-                        onChange={(event) => handleModeChange(event.target.value)}
-                    >
-                        {props.permissionModeOptions.map((option) => (
-                            <option key={`permission:${option.mode}`} value={`permission:${option.mode}`}>
-                                {option.label}
-                            </option>
-                        ))}
-                        {collaborationOptions.map((option) => (
-                            <option key={`collaboration:${option.mode}`} value={`collaboration:${option.mode}`}>
-                                {option.label}
-                            </option>
-                        ))}
-                    </select>
-                </label>
+                    {showMode ? (
+                        <label className="compact-runtime-controls__field" title={t('misc.permissionMode')}>
+                            <span className="sr-only">{t('misc.permissionMode')}</span>
+                            <select
+                                aria-label={t('misc.permissionMode')}
+                                value={selectedMode}
+                                disabled={selectorsDisabled || !canChangeMode}
+                                onChange={(event) => handleModeChange(event.target.value)}
+                            >
+                                {modeOptions.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                        {option.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                    ) : null}
+                </div>
             ) : null}
         </div>
     )

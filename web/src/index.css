@@ -915,8 +915,10 @@ html[data-theme="dark"] .shiki span {
     min-width: 0;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
     gap: 10px;
     padding: 6px 3px max(4px, env(safe-area-inset-bottom));
+    container-type: inline-size;
 }
 
 .compact-composer__telemetry {
@@ -933,6 +935,13 @@ html[data-theme="dark"] .shiki span {
     min-width: 0;
     align-items: center;
     justify-content: flex-end;
+    gap: 5px;
+}
+
+.compact-runtime-controls__selectors {
+    display: flex;
+    min-width: 0;
+    align-items: center;
     gap: 5px;
 }
 
@@ -995,30 +1004,32 @@ html[data-theme="dark"] .shiki span {
     opacity: 0.5;
 }
 
-@media (max-width: 520px) {
-    .compact-composer__status {
-        align-items: stretch;
-        flex-direction: column;
-        gap: 6px;
-        padding-top: 7px;
-    }
-
+@container (max-width: 520px) {
     .compact-composer__telemetry {
         width: 100%;
         min-height: 18px;
+        flex: 1 0 100%;
         padding: 0 2px;
     }
 
     .compact-runtime-controls {
-        display: grid;
         width: 100%;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        flex: 1 0 100%;
+        gap: 6px;
+    }
+
+    .compact-runtime-controls__selectors {
+        display: grid;
+        min-width: 0;
+        flex: 1 1 auto;
+        grid-template-columns: repeat(var(--compact-runtime-control-count), minmax(0, 1fr));
         gap: 6px;
     }
 
     .compact-runtime-controls__switch {
-        width: 100%;
+        width: 30px;
         height: 30px;
+        flex-basis: 30px;
     }
 
     .compact-runtime-controls select {

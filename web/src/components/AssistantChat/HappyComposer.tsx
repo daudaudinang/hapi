@@ -34,6 +34,7 @@ import {
     CompactComposerAttachmentButton,
     CompactRuntimeControls
 } from '@/components/AssistantChat/CompactComposerControls'
+import type { CompactRuntimeChange } from '@/components/AssistantChat/CompactComposerControls'
 import { SessionComposerSettingsPanel } from '@/components/AssistantChat/SessionComposerSettingsPanel'
 import { AttachmentItem } from '@/components/AssistantChat/AttachmentItem'
 import { useTranslation } from '@/lib/use-translation'
@@ -120,6 +121,7 @@ export function HappyComposer(props: {
     onModelChange?: (model: string | null) => void
     onModelReasoningEffortChange?: (modelReasoningEffort: string | null) => void
     onEffortChange?: (effort: string | null) => void
+    onCompactRuntimeChange?: (change: CompactRuntimeChange) => Promise<void>
     onSwitchToRemote?: () => void | Promise<void>
     onTerminal?: () => void
     terminalUnsupported?: boolean
@@ -162,6 +164,7 @@ export function HappyComposer(props: {
         onModelChange,
         onModelReasoningEffortChange,
         onEffortChange,
+        onCompactRuntimeChange,
         onSwitchToRemote,
         onTerminal,
         terminalUnsupported = false,
@@ -822,11 +825,12 @@ export function HappyComposer(props: {
                     permissionMode={permissionMode}
                     permissionModeOptions={showPermissionSettings ? permissionModeOptions : []}
                     collaborationMode={collaborationMode}
-                    collaborationModeOptions={showCollaborationSettings ? collaborationModeOptions : []}
+                    collaborationModeOptions={collaborationModeOptions}
                     onModelChange={showModelSettings ? handleModelChange : undefined}
                     onEffortChange={compactEffortHandler}
                     onPermissionModeChange={showPermissionSettings ? handlePermissionChange : undefined}
                     onCollaborationModeChange={showCollaborationSettings ? handleCollaborationChange : undefined}
+                    onCompactRuntimeChange={onCompactRuntimeChange}
                     onSwitchToRemote={showSwitchButton ? handleSwitch : undefined}
                     switchDisabled={switchDisabled}
                     isSwitching={isSwitching}

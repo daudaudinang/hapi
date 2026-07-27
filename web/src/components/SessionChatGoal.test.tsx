@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DecryptedMessage, Session } from '@/types/api'
 import { SessionChat } from './SessionChat'
@@ -6,6 +6,16 @@ import { SessionChat } from './SessionChat'
 const navigateMock = vi.fn()
 const onSendMock = vi.fn()
 const happyComposerMock = vi.hoisted(() => vi.fn())
+const hapticNotificationMock = vi.hoisted(() => vi.fn())
+const sessionActionsMock = vi.hoisted(() => ({
+    abortSession: vi.fn(),
+    switchSession: vi.fn(),
+    setPermissionMode: vi.fn(),
+    setCollaborationMode: vi.fn(),
+    setModel: vi.fn(),
+    setModelReasoningEffort: vi.fn(),
+    setEffort: vi.fn()
+}))
 const useAgentModelsMock = vi.hoisted(() => vi.fn(() => ({
     models: [],
     status: 'fallback',
@@ -35,7 +45,7 @@ vi.mock('@/lib/use-translation', () => ({
 }))
 
 vi.mock('@/hooks/usePlatform', () => ({
-    usePlatform: () => ({ haptic: { notification: vi.fn() } })
+    usePlatform: () => ({ haptic: { notification: hapticNotificationMock } })
 }))
 
 vi.mock('@/hooks/useTelegram', () => ({
@@ -72,13 +82,7 @@ vi.mock('@/hooks/queries/useOpencodeModels', () => ({
 
 vi.mock('@/hooks/mutations/useSessionActions', () => ({
     useSessionActions: () => ({
-        abortSession: vi.fn(),
-        switchSession: vi.fn(),
-        setPermissionMode: vi.fn(),
-        setCollaborationMode: vi.fn(),
-        setModel: vi.fn(),
-        setModelReasoningEffort: vi.fn(),
-        setEffort: vi.fn(),
+        ...sessionActionsMock,
         archiveSession: vi.fn(),
         renameSession: vi.fn(),
         deleteSession: vi.fn(),
@@ -115,6 +119,10 @@ vi.mock('@/components/AssistantChat/HappyComposer', () => ({
         disabled?: boolean
         sendDisabled?: boolean
         compactSendStatus?: { attemptId: number; state: string }
+        onCompactRuntimeChange?: (change: {
+            type: 'model' | 'effort' | 'permission' | 'collaboration'
+            value: string | null
+        }) => Promise<void>
     }) => {
         happyComposerMock(props)
         return <div data-testid="happy-composer" />
@@ -205,7 +213,8 @@ function renderChat(
     session: Session = makeSession(),
     compactComposerMode?: boolean,
     isSending = false,
-    compactSendStatus?: { attemptId: number; state: 'idle' | 'pending' | 'accepted' | 'error' }
+    compactSendStatus?: { attemptId: number; state: 'idle' | 'pending' | 'accepted' | 'error' },
+    onRefresh = vi.fn()
 ) {
     return render(
         <SessionChat
@@ -220,7 +229,7 @@ function renderChat(
             pendingCount={0}
             messagesVersion={1}
             onBack={vi.fn()}
-            onRefresh={vi.fn()}
+            onRefresh={onRefresh}
             onLoadMore={() => Promise.resolve()}
             onSend={onSendMock}
             onFlushPending={vi.fn()}
@@ -281,6 +290,57 @@ describe('SessionChat Codex goal header control', () => {
             compactComposerMode: true,
             compactSendStatus
         }))
+    })
+
+    it('runs compact Plan-to-permission changes in order with one completion signal', async () => {
+        let resolveCollaboration: (() => void) | undefined
+        sessionActionsMock.setCollaborationMode.mockImplementationOnce(() => new Promise<void>((resolve) => {
+            resolveCollaboration = resolve
+        }))
+        sessionActionsMock.setPermissionMode.mockResolvedValueOnce(undefined)
+        const onRefresh = vi.fn()
+        renderChat(makeSession({
+            metadata: { path: '/repo', host: 'host', machineId: 'machine-1', flavor: 'codex' },
+            collaborationMode: 'plan',
+            permissionMode: 'default'
+        }), true, false, undefined, onRefresh)
+
+        const onCompactRuntimeChange = happyComposerMock.mock.calls.at(-1)?.[0].onCompactRuntimeChange
+        let transaction: Promise<void> | undefined
+        act(() => {
+            transaction = onCompactRuntimeChange?.({ type: 'permission', value: 'yolo' })
+        })
+
+        expect(sessionActionsMock.setCollaborationMode).toHaveBeenCalledWith('default')
+        expect(sessionActionsMock.setPermissionMode).not.toHaveBeenCalled()
+
+        await act(async () => {
+            resolveCollaboration?.()
+            await transaction
+        })
+
+        expect(sessionActionsMock.setPermissionMode).toHaveBeenCalledWith('yolo')
+        expect(hapticNotificationMock).toHaveBeenCalledTimes(1)
+        expect(hapticNotificationMock).toHaveBeenCalledWith('success')
+        expect(onRefresh).toHaveBeenCalledTimes(1)
+    })
+
+    it('stops a compact permission change after Plan clearing fails', async () => {
+        sessionActionsMock.setCollaborationMode.mockRejectedValueOnce(new Error('clear failed'))
+        const onRefresh = vi.fn()
+        renderChat(makeSession({
+            metadata: { path: '/repo', host: 'host', machineId: 'machine-1', flavor: 'codex' },
+            collaborationMode: 'plan',
+            permissionMode: 'default'
+        }), true, false, undefined, onRefresh)
+
+        const onCompactRuntimeChange = happyComposerMock.mock.calls.at(-1)?.[0].onCompactRuntimeChange
+
+        await expect(onCompactRuntimeChange?.({ type: 'permission', value: 'yolo' })).rejects.toThrow('clear failed')
+        expect(sessionActionsMock.setPermissionMode).not.toHaveBeenCalled()
+        expect(hapticNotificationMock).toHaveBeenCalledTimes(1)
+        expect(hapticNotificationMock).toHaveBeenCalledWith('error')
+        expect(onRefresh).not.toHaveBeenCalled()
     })
 
     it('keeps a loaded Codex goal viewable on non-Codex sessions but disables goal actions', () => {

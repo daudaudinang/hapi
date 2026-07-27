@@ -20,6 +20,7 @@ import { reconcileChatBlocks } from '@/chat/reconcile'
 import { buildConversationOutline, getConversationMessageAnchorId } from '@/chat/outline'
 import { isQueuedForInvocation } from '@/lib/messages'
 import { HappyComposer } from '@/components/AssistantChat/HappyComposer'
+import type { CompactRuntimeChange } from '@/components/AssistantChat/CompactComposerControls'
 import { HappyThread } from '@/components/AssistantChat/HappyThread'
 import { QueuedMessagesBar } from '@/components/AssistantChat/QueuedMessagesBar'
 import { TeamMentionQueueBar } from '@/components/AssistantChat/TeamMentionQueueBar'
@@ -408,6 +409,48 @@ export function SessionChat(props: {
         }
     }, [setEffort, props.onRefresh, haptic])
 
+    const handleCompactRuntimeChange = useCallback(async (change: CompactRuntimeChange) => {
+        try {
+            switch (change.type) {
+                case 'model':
+                    await setModel(change.value)
+                    break
+                case 'effort':
+                    if (agentFlavor === 'codex' || agentFlavor === 'opencode') {
+                        await setModelReasoningEffort(change.value)
+                    } else {
+                        await setEffort(change.value)
+                    }
+                    break
+                case 'collaboration':
+                    await setCollaborationMode(change.value)
+                    break
+                case 'permission':
+                    if (props.session.collaborationMode && props.session.collaborationMode !== 'default') {
+                        await setCollaborationMode('default')
+                    }
+                    await setPermissionMode(change.value)
+                    break
+            }
+            haptic.notification('success')
+            props.onRefresh()
+        } catch (error) {
+            haptic.notification('error')
+            console.error(`Failed to set compact runtime ${change.type}:`, error)
+            throw error
+        }
+    }, [
+        agentFlavor,
+        haptic,
+        props.onRefresh,
+        props.session.collaborationMode,
+        setCollaborationMode,
+        setEffort,
+        setModel,
+        setModelReasoningEffort,
+        setPermissionMode
+    ])
+
     // Abort handler
     const handleAbort = useCallback(async () => {
         await abortSession()
@@ -620,7 +663,7 @@ export function SessionChat(props: {
                         sessionId={props.session.id}
                         sendDisabled={props.isSending}
                         permissionMode={props.session.permissionMode}
-                        collaborationMode={codexCollaborationModeSupported ? props.session.collaborationMode : undefined}
+                        collaborationMode={agentFlavor === 'codex' ? props.session.collaborationMode : undefined}
                         model={props.session.model}
                         modelReasoningEffort={
                             agentFlavor === 'codex' || agentFlavor === 'opencode'
@@ -667,6 +710,7 @@ export function SessionChat(props: {
                                 : undefined
                         }
                         onEffortChange={handleEffortChange}
+                        onCompactRuntimeChange={props.compactComposerMode ? handleCompactRuntimeChange : undefined}
                         onSwitchToRemote={handleSwitchToRemote}
                         onTerminal={props.session.active && terminalSupported ? handleViewTerminal : undefined}
                         terminalUnsupported={props.session.active && !terminalSupported}
