@@ -28,10 +28,20 @@
 - Trạng thái không bị cuộn theo danh sách tab.
 - Thông báo lỗi dài hoặc trạng thái bất thường vẫn được hiển thị riêng khi cần, tránh ép mất vùng tab.
 
+### Bubble tương tác trên mobile
+
+- Ban đầu terminal không hiển thị bubble `Nhập | Chọn`.
+- Chạm một lần vào body terminal khi đang ở trạng thái nghỉ sẽ hiển thị bubble.
+- Chạm lần nữa vào body terminal khi bubble đang hiển thị sẽ ẩn bubble.
+- Cuộn terminal hoặc chuyển tab sẽ ẩn bubble.
+- Nhấn trực tiếp `Nhập` hoặc `Chọn` vẫn thực hiện thao tác tương ứng, không bị coi là lần chạm để đóng.
+- Chế độ đang nhập và đang quét chọn giữ nguyên vòng đời hiện tại.
+
 ## Phạm vi code dự kiến
 
 - `web/src/components/SessionChat.tsx`: đổi thao tác Terminal sang mở modal.
 - `web/src/components/Terminal/SessionTerminalTabs.tsx`: gộp tab và trạng thái vào một hàng.
+- `web/src/components/Terminal/useMobileTerminalInteraction.ts`: cho bubble lựa chọn bật/tắt theo lần chạm body.
 - `web/src/router.tsx`: xóa đăng ký route terminal.
 - `web/src/routes/sessions/terminal.tsx` và test: xóa.
 - Các test liên quan: thêm kiểm thử hồi quy cho modal và bố cục thanh terminal.
@@ -42,10 +52,12 @@
 - Terminal panel trong editor mode.
 - Terminal modal mở từ session header.
 - Giới hạn tối đa ba terminal.
+- Ngôn ngữ bàn phím, tự sửa, tự viết hoa và kiểm tra chính tả.
 
 ## Kiểm chứng
 
 1. Nhấn Terminal trong ô nhập mở modal và URL không chuyển sang route terminal cũ.
 2. Tab nằm trái, trạng thái nằm phải trên cùng hàng; tab vẫn cuộn được khi tràn.
-3. Route terminal không còn trong router và không còn component trang riêng.
-4. Test web, typecheck và build web/PWA hoàn tất.
+3. Chạm body terminal lần đầu hiện bubble, lần hai ẩn; cuộn và chuyển tab cũng ẩn.
+4. Route terminal không còn trong router và không còn component trang riêng.
+5. Test web, typecheck và build web/PWA hoàn tất.
