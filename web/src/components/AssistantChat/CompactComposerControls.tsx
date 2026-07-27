@@ -198,7 +198,9 @@ export function CompactRuntimeControls(props: {
                 : props.permissionModeOptions.filter((option) => option.mode === props.permissionMode)
         const collaborationOptions = props.onCollaborationModeChange
             ? (props.collaborationModeOptions ?? []).filter((option) => option.mode !== 'default')
-            : (props.collaborationModeOptions ?? []).filter((option) => option.mode === currentCollaborationMode)
+            : collaborationActive
+                ? (props.collaborationModeOptions ?? []).filter((option) => option.mode === currentCollaborationMode)
+                : []
         const options = [
             ...permissionOptions.map((option) => ({
                 value: `permission:${option.mode}`,

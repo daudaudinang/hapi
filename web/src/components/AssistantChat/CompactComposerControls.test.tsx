@@ -178,6 +178,36 @@ describe('CompactRuntimeControls', () => {
         expect(screen.queryByRole('option', { name: 'Yolo' })).not.toBeInTheDocument()
     })
 
+    it('renders only permission options when collaboration is default and unavailable', () => {
+        render(
+            <CompactRuntimeControls
+                disabled={false}
+                model={null}
+                modelOptions={[]}
+                effort={null}
+                effortLabel="misc.reasoningEffort"
+                effortOptions={[]}
+                permissionMode="default"
+                permissionModeOptions={[
+                    { mode: 'default', label: 'Default' },
+                    { mode: 'yolo', label: 'Yolo' }
+                ]}
+                collaborationMode="default"
+                collaborationModeOptions={[
+                    { mode: 'default', label: 'Default' },
+                    { mode: 'plan', label: 'Plan' }
+                ]}
+                onPermissionModeChange={vi.fn()}
+            />
+        )
+
+        const options = screen.getAllByRole('option') as HTMLOptionElement[]
+        expect(options.map((option) => option.value)).toEqual([
+            'permission:default',
+            'permission:yolo'
+        ])
+    })
+
     it('renders a collaboration-only selector with only the valid current permission state', () => {
         const onCollaborationModeChange = vi.fn()
 

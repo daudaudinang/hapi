@@ -663,7 +663,11 @@ export function SessionChat(props: {
                         sessionId={props.session.id}
                         sendDisabled={props.isSending}
                         permissionMode={props.session.permissionMode}
-                        collaborationMode={agentFlavor === 'codex' ? props.session.collaborationMode : undefined}
+                        collaborationMode={
+                            agentFlavor === 'codex' && (props.compactComposerMode || codexCollaborationModeSupported)
+                                ? props.session.collaborationMode
+                                : undefined
+                        }
                         model={props.session.model}
                         modelReasoningEffort={
                             agentFlavor === 'codex' || agentFlavor === 'opencode'

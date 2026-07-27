@@ -272,6 +272,42 @@ describe('SessionChat Codex goal header control', () => {
         }))
     })
 
+    it('forwards a read-only Codex Plan only to the compact composer', () => {
+        const controlledPlan = makeSession({
+            metadata: { path: '/repo', host: 'host', machineId: 'machine-1', flavor: 'codex' },
+            agentState: { controlledByUser: true },
+            collaborationMode: 'plan'
+        })
+        const view = renderChat(controlledPlan, false)
+
+        expect(happyComposerMock.mock.calls.at(-1)?.[0].collaborationMode).toBeUndefined()
+
+        view.rerender(
+            <SessionChat
+                api={null as never}
+                session={controlledPlan}
+                messages={[makeCodexGoalMessage()]}
+                messagesWarning={null}
+                hasMoreMessages={false}
+                isLoadingMessages={false}
+                isLoadingMoreMessages={false}
+                isSending={false}
+                pendingCount={0}
+                messagesVersion={1}
+                onBack={vi.fn()}
+                onRefresh={vi.fn()}
+                onLoadMore={() => Promise.resolve()}
+                onSend={onSendMock}
+                onFlushPending={vi.fn()}
+                onAtBottomChange={vi.fn()}
+                compactComposerMode
+            />
+        )
+
+        expect(happyComposerMock.mock.calls.at(-1)?.[0].collaborationMode).toBe('plan')
+        expect(happyComposerMock.mock.calls.at(-1)?.[0].onCollaborationModeChange).toBeUndefined()
+    })
+
     it('treats an in-flight message mutation as send-disabled rather than hard-disabling a running composer', () => {
         renderChat(makeSession({ thinking: true }), true, true)
 
