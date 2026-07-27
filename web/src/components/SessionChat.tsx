@@ -426,9 +426,12 @@ export function SessionChat(props: {
 
     const handleViewTerminal = useCallback(() => {
         navigate({
-            to: '/sessions/$sessionId/terminal',
-            params: { sessionId: props.session.id }
-        })
+            search: (previous: any) => ({
+                ...previous,
+                modal: 'terminal',
+                modalSessionId: props.session.id,
+            }),
+        } as any)
     }, [navigate, props.session.id])
 
     const handleSend = useCallback((text: string, attachments?: AttachmentMetadata[]) => {

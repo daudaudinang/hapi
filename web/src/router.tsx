@@ -32,7 +32,6 @@ import { clearDraftsAfterSend } from '@/lib/clearDraftsAfterSend'
 import type { Machine } from '@/types/api'
 import FilesPage from '@/routes/sessions/files'
 import FilePage from '@/routes/sessions/file'
-import TerminalPage from '@/routes/sessions/terminal'
 import SettingsPage from '@/routes/settings'
 import DashboardPage from '@/routes/dashboard'
 import EditorPage from '@/routes/editor'
@@ -425,12 +424,6 @@ const sessionFilesRoute = createRoute({
     component: FilesPage,
 })
 
-const sessionTerminalRoute = createRoute({
-    getParentRoute: () => sessionDetailRoute,
-    path: 'terminal',
-    component: TerminalPage,
-})
-
 type SessionFileSearch = {
     path: string
     staged?: boolean
@@ -565,7 +558,6 @@ export const routeTree = rootRoute.addChildren([
         sessionsIndexRoute,
         newSessionRoute,
         sessionDetailRoute.addChildren([
-            sessionTerminalRoute,
             sessionFilesRoute,
             sessionFileRoute,
         ]),
