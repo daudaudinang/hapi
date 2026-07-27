@@ -1,0 +1,240 @@
+import { act, cleanup, createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { HappyComposer } from './HappyComposer'
+
+const assistant = vi.hoisted(() => ({
+    state: {
+        composer: {
+            text: '',
+            attachments: [] as Array<{ status: { type: string } }>
+        },
+        thread: {
+            isRunning: false,
+            isDisabled: false
+        }
+    },
+    send: vi.fn(),
+    cancelRun: vi.fn(),
+    setText: vi.fn(),
+    addAttachment: vi.fn()
+}))
+
+vi.mock('@assistant-ui/react', async () => {
+    const React = await vi.importActual<typeof import('react')>('react')
+
+    return {
+        useAssistantApi: () => ({
+            composer: () => ({
+                send: assistant.send,
+                setText: assistant.setText,
+                addAttachment: assistant.addAttachment
+            }),
+            thread: () => ({
+                cancelRun: assistant.cancelRun
+            })
+        }),
+        useAssistantState: (selector: (state: typeof assistant.state) => unknown) => selector(assistant.state),
+        ComposerPrimitive: {
+            Root: ({ children, onSubmit, className }: React.ComponentProps<'form'>) => (
+                <form className={className} onSubmit={onSubmit}>{children}</form>
+            ),
+            Input: React.forwardRef<HTMLTextAreaElement, React.ComponentProps<'textarea'> & {
+                maxRows?: number
+                submitOnEnter?: boolean
+                cancelOnEscape?: boolean
+            }>((props, ref) => {
+                const {
+                    maxRows: _maxRows,
+                    submitOnEnter: _submitOnEnter,
+                    cancelOnEscape: _cancelOnEscape,
+                    onChange,
+                    ...textareaProps
+                } = props
+                return (
+                    <textarea
+                        {...textareaProps}
+                        ref={ref}
+                        value={assistant.state.composer.text}
+                        onChange={(event) => {
+                            assistant.state.composer.text = event.target.value
+                            assistant.setText(event.target.value)
+                            onChange?.(event)
+                        }}
+                    />
+                )
+            }),
+            AddAttachment: ({ children, ...props }: React.ComponentProps<'button'>) => (
+                <button type="button" {...props}>{children}</button>
+            ),
+            Attachments: () => null
+        }
+    }
+})
+
+vi.mock('@/hooks/usePlatform', () => ({
+    usePlatform: () => ({
+        isTouch: false,
+        haptic: {
+            impact: vi.fn(),
+            notification: vi.fn()
+        }
+    })
+}))
+
+vi.mock('@/hooks/useMediaQuery', () => ({
+    useMediaQuery: () => false
+}))
+
+vi.mock('@/hooks/usePWAInstall', () => ({
+    usePWAInstall: () => ({ isStandalone: false, isIOS: false })
+}))
+
+vi.mock('@/hooks/useActiveWord', () => ({
+    useActiveWord: () => null
+}))
+
+vi.mock('@/hooks/useActiveSuggestions', () => ({
+    useActiveSuggestions: () => [[], -1, vi.fn(), vi.fn(), vi.fn()]
+}))
+
+vi.mock('@/hooks/useComposerDraft', () => ({
+    useComposerDraft: vi.fn()
+}))
+
+vi.mock('@/lib/use-translation', () => ({
+    useTranslation: () => ({
+        t: (key: string) => key
+    })
+}))
+
+describe('HappyComposer compact Agent mode', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+        assistant.state.composer.text = ''
+        assistant.state.composer.attachments = []
+        assistant.state.thread.isRunning = false
+        assistant.state.thread.isDisabled = false
+        window.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+            callback(0)
+            return 1
+        })
+        window.cancelAnimationFrame = vi.fn()
+    })
+
+    afterEach(() => {
+        cleanup()
+        vi.unstubAllGlobals()
+    })
+
+    it('keeps drafting enabled and blocks desktop Enter while Stop is the only running action', () => {
+        assistant.state.thread.isRunning = true
+        assistant.state.thread.isDisabled = true
+        const view = render(<HappyComposer compactComposerMode />)
+        const input = screen.getByRole('textbox')
+
+        expect(input).toBeEnabled()
+        expect(screen.getByRole('button', { name: 'composer.stop' })).toBeEnabled()
+        expect(screen.queryByRole('button', { name: 'composer.send' })).not.toBeInTheDocument()
+
+        fireEvent.change(input, { target: { value: 'draft while running' } })
+        const enterEvent = createEvent.keyDown(input, { key: 'Enter' })
+        fireEvent(input, enterEvent)
+
+        expect(enterEvent.defaultPrevented).toBe(false)
+        expect(assistant.send).not.toHaveBeenCalled()
+
+        fireEvent.click(screen.getByRole('button', { name: 'composer.stop' }))
+        expect(assistant.cancelRun).toHaveBeenCalledTimes(1)
+
+        assistant.state.thread.isRunning = false
+        assistant.state.thread.isDisabled = false
+        view.rerender(<HappyComposer compactComposerMode />)
+
+        const send = screen.getByRole('button', { name: 'composer.send' })
+        expect(send).toBeEnabled()
+        fireEvent.click(send)
+        expect(assistant.send).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps the legacy composer and Terminal action outside Agent compact composer mode', () => {
+        const onTerminal = vi.fn()
+
+        render(<HappyComposer compactComposerMode={false} onTerminal={onTerminal} />)
+
+        fireEvent.click(screen.getByRole('button', { name: 'composer.terminal' }))
+        expect(onTerminal).toHaveBeenCalledTimes(1)
+        expect(document.querySelector('.compact-composer')).not.toBeInTheDocument()
+    })
+
+    it('switches a compact local session to remote and preserves pending/error behavior', async () => {
+        let rejectSwitch: ((reason?: unknown) => void) | undefined
+        const onSwitchToRemote = vi.fn(() => new Promise<void>((_resolve, reject) => {
+            rejectSwitch = reject
+        }))
+
+        render(
+            <HappyComposer
+                compactComposerMode
+                controlledByUser
+                onSwitchToRemote={onSwitchToRemote}
+            />
+        )
+
+        const switchButton = screen.getByRole('button', { name: 'composer.switchRemote' })
+        expect(switchButton).toHaveClass('compact-runtime-controls__switch')
+        expect(document.querySelector('.compact-composer')).toBeInTheDocument()
+        fireEvent.click(switchButton)
+
+        expect(onSwitchToRemote).toHaveBeenCalledTimes(1)
+        expect(switchButton).toBeDisabled()
+
+        await act(async () => {
+            rejectSwitch?.(new Error('switch failed'))
+            await Promise.resolve()
+        })
+
+        await waitFor(() => expect(switchButton).toBeEnabled())
+    })
+
+    it('updates adaptive radius for explicit newlines, wrapping, resize, and observer cleanup', async () => {
+        let resizeCallback: ResizeObserverCallback | undefined
+        const disconnect = vi.fn()
+        const observe = vi.fn()
+        vi.stubGlobal('ResizeObserver', class ResizeObserverMock {
+            constructor(callback: ResizeObserverCallback) {
+                resizeCallback = callback
+            }
+            observe = observe
+            unobserve = vi.fn()
+            disconnect = disconnect
+        })
+
+        assistant.state.composer.text = 'one line that may wrap'
+        const view = render(<HappyComposer compactComposerMode />)
+        const input = screen.getByRole('textbox')
+        const composer = document.querySelector('.compact-composer')
+
+        expect(observe).toHaveBeenCalledWith(input)
+        expect(composer).toHaveAttribute('data-multiline', 'false')
+
+        input.style.lineHeight = '20px'
+        input.style.paddingTop = '2px'
+        input.style.paddingBottom = '2px'
+        Object.defineProperty(input, 'clientHeight', { configurable: true, value: 48 })
+        Object.defineProperty(input, 'scrollHeight', { configurable: true, value: 48 })
+        act(() => resizeCallback?.([], {} as ResizeObserver))
+        expect(composer).toHaveAttribute('data-multiline', 'true')
+
+        Object.defineProperty(input, 'clientHeight', { configurable: true, value: 24 })
+        Object.defineProperty(input, 'scrollHeight', { configurable: true, value: 24 })
+        act(() => resizeCallback?.([], {} as ResizeObserver))
+        expect(composer).toHaveAttribute('data-multiline', 'false')
+
+        assistant.state.composer.text = 'first\nsecond'
+        view.rerender(<HappyComposer compactComposerMode />)
+        await waitFor(() => expect(composer).toHaveAttribute('data-multiline', 'true'))
+
+        view.unmount()
+        expect(disconnect).toHaveBeenCalledTimes(1)
+    })
+})

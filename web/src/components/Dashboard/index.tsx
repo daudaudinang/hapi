@@ -345,6 +345,7 @@ function PinnedPanel({ sessionId, api, onUnpin, onSessionResolved, pinIndex, com
                 availableSlashCommands={slashCommands}
                 disableVoice
                 compactMode={true}
+                compactComposerMode={true}
                 pinIndex={pinIndex}
                 onFocusSession={onFocusSession}
                 compactCloseLabel={onCloseFocus ? 'Close focus session' : undefined}

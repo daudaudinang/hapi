@@ -898,6 +898,7 @@ html[data-theme="dark"] .shiki span {
 
 .compact-composer__attachment:focus-visible,
 .compact-composer__action:focus-visible,
+.compact-runtime-controls__switch:focus-visible,
 .compact-runtime-controls select:focus-visible {
     outline: 2px solid color-mix(in srgb, #7c6cff 72%, white);
     outline-offset: 2px;
@@ -933,6 +934,31 @@ html[data-theme="dark"] .shiki span {
     align-items: center;
     justify-content: flex-end;
     gap: 5px;
+}
+
+.compact-runtime-controls__switch {
+    display: inline-flex;
+    width: 26px;
+    height: 26px;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 26px;
+    border: 1px solid var(--app-border);
+    border-radius: 7px;
+    background: var(--app-subtle-bg);
+    color: var(--app-hint);
+    transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
+}
+
+.compact-runtime-controls__switch:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--app-link) 30%, var(--app-border));
+    background: var(--app-secondary-bg);
+    color: var(--app-link);
+}
+
+.compact-runtime-controls__switch:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
 }
 
 .compact-runtime-controls__field {
@@ -990,6 +1016,11 @@ html[data-theme="dark"] .shiki span {
         gap: 6px;
     }
 
+    .compact-runtime-controls__switch {
+        width: 100%;
+        height: 30px;
+    }
+
     .compact-runtime-controls select {
         max-width: none;
         height: 30px;
@@ -1002,6 +1033,7 @@ html[data-theme="dark"] .shiki span {
     .compact-composer,
     .compact-composer__attachment,
     .compact-composer__action,
+    .compact-runtime-controls__switch,
     .compact-runtime-controls select {
         transition: none;
         transform: none !important;

@@ -64,6 +64,28 @@ export function appendTextToComposerDraft(currentDraft: string, textToAppend: st
     return nextText
 }
 
+export function shouldUseMultilineComposerRadius(
+    text: string,
+    scrollHeight: number,
+    clientHeight: number,
+    singleLineHeight = clientHeight
+): boolean {
+    if (text.length === 0) return false
+    const baselineHeight = singleLineHeight > 0 ? singleLineHeight : clientHeight
+    return text.includes('\n') || scrollHeight > baselineHeight + 2
+}
+
+function getCompactComposerSingleLineHeight(input: HTMLTextAreaElement): number {
+    const styles = window.getComputedStyle(input)
+    const lineHeight = Number.parseFloat(styles.lineHeight)
+    const paddingTop = Number.parseFloat(styles.paddingTop)
+    const paddingBottom = Number.parseFloat(styles.paddingBottom)
+    if (!Number.isFinite(lineHeight)) return input.clientHeight
+    return lineHeight
+        + (Number.isFinite(paddingTop) ? paddingTop : 0)
+        + (Number.isFinite(paddingBottom) ? paddingBottom : 0)
+}
+
 const defaultSuggestionHandler = async (): Promise<Suggestion[]> => []
 
 export function HappyComposer(props: {
@@ -91,7 +113,7 @@ export function HappyComposer(props: {
     onModelChange?: (model: string | null) => void
     onModelReasoningEffortChange?: (modelReasoningEffort: string | null) => void
     onEffortChange?: (effort: string | null) => void
-    onSwitchToRemote?: () => void
+    onSwitchToRemote?: () => void | Promise<void>
     onTerminal?: () => void
     terminalUnsupported?: boolean
     autocompletePrefixes?: string[]
@@ -103,7 +125,7 @@ export function HappyComposer(props: {
     onVoiceMicToggle?: () => void
     appendText?: string
     onAppendTextConsumed?: () => void
-    compactMode?: boolean
+    compactComposerMode?: boolean
 }) {
     const { t } = useTranslation()
     const {
@@ -142,7 +164,7 @@ export function HappyComposer(props: {
         onVoiceMicToggle,
         appendText,
         onAppendTextConsumed,
-        compactMode = false
+        compactComposerMode = false
     } = props
 
     // Use ?? so missing values fall back to default (destructuring defaults only handle undefined)
@@ -158,7 +180,11 @@ export function HappyComposer(props: {
     const threadIsRunning = useAssistantState(({ thread }) => thread.isRunning)
     const threadIsDisabled = useAssistantState(({ thread }) => thread.isDisabled)
 
-    const controlsDisabled = disabled || (!active && !allowSendWhenInactive) || threadIsDisabled
+    const sessionControlsDisabled = disabled || (!active && !allowSendWhenInactive)
+    const controlsDisabled = sessionControlsDisabled || threadIsDisabled
+    const composerInputDisabled = compactComposerMode && threadIsRunning
+        ? sessionControlsDisabled
+        : controlsDisabled
     const trimmed = composerText.trim()
     const hasText = trimmed.length > 0
     const hasAttachments = attachments.length > 0
@@ -172,7 +198,10 @@ export function HappyComposer(props: {
         const path = (attachment as { path?: string }).path
         return typeof path === 'string' && path.length > 0
     })
-    const canSend = (hasText || hasAttachments) && attachmentsReady && !controlsDisabled
+    const canSend = (hasText || hasAttachments)
+        && attachmentsReady
+        && !controlsDisabled
+        && (!compactComposerMode || !threadIsRunning)
 
     const [inputState, setInputState] = useState<TextInputState>({
         text: '',
@@ -229,23 +258,39 @@ export function HappyComposer(props: {
     }, [composerText])
 
     useEffect(() => {
-        if (!compactMode) return
-        if (!composerText) {
-            setComposerMultiline(false)
-            return
-        }
+        if (!compactComposerMode) return
 
         const frame = window.requestAnimationFrame(() => {
             const input = textareaRef.current
             if (!input) return
-            setComposerMultiline(
-                composerText.includes('\n')
-                || input.scrollHeight > input.clientHeight + 2
-            )
+            setComposerMultiline(shouldUseMultilineComposerRadius(
+                composerText,
+                input.scrollHeight,
+                input.clientHeight,
+                getCompactComposerSingleLineHeight(input)
+            ))
         })
 
         return () => window.cancelAnimationFrame(frame)
-    }, [compactMode, composerText])
+    }, [compactComposerMode, composerText])
+
+    useEffect(() => {
+        if (!compactComposerMode) return
+        const input = textareaRef.current
+        if (!input || typeof ResizeObserver === 'undefined') return
+
+        const observer = new ResizeObserver(() => {
+            setComposerMultiline(shouldUseMultilineComposerRadius(
+                input.value,
+                input.scrollHeight,
+                input.clientHeight,
+                getCompactComposerSingleLineHeight(input)
+            ))
+        })
+        observer.observe(input)
+
+        return () => observer.disconnect()
+    }, [compactComposerMode])
 
     // Track one-time "continue" hint after switching from local to remote.
     useEffect(() => {
@@ -315,7 +360,9 @@ export function HappyComposer(props: {
         haptic('light')
     }, [api, suggestions, inputState, autocompletePrefixes, haptic])
 
-    const abortDisabled = controlsDisabled || isAborting || !threadIsRunning
+    const abortDisabled = (compactComposerMode ? sessionControlsDisabled : controlsDisabled)
+        || isAborting
+        || !threadIsRunning
     const switchDisabled = controlsDisabled || isSwitching || !controlledByUser
     const showSwitchButton = Boolean(controlledByUser && onSwitchToRemote)
     const showTerminalButton = Boolean(onTerminal || terminalUnsupported)
@@ -384,6 +431,12 @@ export function HappyComposer(props: {
 
         // Avoid intercepting IME composition keystrokes (Enter, arrows, etc.)
         if (e.nativeEvent.isComposing) {
+            return
+        }
+
+        // Agent Mode supports drafting while a run is active, but never queues
+        // another send. Leave Enter alone so it remains a drafting/newline action.
+        if (key === 'Enter' && compactComposerMode && threadIsRunning) {
             return
         }
 
@@ -470,6 +523,7 @@ export function HappyComposer(props: {
         api,
         isTouch,
         hasCoarsePointer,
+        compactComposerMode,
         haptic
     ])
 
@@ -492,13 +546,15 @@ export function HappyComposer(props: {
             end: e.target.selectionEnd
         }
         setInputState({ text: e.target.value, selection })
-        if (compactMode) {
-            setComposerMultiline(
-                e.target.value.includes('\n')
-                || e.target.scrollHeight > e.target.clientHeight + 2
-            )
+        if (compactComposerMode) {
+            setComposerMultiline(shouldUseMultilineComposerRadius(
+                e.target.value,
+                e.target.scrollHeight,
+                e.target.clientHeight,
+                getCompactComposerSingleLineHeight(e.target)
+            ))
         }
-    }, [compactMode])
+    }, [compactComposerMode])
 
     const handleSelect = useCallback((e: ReactSyntheticEvent<HTMLTextAreaElement>) => {
         const target = e.target as HTMLTextAreaElement
@@ -531,12 +587,12 @@ export function HappyComposer(props: {
     }, [haptic])
 
     const handleSubmit = useCallback((event?: ReactFormEvent<HTMLFormElement>) => {
-        if (event && !attachmentsReady) {
+        if (event && (!attachmentsReady || (compactComposerMode && threadIsRunning))) {
             event.preventDefault()
             return
         }
         setShowContinueHint(false)
-    }, [attachmentsReady])
+    }, [attachmentsReady, compactComposerMode, threadIsRunning])
 
     const handlePermissionChange = useCallback((mode: PermissionMode) => {
         if (!onPermissionModeChange || controlsDisabled) return
@@ -597,8 +653,9 @@ export function HappyComposer(props: {
             : undefined
 
     const handleSend = useCallback(() => {
+        if (!canSend) return
         api.composer().send()
-    }, [api])
+    }, [api, canSend])
 
     const overlays = useMemo(() => {
         if (showSettings && (showCollaborationSettings || showPermissionSettings || showModelSettings || showModelReasoningEffortSettings || showEffortSettings)) {
@@ -692,7 +749,7 @@ export function HappyComposer(props: {
             collaborationMode={collaborationMode}
             agentFlavor={agentFlavor}
             voiceStatus={voiceStatus}
-            compactControls={compactMode ? (
+            compactControls={compactComposerMode ? (
                 <CompactRuntimeControls
                     disabled={controlsDisabled}
                     model={model}
@@ -708,6 +765,9 @@ export function HappyComposer(props: {
                     onEffortChange={compactEffortHandler}
                     onPermissionModeChange={showPermissionSettings ? handlePermissionChange : undefined}
                     onCollaborationModeChange={showCollaborationSettings ? handleCollaborationChange : undefined}
+                    onSwitchToRemote={showSwitchButton ? handleSwitch : undefined}
+                    switchDisabled={switchDisabled}
+                    isSwitching={isSwitching}
                 />
             ) : undefined}
         />
@@ -719,9 +779,9 @@ export function HappyComposer(props: {
                 <ComposerPrimitive.Root className="relative" onSubmit={handleSubmit}>
                     {overlays}
 
-                    {!compactMode ? statusBar : null}
+                    {!compactComposerMode ? statusBar : null}
 
-                    {compactMode ? (
+                    {compactComposerMode ? (
                         <>
                             <div
                                 className="compact-composer"
@@ -737,9 +797,9 @@ export function HappyComposer(props: {
                                     <CompactComposerAttachmentButton disabled={controlsDisabled} />
                                     <ComposerPrimitive.Input
                                         ref={textareaRef}
-                                        autoFocus={!controlsDisabled && !isTouch}
+                                        autoFocus={!composerInputDisabled && !isTouch}
                                         placeholder={showContinueHint ? t('misc.typeMessage') : t('misc.typeAMessage')}
-                                        disabled={controlsDisabled}
+                                        disabled={composerInputDisabled}
                                         maxRows={5}
                                         submitOnEnter={false}
                                         cancelOnEscape={false}

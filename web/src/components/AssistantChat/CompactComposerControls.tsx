@@ -51,6 +51,25 @@ function StopIcon(props: { spinning: boolean }) {
     )
 }
 
+function SwitchToRemoteIcon(props: { spinning: boolean }) {
+    if (props.spinning) {
+        return (
+            <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" opacity="0.25" />
+                <path d="M12 3a9 9 0 0 1 9 9" strokeLinecap="round" />
+            </svg>
+        )
+    }
+
+    return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="6" y="2.5" width="12" height="19" rx="2" />
+            <path d="M9.5 12h5" />
+            <path d="m12.5 9 3 3-3 3" />
+        </svg>
+    )
+}
+
 export function CompactComposerAttachmentButton(props: { disabled: boolean }) {
     const { t } = useTranslation()
 
@@ -137,6 +156,9 @@ export function CompactRuntimeControls(props: {
     onEffortChange?: (effort: string | null) => void
     onPermissionModeChange?: (mode: PermissionMode) => void
     onCollaborationModeChange?: (mode: CodexCollaborationMode) => void
+    onSwitchToRemote?: () => void
+    switchDisabled?: boolean
+    isSwitching?: boolean
 }) {
     const { t } = useTranslation()
     const showModel = Boolean(props.onModelChange && props.modelOptions.length > 0)
@@ -148,6 +170,7 @@ export function CompactRuntimeControls(props: {
         (props.onPermissionModeChange && props.permissionModeOptions.length > 0)
         || collaborationOptions.length > 0
     )
+    const showSwitch = Boolean(props.onSwitchToRemote)
     const selectedMode = props.collaborationMode && props.collaborationMode !== 'default'
         ? `collaboration:${props.collaborationMode}`
         : `permission:${props.permissionMode}`
@@ -164,10 +187,24 @@ export function CompactRuntimeControls(props: {
         props.onPermissionModeChange?.(value.slice('permission:'.length) as PermissionMode)
     }
 
-    if (!showModel && !showEffort && !showPermission) return null
+    if (!showModel && !showEffort && !showPermission && !showSwitch) return null
 
     return (
         <div className="compact-runtime-controls">
+            {showSwitch && props.onSwitchToRemote ? (
+                <button
+                    type="button"
+                    className="compact-runtime-controls__switch"
+                    aria-label={t('composer.switchRemote')}
+                    title={t('composer.switchRemote')}
+                    disabled={props.switchDisabled || props.isSwitching}
+                    aria-busy={props.isSwitching ? 'true' : undefined}
+                    onClick={props.onSwitchToRemote}
+                >
+                    <SwitchToRemoteIcon spinning={props.isSwitching === true} />
+                </button>
+            ) : null}
+
             {showModel && props.onModelChange ? (
                 <ValueSelect
                     label={t('misc.model')}

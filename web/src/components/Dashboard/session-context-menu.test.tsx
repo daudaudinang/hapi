@@ -7,6 +7,7 @@ import type { SessionSummary } from '@/types/api'
 
 const navigate = vi.fn()
 const sessionChatUnmounts = vi.fn()
+const sessionChatMock = vi.fn()
 let mockSessions: SessionSummary[]
 
 vi.mock('@tanstack/react-router', () => ({
@@ -73,7 +74,10 @@ vi.mock('@/components/SessionChat', async () => {
             onFocusSession?: () => void
             compactCloseLabel?: string
             compactCloseButtonRef?: React.Ref<HTMLButtonElement>
+            compactMode?: boolean
+            compactComposerMode?: boolean
         }) => {
+            sessionChatMock(props)
             const instanceId = React.useId()
             const [draft, setDraft] = React.useState('')
             React.useEffect(() => () => sessionChatUnmounts(props.session.id), [props.session.id])
@@ -231,6 +235,7 @@ describe('Dashboard session context menu', () => {
     beforeEach(() => {
         navigate.mockClear()
         sessionChatUnmounts.mockClear()
+        sessionChatMock.mockClear()
         sessionStorage.clear()
         resetMockSessions()
         mobileMedia = null
@@ -289,6 +294,10 @@ describe('Dashboard session context menu', () => {
 
         fireEvent.click(cardTitle)
         expect(sessionStorage.getItem('mc-pinned-ids')).toBe(JSON.stringify(['session-1']))
+        expect(sessionChatMock).toHaveBeenCalledWith(expect.objectContaining({
+            compactMode: true,
+            compactComposerMode: true
+        }))
     })
 
     it('expands the existing pinned panel without remounting the session chat', () => {

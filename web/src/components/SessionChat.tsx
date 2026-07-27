@@ -74,6 +74,7 @@ export function SessionChat(props: {
     disableVoice?: boolean
     hideHeader?: boolean
     compactMode?: boolean
+    compactComposerMode?: boolean
     pinIndex?: number
     composerAppendText?: string
     onComposerAppendTextConsumed?: () => void
@@ -673,7 +674,7 @@ export function SessionChat(props: {
                         onVoiceMicToggle={voice ? handleVoiceMicToggle : undefined}
                         appendText={props.composerAppendText}
                         onAppendTextConsumed={props.onComposerAppendTextConsumed}
-                        compactMode={props.compactMode}
+                        compactComposerMode={props.compactComposerMode}
                     />
                 </div>
             </AssistantRuntimeProvider>

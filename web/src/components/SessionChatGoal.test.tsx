@@ -5,6 +5,7 @@ import { SessionChat } from './SessionChat'
 
 const navigateMock = vi.fn()
 const onSendMock = vi.fn()
+const happyComposerMock = vi.hoisted(() => vi.fn())
 const useAgentModelsMock = vi.hoisted(() => vi.fn(() => ({
     models: [],
     status: 'fallback',
@@ -109,7 +110,10 @@ vi.mock('@/components/AssistantChat/HappyThread', () => ({
 }))
 
 vi.mock('@/components/AssistantChat/HappyComposer', () => ({
-    HappyComposer: () => <div data-testid="happy-composer" />
+    HappyComposer: (props: { compactComposerMode?: boolean }) => {
+        happyComposerMock(props)
+        return <div data-testid="happy-composer" />
+    }
 }))
 
 vi.mock('@/components/AssistantChat/QueuedMessagesBar', () => ({
@@ -192,7 +196,7 @@ function makeCodexGoalMessage(): DecryptedMessage {
     }
 }
 
-function renderChat(session: Session = makeSession()) {
+function renderChat(session: Session = makeSession(), compactComposerMode?: boolean) {
     return render(
         <SessionChat
             api={null as never}
@@ -211,6 +215,7 @@ function renderChat(session: Session = makeSession()) {
             onSend={onSendMock}
             onFlushPending={vi.fn()}
             onAtBottomChange={vi.fn()}
+            compactComposerMode={compactComposerMode}
         />
     )
 }
@@ -237,6 +242,14 @@ describe('SessionChat Codex goal header control', () => {
     afterEach(() => {
         cleanup()
         consoleErrorSpy.mockRestore()
+    })
+
+    it('forwards the dedicated compact composer scope independently from compact header layout', () => {
+        renderChat(makeSession(), true)
+
+        expect(happyComposerMock).toHaveBeenCalledWith(expect.objectContaining({
+            compactComposerMode: true
+        }))
     })
 
     it('keeps a loaded Codex goal viewable on non-Codex sessions but disables goal actions', () => {
