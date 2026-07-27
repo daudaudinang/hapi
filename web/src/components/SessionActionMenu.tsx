@@ -305,7 +305,7 @@ export function SessionActionMenu(props: SessionActionMenuProps) {
                         onClick={handleOpenFiles}
                     >
                         <FolderIcon className="text-[var(--app-hint)]" />
-                        {t('button.files')}
+                        {t('session.title')}
                     </button>
                 ) : null}
 

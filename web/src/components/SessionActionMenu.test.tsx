@@ -54,7 +54,7 @@ describe('SessionActionMenu', () => {
             />
         )
 
-        fireEvent.click(screen.getByRole('menuitem', { name: 'button.files' }))
+        fireEvent.click(screen.getByRole('menuitem', { name: 'session.title' }))
         expect(onClose).toHaveBeenCalledTimes(1)
         expect(onOpenFiles).toHaveBeenCalledTimes(1)
 
@@ -77,7 +77,7 @@ describe('SessionActionMenu', () => {
             />
         )
 
-        expect(screen.getByRole('menuitem', { name: 'button.files' })).toHaveClass('session-action-menu__mobile-only')
+        expect(screen.getByRole('menuitem', { name: 'session.title' })).toHaveClass('session-action-menu__mobile-only')
         expect(screen.getByRole('separator')).toHaveClass('session-action-menu__mobile-only')
     })
 
@@ -96,7 +96,7 @@ describe('SessionActionMenu', () => {
             />
         )
 
-        expect(screen.getByRole('menuitem', { name: 'button.files' })).not.toHaveClass('session-action-menu__mobile-only')
+        expect(screen.getByRole('menuitem', { name: 'session.title' })).not.toHaveClass('session-action-menu__mobile-only')
         expect(screen.getByRole('separator')).not.toHaveClass('session-action-menu__mobile-only')
     })
 
@@ -115,7 +115,7 @@ describe('SessionActionMenu', () => {
             />
         )
 
-        expect(screen.getByRole('menuitem', { name: 'button.files' })).toHaveClass('session-action-menu__mobile-only')
+        expect(screen.getByRole('menuitem', { name: 'session.title' })).toHaveClass('session-action-menu__mobile-only')
         expect(screen.getByRole('separator')).not.toHaveClass('session-action-menu__mobile-only')
     })
 })

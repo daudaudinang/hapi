@@ -224,19 +224,22 @@ export function useHappyRuntime(props: {
     attachmentAdapter?: AttachmentAdapter
     allowSendWhenInactive?: boolean
     allowDraftWhileRunning?: boolean
+    isAgentRunning?: boolean
 }) {
+    const isAgentRunning = props.isAgentRunning ?? props.session.thinking
+
     // Use cached message converter for performance optimization
     // This prevents re-converting all messages on every render
     const convertedMessages = useExternalMessageConverter<ChatBlock>({
         callback: toThreadMessageLike,
         messages: props.blocks as ChatBlock[],
-        isRunning: props.session.thinking,
+        isRunning: isAgentRunning,
     })
 
     const sessionUnavailable = !props.session.active && !props.allowSendWhenInactive
     const internalSendBlocked = props.isSending
         || sessionUnavailable
-        || (props.allowDraftWhileRunning === true && props.session.thinking)
+        || (props.allowDraftWhileRunning === true && isAgentRunning)
 
     const onNew = useCallback(async (message: AppendMessage) => {
         if (internalSendBlocked) return
@@ -252,10 +255,10 @@ export function useHappyRuntime(props: {
     // Memoize the adapter to avoid recreating on every render
     // useExternalStoreRuntime may use adapter identity for subscriptions
     const adapter = useMemo(() => ({
-        isDisabled: props.allowDraftWhileRunning && props.session.thinking && !sessionUnavailable
+        isDisabled: props.allowDraftWhileRunning && isAgentRunning && !sessionUnavailable
             ? false
             : props.isSending || sessionUnavailable,
-        isRunning: props.session.thinking,
+        isRunning: isAgentRunning,
         messages: convertedMessages,
         onNew,
         onCancel,
@@ -266,7 +269,7 @@ export function useHappyRuntime(props: {
         props.isSending,
         props.allowSendWhenInactive,
         props.allowDraftWhileRunning,
-        props.session.thinking,
+        isAgentRunning,
         sessionUnavailable,
         convertedMessages,
         onNew,

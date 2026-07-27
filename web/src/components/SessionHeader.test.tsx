@@ -60,7 +60,7 @@ vi.mock('@/components/SessionActionMenu', () => ({
                     className={props.filesVisibleOnDesktop ? undefined : 'session-action-menu__mobile-only'}
                     onClick={props.onOpenFiles}
                 >
-                    button.files
+                    session.title
                 </button>
             ) : null}
             {props.onUnpin ? <button type="button" onClick={props.onUnpin}>dashboard.unpin</button> : null}
@@ -398,7 +398,7 @@ describe('SessionHeader editor entry point', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'session.more' }))
 
-        expect(screen.getByRole('button', { name: 'button.files' })).not.toHaveClass('session-action-menu__mobile-only')
+        expect(screen.getByRole('button', { name: 'session.title' })).not.toHaveClass('session-action-menu__mobile-only')
     })
 
     it('keeps Files mobile-only in More when the compact path trigger exists', () => {
@@ -420,7 +420,7 @@ describe('SessionHeader editor entry point', () => {
         expect(screen.getByRole('button', { name: 'Localized open files in /workspace/hapi' })).toBeInTheDocument()
         fireEvent.click(screen.getByRole('button', { name: 'session.more' }))
 
-        expect(screen.getByRole('button', { name: 'button.files' })).toHaveClass('session-action-menu__mobile-only')
+        expect(screen.getByRole('button', { name: 'session.title' })).toHaveClass('session-action-menu__mobile-only')
     })
 
     it('uses localized compact path trigger labels in every supported locale', () => {
@@ -736,7 +736,7 @@ describe('SessionHeader editor entry point', () => {
         )
 
         fireEvent.doubleClick(screen.getByRole('button', { name: 'Localized open files in /repo' }))
-        fireEvent.doubleClick(screen.getByRole('button', { name: 'button.terminal' }))
+        fireEvent.doubleClick(screen.getByRole('button', { name: 'chat.terminal' }))
         fireEvent.doubleClick(screen.getByRole('button', { name: 'session.more' }))
 
         expect(onFocusSession).not.toHaveBeenCalled()

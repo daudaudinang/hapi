@@ -454,8 +454,8 @@ export function SessionHeader(props: {
                                     </svg>
                                 </button>
                             ) : null}
-                            <button type="button" className="db-pinned__compact-action" onClick={handleOpenCompactTerminal} onDoubleClick={(event) => event.stopPropagation()} title={t('button.terminal')}
-                                aria-label={t('button.terminal')}
+                            <button type="button" className="db-pinned__compact-action" onClick={handleOpenCompactTerminal} onDoubleClick={(event) => event.stopPropagation()} title={t('chat.terminal')}
+                                aria-label={t('chat.terminal')}
                             >
                                 <TerminalIcon className="w-4 h-4" />
                             </button>
@@ -705,7 +705,7 @@ export function SessionHeader(props: {
                     <button
                         type="button"
                         className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
-                        title={t('button.files')}
+                        title={t('session.title')}
                         onClick={() => navigate({ search: (prev: any) => ({ ...prev, modal: 'files', modalSessionId: session.id }) } as any)}
                     >
                         <FolderIcon className="w-5 h-5" />
@@ -713,7 +713,7 @@ export function SessionHeader(props: {
                     <button
                         type="button"
                         className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]"
-                        title={t('button.terminal')}
+                        title={t('chat.terminal')}
                         onClick={() => navigate({ search: (prev: any) => ({ ...prev, modal: 'terminal', modalSessionId: session.id }) } as any)}
                     >
                         <TerminalIcon className="w-5 h-5" />

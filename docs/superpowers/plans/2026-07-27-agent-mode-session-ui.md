@@ -55,9 +55,9 @@
   - Preserve existing status bar.
   - Add compact layout slot for interactive runtime controls.
 - [x] Update `web/src/components/AssistantChat/HappyComposer.tsx`
-  - Add `compactMode`.
-  - Render approved pill composer only in compact mode.
-  - Keep existing composer untouched outside compact mode.
+  - Add the dedicated `compactComposerMode` scope.
+  - Render approved pill composer only in Agent Mode.
+  - Keep the Editor composer untouched.
   - Move compact runtime status below the input.
   - Preserve max five rows, attachments, autocomplete, IME, send, and abort behavior.
 - [x] Update `web/src/components/SessionChat.tsx`
@@ -75,3 +75,25 @@
 - [x] Inspect desktop/mobile and light/dark with browser automation when runtime fixtures permit.
 - [x] Review `git diff --check` and scoped diff; confirm no API/backend changes.
 - [x] Commit only the implementation files and this plan.
+
+### Review Findings
+
+- [x] [Review][Patch] Đồng nhất desktop/mobile: khi agent đang chạy chỉ hiện Stop; vẫn cho soạn nháp nhưng chặn mọi cách gửi cho tới khi agent hoàn thành [web/src/components/AssistantChat/HappyComposer.tsx:382]
+- [x] [Review][Patch] Tách giao diện composer Agent Mode khỏi `compactMode` dùng chung để không đổi ngoài phạm vi và làm mất nút Terminal trong Editor Chat [web/src/components/SessionChat.tsx:676]
+- [x] [Review][Patch] Khôi phục lối chuyển session local về remote trong Agent Mode compact [web/src/components/AssistantChat/HappyComposer.tsx:724]
+- [x] [Review][Patch] Chuẩn hóa chuyển Plan/Permission: luôn hiển thị đúng trạng thái, tuần tự hóa RPC, khóa khi đang cập nhật và hỗ trợ provider chỉ có một loại callback [web/src/components/AssistantChat/CompactComposerControls.tsx:144]
+- [x] [Review][Patch] Giữ Files truy cập được trên desktop khi thiếu path, bỏ separator mồ côi và địa phương hóa nhãn hỗ trợ đọc màn hình [web/src/components/SessionActionMenu.tsx:298]
+- [x] [Review][Patch] Dùng độ rộng panel thay vì viewport để xếp runtime selectors trong bố cục nhiều card [web/src/index.css:972]
+- [x] [Review][Patch] Không làm mất các team membership sau mục đầu; thêm chỉ báo `+N`/overflow gọn [web/src/components/SessionHeader.tsx:373]
+- [x] [Review][Patch] Sửa nhận diện composer nhiều dòng khi text tự wrap hoặc panel đổi kích thước [web/src/components/AssistantChat/HappyComposer.tsx:231]
+- [x] [Review][Patch] Bổ sung test tích hợp compact composer cho switch remote, Terminal/Editor scope, IME, autocomplete, attachment, gửi/dừng và text tự wrap [web/src/components/AssistantChat/CompactComposerControls.test.tsx:1]
+- [x] [Browser][Patch] Suy ra trạng thái chạy bảo thủ từ tool call chưa có kết quả khi cờ `session.thinking` của provider đến chậm; khóa cả lệnh Goal trong thời gian chạy [web/src/chat/running.ts:1]
+- [x] [Browser][Patch] Dùng khóa dịch hiện có cho Files/Terminal thay vì hiển thị literal `button.files`/`button.terminal` [web/src/components/SessionActionMenu.tsx:308]
+
+### Verification Evidence
+
+- Full web suite: 131 files, 1056 tests passed.
+- Web typecheck: passed.
+- Web production build: passed; only pre-existing Browserslist, KaTeX asset, and chunk-size warnings.
+- Browser: desktop light, mobile 390 light, mobile 320 dark, and focused panel checked against the worktree Vite server.
+- Browser assertions: Stop-only while running, editable draft, responsive runtime selectors, correct Files fallback, no orphan focused separator, no horizontal overflow.

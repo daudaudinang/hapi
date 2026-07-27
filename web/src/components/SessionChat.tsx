@@ -17,6 +17,7 @@ import type { SendStatus } from '@/hooks/mutations/useSendMessage'
 import { normalizeDecryptedMessage } from '@/chat/normalize'
 import { reduceChatBlocks } from '@/chat/reducer'
 import { reconcileChatBlocks } from '@/chat/reconcile'
+import { hasInFlightToolCall } from '@/chat/running'
 import { buildConversationOutline, getConversationMessageAnchorId } from '@/chat/outline'
 import { isQueuedForInvocation } from '@/lib/messages'
 import { HappyComposer } from '@/components/AssistantChat/HappyComposer'
@@ -322,6 +323,8 @@ export function SessionChat(props: {
         () => reduceChatBlocks(normalizedMessages, props.session.agentState, teamMentionRequests),
         [normalizedMessages, props.session.agentState, teamMentionRequests]
     )
+    const effectiveAgentRunning = props.session.thinking
+        || (props.compactComposerMode === true && hasInFlightToolCall(normalizedMessages))
     const reconciled = useMemo(
         () => reconcileChatBlocks(reduced.blocks, blocksByIdRef.current),
         [reduced.blocks]
@@ -486,8 +489,9 @@ export function SessionChat(props: {
     }, [props.onSend])
 
     const handleGoalCommand = useCallback((command: string) => {
+        if (effectiveAgentRunning) return
         handleSend(command)
-    }, [handleSend])
+    }, [effectiveAgentRunning, handleSend])
 
     const attachmentAdapter = useMemo(() => {
         if (!props.session.active) {
@@ -504,7 +508,8 @@ export function SessionChat(props: {
         onAbort: handleAbort,
         attachmentAdapter,
         allowSendWhenInactive: true,
-        allowDraftWhileRunning: props.compactComposerMode === true
+        allowDraftWhileRunning: props.compactComposerMode === true,
+        isAgentRunning: effectiveAgentRunning
     })
 
     return (
@@ -523,7 +528,7 @@ export function SessionChat(props: {
                     compactCloseLabel={props.compactCloseLabel}
                     compactCloseButtonRef={props.compactCloseButtonRef}
                     codexGoal={reduced.latestGoal}
-                    onGoalCommand={handleGoalCommand}
+                    onGoalCommand={effectiveAgentRunning ? undefined : handleGoalCommand}
                 />
             )}
 
@@ -688,7 +693,7 @@ export function SessionChat(props: {
                         availableModelReasoningEffortOptions={opencodeReasoningEffortOptions}
                         active={props.session.active}
                         allowSendWhenInactive
-                        thinking={props.session.thinking}
+                        thinking={effectiveAgentRunning}
                         agentState={props.session.agentState}
                         backgroundTaskCount={props.session.backgroundTaskCount}
                         contextSize={reduced.latestUsage?.contextSize}
