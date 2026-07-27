@@ -24,6 +24,11 @@ const platform = vi.hoisted(() => ({
     hasCoarsePointer: false
 }))
 
+const suggestionState = vi.hoisted(() => ({
+    suggestions: [] as Array<{ key: string; text: string; label: string }>,
+    selectedIndex: -1
+}))
+
 vi.mock('@assistant-ui/react', async () => {
     const React = await vi.importActual<typeof import('react')>('react')
 
@@ -99,7 +104,13 @@ vi.mock('@/hooks/useActiveWord', () => ({
 }))
 
 vi.mock('@/hooks/useActiveSuggestions', () => ({
-    useActiveSuggestions: () => [[], -1, vi.fn(), vi.fn(), vi.fn()]
+    useActiveSuggestions: () => [
+        suggestionState.suggestions,
+        suggestionState.selectedIndex,
+        vi.fn(),
+        vi.fn(),
+        vi.fn()
+    ]
 }))
 
 vi.mock('@/hooks/useComposerDraft', () => ({
@@ -121,6 +132,9 @@ describe('HappyComposer compact Agent mode', () => {
         assistant.state.thread.isDisabled = false
         platform.isTouch = false
         platform.hasCoarsePointer = false
+        suggestionState.suggestions = []
+        suggestionState.selectedIndex = -1
+        Element.prototype.scrollIntoView = vi.fn()
         window.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
             callback(0)
             return 1
@@ -130,6 +144,7 @@ describe('HappyComposer compact Agent mode', () => {
 
     afterEach(() => {
         cleanup()
+        vi.useRealTimers()
         vi.unstubAllGlobals()
     })
 
@@ -195,6 +210,41 @@ describe('HappyComposer compact Agent mode', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'composer.stop' }))
         expect(assistant.cancelRun).toHaveBeenCalledTimes(1)
+    })
+
+    it('selects an active suggestion on Enter while running without sending', () => {
+        assistant.state.composer.text = '/he'
+        assistant.state.thread.isRunning = true
+        suggestionState.suggestions = [{ key: 'help', text: '/help', label: 'Help' }]
+        suggestionState.selectedIndex = 0
+
+        render(<HappyComposer compactComposerMode />)
+        const input = screen.getByRole('textbox')
+        const enterEvent = createEvent.keyDown(input, { key: 'Enter' })
+        fireEvent(input, enterEvent)
+
+        expect(enterEvent.defaultPrevented).toBe(true)
+        expect(assistant.setText).toHaveBeenCalledWith('/help ')
+        expect(assistant.send).not.toHaveBeenCalled()
+    })
+
+    it('keeps send latched through the POST-to-run gap and releases after a no-run timeout', () => {
+        vi.useFakeTimers()
+        assistant.state.composer.text = 'first request'
+        const view = render(<HappyComposer compactComposerMode />)
+
+        fireEvent.click(screen.getByRole('button', { name: 'composer.send' }))
+        expect(assistant.send).toHaveBeenCalledTimes(1)
+        expect(screen.getByRole('button', { name: 'composer.send' })).toBeDisabled()
+
+        view.rerender(<HappyComposer compactComposerMode sendDisabled />)
+        expect(screen.getByRole('button', { name: 'composer.send' })).toBeDisabled()
+
+        view.rerender(<HappyComposer compactComposerMode />)
+        expect(screen.getByRole('button', { name: 'composer.send' })).toBeDisabled()
+
+        act(() => vi.advanceTimersByTime(2_000))
+        expect(screen.getByRole('button', { name: 'composer.send' })).toBeEnabled()
     })
 
     it('keeps the legacy composer and Terminal action outside Agent compact composer mode', () => {

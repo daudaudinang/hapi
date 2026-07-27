@@ -223,6 +223,7 @@ export function useHappyRuntime(props: {
     onAbort: () => Promise<void>
     attachmentAdapter?: AttachmentAdapter
     allowSendWhenInactive?: boolean
+    allowDraftWhileRunning?: boolean
 }) {
     // Use cached message converter for performance optimization
     // This prevents re-converting all messages on every render
@@ -232,11 +233,17 @@ export function useHappyRuntime(props: {
         isRunning: props.session.thinking,
     })
 
+    const sessionUnavailable = !props.session.active && !props.allowSendWhenInactive
+    const internalSendBlocked = props.isSending
+        || sessionUnavailable
+        || (props.allowDraftWhileRunning === true && props.session.thinking)
+
     const onNew = useCallback(async (message: AppendMessage) => {
+        if (internalSendBlocked) return
         const { text, attachments } = extractMessageContent(message)
         if (!text && attachments.length === 0) return
         props.onSendMessage(text, attachments.length > 0 ? attachments : undefined)
-    }, [props.onSendMessage])
+    }, [internalSendBlocked, props.onSendMessage])
 
     const onCancel = useCallback(async () => {
         await props.onAbort()
@@ -245,7 +252,9 @@ export function useHappyRuntime(props: {
     // Memoize the adapter to avoid recreating on every render
     // useExternalStoreRuntime may use adapter identity for subscriptions
     const adapter = useMemo(() => ({
-        isDisabled: props.isSending || (!props.session.active && !props.allowSendWhenInactive),
+        isDisabled: props.allowDraftWhileRunning && props.session.thinking && !sessionUnavailable
+            ? false
+            : props.isSending || sessionUnavailable,
         isRunning: props.session.thinking,
         messages: convertedMessages,
         onNew,
@@ -256,7 +265,9 @@ export function useHappyRuntime(props: {
         props.session.active,
         props.isSending,
         props.allowSendWhenInactive,
+        props.allowDraftWhileRunning,
         props.session.thinking,
+        sessionUnavailable,
         convertedMessages,
         onNew,
         onCancel,

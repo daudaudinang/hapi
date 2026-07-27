@@ -458,7 +458,8 @@ export function SessionChat(props: {
         onSendMessage: handleSend,
         onAbort: handleAbort,
         attachmentAdapter,
-        allowSendWhenInactive: true
+        allowSendWhenInactive: true,
+        allowDraftWhileRunning: props.compactComposerMode === true
     })
 
     return (

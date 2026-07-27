@@ -87,6 +87,9 @@ function getCompactComposerSingleLineHeight(input: HTMLTextAreaElement): number 
 }
 
 const defaultSuggestionHandler = async (): Promise<Suggestion[]> => []
+const COMPACT_SEND_RUN_GRACE_MS = 1_500
+
+type CompactSendLifecycle = 'idle' | 'submitting' | 'awaiting-run'
 
 export function HappyComposer(props: {
     sessionId?: string
@@ -200,11 +203,6 @@ export function HappyComposer(props: {
         const path = (attachment as { path?: string }).path
         return typeof path === 'string' && path.length > 0
     })
-    const canSend = (hasText || hasAttachments)
-        && attachmentsReady
-        && !controlsDisabled
-        && (!compactComposerMode || !threadIsRunning)
-
     const [inputState, setInputState] = useState<TextInputState>({
         text: '',
         selection: { start: 0, end: 0 }
@@ -214,6 +212,12 @@ export function HappyComposer(props: {
     const [isSwitching, setIsSwitching] = useState(false)
     const [showContinueHint, setShowContinueHint] = useState(false)
     const [composerMultiline, setComposerMultiline] = useState(false)
+    const [compactSendLifecycle, setCompactSendLifecycle] = useState<CompactSendLifecycle>('idle')
+    const compactSendLocked = compactComposerMode && compactSendLifecycle !== 'idle'
+    const canSend = (hasText || hasAttachments)
+        && attachmentsReady
+        && !controlsDisabled
+        && (!compactComposerMode || (!threadIsRunning && !compactSendLocked))
 
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const prevControlledByUser = useRef(controlledByUser)
@@ -222,6 +226,39 @@ export function HappyComposer(props: {
     useEffect(() => {
         composerTextRef.current = composerText
     }, [composerText])
+
+    useEffect(() => {
+        if (!compactComposerMode) {
+            if (compactSendLifecycle !== 'idle') setCompactSendLifecycle('idle')
+            return
+        }
+        if (compactSendLifecycle === 'idle') return
+        if (threadIsRunning) {
+            setCompactSendLifecycle('idle')
+            return
+        }
+
+        if (sendDisabled || threadIsDisabled) {
+            if (compactSendLifecycle !== 'submitting') {
+                setCompactSendLifecycle('submitting')
+            }
+            return
+        }
+
+        if (compactSendLifecycle !== 'awaiting-run') {
+            setCompactSendLifecycle('awaiting-run')
+        }
+        const timer = window.setTimeout(() => {
+            setCompactSendLifecycle('idle')
+        }, COMPACT_SEND_RUN_GRACE_MS)
+        return () => window.clearTimeout(timer)
+    }, [
+        compactComposerMode,
+        compactSendLifecycle,
+        sendDisabled,
+        threadIsDisabled,
+        threadIsRunning
+    ])
 
     useComposerDraft(sessionId, composerText, (text) => api.composer().setText(text))
 
@@ -428,11 +465,25 @@ export function HappyComposer(props: {
         [permissionModeOptions]
     )
 
+    const beginCompactSend = useCallback(() => {
+        if (compactComposerMode) {
+            setCompactSendLifecycle('submitting')
+        }
+    }, [compactComposerMode])
+
     const handleKeyDown = useCallback((e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
         const key = e.key
 
         // Avoid intercepting IME composition keystrokes (Enter, arrows, etc.)
         if (e.nativeEvent.isComposing) {
+            return
+        }
+
+        // Enter with suggestions visible: select the suggestion
+        if (key === 'Enter' && suggestions.length > 0) {
+            e.preventDefault()
+            const indexToSelect = selectedIndex >= 0 ? selectedIndex : 0
+            handleSuggestionSelect(indexToSelect)
             return
         }
 
@@ -453,18 +504,11 @@ export function HappyComposer(props: {
             return
         }
 
-        // Enter with suggestions visible: select the suggestion
-        if (key === 'Enter' && suggestions.length > 0) {
-            e.preventDefault()
-            const indexToSelect = selectedIndex >= 0 ? selectedIndex : 0
-            handleSuggestionSelect(indexToSelect)
-            return
-        }
-
         // Only plain desktop Enter sends; other modifier combos are ignored
         if (key === 'Enter') {
             e.preventDefault()
             if (shouldSendComposerOnEnter(e, { isTouch, hasCoarsePointer }) && canSend) {
+                beginCompactSend()
                 api.composer().send()
                 setShowContinueHint(false)
             }
@@ -526,6 +570,7 @@ export function HappyComposer(props: {
         isTouch,
         hasCoarsePointer,
         compactComposerMode,
+        beginCompactSend,
         haptic
     ])
 
@@ -593,8 +638,9 @@ export function HappyComposer(props: {
             event.preventDefault()
             return
         }
+        beginCompactSend()
         setShowContinueHint(false)
-    }, [canSend])
+    }, [beginCompactSend, canSend])
 
     const handlePermissionChange = useCallback((mode: PermissionMode) => {
         if (!onPermissionModeChange || controlsDisabled) return
@@ -656,8 +702,9 @@ export function HappyComposer(props: {
 
     const handleSend = useCallback(() => {
         if (!canSend) return
+        beginCompactSend()
         api.composer().send()
-    }, [api, canSend])
+    }, [api, beginCompactSend, canSend])
 
     const overlays = useMemo(() => {
         if (showSettings && (showCollaborationSettings || showPermissionSettings || showModelSettings || showModelReasoningEffortSettings || showEffortSettings)) {
