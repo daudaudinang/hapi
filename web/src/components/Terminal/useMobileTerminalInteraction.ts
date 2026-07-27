@@ -48,6 +48,7 @@ type TouchSession = {
     seedCell: TerminalCell
     scrolling: boolean
     longPressed: boolean
+    dismissingChoice: boolean
 }
 
 type InputViewportSession = {
@@ -373,7 +374,8 @@ export function useMobileTerminalInteraction(
             if (
                 !activeRef.current
                 || terminalRef.current !== terminal
-                || overlayRef.current.mode !== 'choice'
+                || overlayRef.current.mode === 'input'
+                || overlayRef.current.mode === 'select'
             ) return
             if (terminal.textarea) terminal.textarea.readOnly = true
             terminal.blur()
@@ -649,6 +651,7 @@ export function useMobileTerminalInteraction(
                 overlayRef.current.mode === 'input'
                 || overlayRef.current.mode === 'select'
             ) return
+            const dismissingChoice = overlayRef.current.mode === 'choice'
             if (event.touches.length !== 1) {
                 cancelTouch()
                 return
@@ -672,6 +675,7 @@ export function useMobileTerminalInteraction(
                 seedCell,
                 scrolling: false,
                 longPressed: false,
+                dismissingChoice,
             }
             touchRef.current = session
             touchPixelRemainderRef.current = 0
@@ -681,16 +685,21 @@ export function useMobileTerminalInteraction(
                 touch.clientY,
             )
             lastUsableAnchorRef.current = fallbackChoicePointRef.current
-            longPressTimerRef.current = window.setTimeout(() => {
-                longPressTimerRef.current = null
-                if (
-                    touchRef.current !== session
-                    || session.scrolling
-                    || overlayRef.current.mode === 'input'
-                ) return
-                session.longPressed = true
-                selectWord(session.seedCell)
-            }, LONG_PRESS_MS)
+            if (dismissingChoice) {
+                updateOverlay(IDLE_OVERLAY)
+                settleChoiceFocus(terminal)
+            } else {
+                longPressTimerRef.current = window.setTimeout(() => {
+                    longPressTimerRef.current = null
+                    if (
+                        touchRef.current !== session
+                        || session.scrolling
+                        || overlayRef.current.mode === 'input'
+                    ) return
+                    session.longPressed = true
+                    selectWord(session.seedCell)
+                }, LONG_PRESS_MS)
+            }
         }
 
         const handleTouchMove = (event: TouchEvent) => {
@@ -751,7 +760,7 @@ export function useMobileTerminalInteraction(
             clearLongPressTimer()
             if (session.scrolling || session.longPressed) {
                 event.preventDefault()
-            } else {
+            } else if (!session.dismissingChoice) {
                 scheduleChoiceReveal(terminal)
             }
             touchRef.current = null
@@ -869,6 +878,7 @@ export function useMobileTerminalInteraction(
         reset,
         scheduleChoiceReveal,
         selectWord,
+        settleChoiceFocus,
         syncChoiceAnchor,
         syncSelectionOverlay,
         updateOverlay,

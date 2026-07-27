@@ -378,6 +378,34 @@ describe('useMobileTerminalInteraction', () => {
         expect(document.activeElement).not.toBe(fixture.textarea)
     })
 
+    it('toggles the choice bubble off on the second terminal body tap', () => {
+        const fixture = createTerminalFixture()
+        const { result } = renderInteraction(fixture)
+        const first = touch(1, 55, 130)
+        const second = touch(2, 55, 130)
+        fixture.terminalElement.addEventListener('click', () => {
+            fixture.textarea.focus()
+        })
+
+        act(() => {
+            dispatchTouch(fixture.terminalElement, 'touchstart', [first])
+            dispatchTouch(fixture.terminalElement, 'touchend', [], [first])
+            fixture.terminalElement.click()
+            vi.runOnlyPendingTimers()
+        })
+        expect(result.current.overlayProps.mode).toBe('choice')
+
+        act(() => {
+            dispatchTouch(fixture.terminalElement, 'touchstart', [second])
+            dispatchTouch(fixture.terminalElement, 'touchend', [], [second])
+            fixture.terminalElement.click()
+            vi.runOnlyPendingTimers()
+        })
+
+        expect(result.current.overlayProps.mode).toBe('idle')
+        expect(document.activeElement).not.toBe(fixture.textarea)
+    })
+
     it.each([
         'reset',
         'dismiss',
