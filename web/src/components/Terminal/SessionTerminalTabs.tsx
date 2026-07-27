@@ -339,67 +339,91 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
         ? controller.terminals.find((terminal) => terminal.terminalId === pendingCloseTerminalId)
         : null
 
-    const statusContent = (
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-            <span className={`h-2 w-2 shrink-0 rounded-full ${controller.state.status === 'connected' ? 'bg-emerald-500' : controller.state.status === 'connecting' ? 'bg-amber-500' : controller.state.status === 'error' ? 'bg-red-500' : 'bg-[var(--app-hint)]'}`} />
+    const statusColor = controller.state.status === 'connected'
+        ? 'bg-emerald-500'
+        : controller.state.status === 'connecting'
+            ? 'bg-amber-500'
+            : controller.state.status === 'error'
+                ? 'bg-red-500'
+                : 'bg-[var(--app-hint)]'
+    const statusSummary = (
+        <div
+            data-testid="terminal-connection-status"
+            className="flex shrink-0 items-center gap-2 border-l border-[var(--app-border)] bg-[var(--app-subtle-bg)] px-2 py-1"
+        >
+            <span className={`h-2 w-2 shrink-0 rounded-full ${statusColor}`} />
             <span className="text-[10px] text-[var(--app-hint)]">{controller.state.status}</span>
             <span className="rounded-full border border-[var(--app-border)] px-1.5 py-0.5 text-[10px] text-[var(--app-hint)]">{liveCount}/3</span>
-            {createError ? <span className="truncate text-[10px] text-red-500">{createError}</span> : null}
-            {controller.lastError ? <span className="truncate text-[10px] text-red-500">{controller.lastError}</span> : null}
-            {controller.terminals.length === 0 && controller.recoveryReason === 'cli_lost' ? (
-                <span className="truncate text-[10px] text-amber-500">{t('terminal.recovery.cliLost')}</span>
-            ) : null}
-            {!props.terminalSupported ? <span className="text-[10px] text-red-500">{t('terminal.unsupported')}</span> : null}
-            {!props.active ? <span className="text-[10px] text-[var(--app-hint)]">{t('terminal.inactive')}</span> : null}
         </div>
+    )
+    const hasStatusMessage = Boolean(
+        createError
+        || controller.lastError
+        || (controller.terminals.length === 0 && controller.recoveryReason === 'cli_lost')
+        || !props.terminalSupported
+        || !props.active
     )
 
     return (
         <div className={`flex h-full min-h-0 flex-col bg-[var(--app-bg)] ${props.className ?? ''}`}>
-            <div className="flex shrink-0 items-center gap-2 border-b border-[var(--app-border)] px-2 py-1">
-                {statusContent}
+            <div
+                data-testid="terminal-tabs-status-row"
+                className="flex shrink-0 items-stretch overflow-hidden border-b border-[var(--app-border)]"
+            >
+                <div
+                    role="group"
+                    aria-label="Terminal tabs"
+                    className="flex min-w-0 flex-1 items-center overflow-x-auto"
+                >
+                    {visibleTerminals.map((terminal) => {
+                        const isSelected = terminal.terminalId === activeTerminalId
+                        const warning = warningReason(terminal)
+                        return (
+                            <div key={terminal.terminalId} className={`flex items-center gap-1 border-l border-[var(--app-border)] px-2 py-1 text-xs ${isSelected ? 'bg-[var(--app-bg)] text-[#818cf8]' : 'text-[var(--app-hint)]'}`}>
+                                <button type="button" onClick={() => setActiveTerminalId(terminal.terminalId)} className="max-w-[140px] truncate hover:text-[var(--app-fg)]">
+                                    {terminal.label}
+                                </button>
+                                {warning ? (
+                                    <span aria-label={t(warning === 'idle' ? 'terminal.warning.badge.idle' : 'terminal.warning.badge.age')} className="text-[10px] text-amber-500">⚠</span>
+                                ) : null}
+                                {isLiveTerminal(terminal) ? (
+                                    <button
+                                        type="button"
+                                        aria-label={`Close terminal ${terminal.terminalId}`}
+                                        className="text-[10px] hover:text-red-500"
+                                        onClick={() => setPendingCloseTerminalId(terminal.terminalId)}
+                                    >
+                                        ✕
+                                    </button>
+                                ) : null}
+                            </div>
+                        )
+                    })}
+                    <button
+                        type="button"
+                        aria-label={t('terminal.new')}
+                        disabled={!canUseTerminal || !terminalSocketConnected || liveCount >= 3 || createPending}
+                        onClick={() => createTerminal(true)}
+                        className="shrink-0 border-l border-[var(--app-border)] px-3 py-1 text-sm text-[var(--app-hint)] hover:text-[var(--app-fg)] disabled:cursor-not-allowed disabled:opacity-50"
+                        title={liveCount >= 3 ? t('terminal.limit.full') : t('terminal.new')}
+                    >
+                        +
+                    </button>
+                </div>
+                {statusSummary}
             </div>
 
-            <div
-                role="group"
-                aria-label="Terminal tabs"
-                className="flex shrink-0 items-center overflow-x-auto border-b border-[var(--app-border)]"
-            >
-                {visibleTerminals.map((terminal) => {
-                    const isSelected = terminal.terminalId === activeTerminalId
-                    const warning = warningReason(terminal)
-                    return (
-                        <div key={terminal.terminalId} className={`flex items-center gap-1 border-l border-[var(--app-border)] px-2 py-1 text-xs ${isSelected ? 'bg-[var(--app-bg)] text-[#818cf8]' : 'text-[var(--app-hint)]'}`}>
-                            <button type="button" onClick={() => setActiveTerminalId(terminal.terminalId)} className="max-w-[140px] truncate hover:text-[var(--app-fg)]">
-                                {terminal.label}
-                            </button>
-                            {warning ? (
-                                <span aria-label={t(warning === 'idle' ? 'terminal.warning.badge.idle' : 'terminal.warning.badge.age')} className="text-[10px] text-amber-500">⚠</span>
-                            ) : null}
-                            {isLiveTerminal(terminal) ? (
-                                <button
-                                    type="button"
-                                    aria-label={`Close terminal ${terminal.terminalId}`}
-                                    className="text-[10px] hover:text-red-500"
-                                    onClick={() => setPendingCloseTerminalId(terminal.terminalId)}
-                                >
-                                    ✕
-                                </button>
-                            ) : null}
-                        </div>
-                    )
-                })}
-                <button
-                    type="button"
-                    aria-label={t('terminal.new')}
-                    disabled={!canUseTerminal || !terminalSocketConnected || liveCount >= 3 || createPending}
-                    onClick={() => createTerminal(true)}
-                    className="shrink-0 border-l border-[var(--app-border)] px-3 py-1 text-sm text-[var(--app-hint)] hover:text-[var(--app-fg)] disabled:cursor-not-allowed disabled:opacity-50"
-                    title={liveCount >= 3 ? t('terminal.limit.full') : t('terminal.new')}
-                >
-                    +
-                </button>
-            </div>
+            {hasStatusMessage ? (
+                <div className="flex shrink-0 items-center gap-2 border-b border-[var(--app-border)] px-2 py-1">
+                    {createError ? <span className="truncate text-[10px] text-red-500">{createError}</span> : null}
+                    {controller.lastError ? <span className="truncate text-[10px] text-red-500">{controller.lastError}</span> : null}
+                    {controller.terminals.length === 0 && controller.recoveryReason === 'cli_lost' ? (
+                        <span className="truncate text-[10px] text-amber-500">{t('terminal.recovery.cliLost')}</span>
+                    ) : null}
+                    {!props.terminalSupported ? <span className="text-[10px] text-red-500">{t('terminal.unsupported')}</span> : null}
+                    {!props.active ? <span className="text-[10px] text-[var(--app-hint)]">{t('terminal.inactive')}</span> : null}
+                </div>
+            ) : null}
 
             <div
                 data-testid="terminal-surface"

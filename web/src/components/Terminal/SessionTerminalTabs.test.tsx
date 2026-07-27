@@ -247,6 +247,23 @@ describe('SessionTerminalTabs', () => {
         expect(screen.getByText('2/3')).toBeInTheDocument()
     })
 
+    it('keeps scrollable tabs left and connection status fixed right on one row', () => {
+        mocks.controller = makeController([state('t1'), state('t2')])
+
+        renderTabs()
+
+        const row = screen.getByTestId('terminal-tabs-status-row')
+        const tabs = screen.getByRole('group', { name: 'Terminal tabs' })
+        const status = screen.getByTestId('terminal-connection-status')
+
+        expect(tabs.parentElement).toBe(row)
+        expect(status.parentElement).toBe(row)
+        expect(tabs).toHaveClass('min-w-0', 'flex-1', 'overflow-x-auto')
+        expect(status).toHaveClass('shrink-0')
+        expect(status).toHaveTextContent('connected')
+        expect(status).toHaveTextContent('2/3')
+    })
+
     it('places new-terminal button directly after the latest terminal tab', () => {
         mocks.controller = makeController([state('t1'), state('t2')])
 
