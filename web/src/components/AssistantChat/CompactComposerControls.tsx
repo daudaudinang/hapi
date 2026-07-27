@@ -171,6 +171,7 @@ function ValueSelect(props: {
                 value={encodeValue(props.value)}
                 disabled={props.disabled}
                 onChange={(event) => {
+                    if (!uniqueOptions.some((option) => encodeValue(option.value) === event.target.value)) return
                     const value = decodeValue(event.target.value)
                     if (value !== undefined) props.onChange(value)
                 }}

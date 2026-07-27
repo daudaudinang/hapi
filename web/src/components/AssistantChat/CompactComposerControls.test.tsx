@@ -183,6 +183,35 @@ describe('CompactRuntimeControls', () => {
         expect(onModelChange).toHaveBeenCalledWith('__hapi_default__')
     })
 
+    it('rejects a syntactically valid encoded value that is not rendered', () => {
+        const onModelChange = vi.fn()
+        render(
+            <CompactRuntimeControls
+                disabled={false}
+                model={null}
+                modelOptions={[
+                    { value: null, label: 'Default' },
+                    { value: 'model-a', label: 'Model A' }
+                ]}
+                effort={null}
+                effortLabel="misc.reasoningEffort"
+                effortOptions={[]}
+                permissionMode="default"
+                permissionModeOptions={[]}
+                onModelChange={onModelChange}
+            />
+        )
+
+        const model = screen.getByLabelText('misc.model') as HTMLSelectElement
+        const rogue = document.createElement('option')
+        rogue.value = 'hapi-value:"rogue-model"'
+        rogue.textContent = 'Rogue model'
+        model.append(rogue)
+        fireEvent.change(model, { target: { value: rogue.value } })
+
+        expect(onModelChange).not.toHaveBeenCalled()
+    })
+
     it('shows an unmatched active Plan as read-only when collaboration cannot be changed', () => {
         render(
             <CompactRuntimeControls
