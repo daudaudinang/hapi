@@ -68,6 +68,7 @@ export default {
   'session.title': 'Files',
   'session.more': 'More actions',
   'session.files.openIn': 'Open files in {path}',
+  'session.teamMemberships.more': '{count} more team memberships: {memberships}',
   'session.tasks.label': 'Tasks',
   'session.tasks.trigger': 'Session tasks: {completed} of {total} completed',
   'session.tasks.title': 'Session tasks',

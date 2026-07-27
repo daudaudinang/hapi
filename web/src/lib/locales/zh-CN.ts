@@ -68,6 +68,7 @@ export default {
   'session.title': '文件',
   'session.more': '更多操作',
   'session.files.openIn': '打开 {path} 中的文件',
+  'session.teamMemberships.more': '还有 {count} 个团队聊天：{memberships}',
   'session.tasks.label': '任务',
   'session.tasks.trigger': '会话任务：已完成 {completed}/{total}',
   'session.tasks.title': '会话任务',

@@ -92,7 +92,8 @@ vi.mock('@/lib/use-translation', () => ({
                 'session.tasks.status.pending': 'Pending',
                 'session.tasks.status.in_progress': 'In progress',
                 'session.tasks.status.completed': 'Completed',
-                'session.files.openIn': 'Localized open files in {path}'
+                'session.files.openIn': 'Localized open files in {path}',
+                'session.teamMemberships.more': 'Localized {count} more team memberships: {memberships}'
             }
             let value = messages[key] ?? key
             for (const [param, replacement] of Object.entries(params ?? {})) {
@@ -428,6 +429,12 @@ describe('SessionHeader editor entry point', () => {
         expect(zhCN['session.files.openIn']).toBe('打开 {path} 中的文件')
     })
 
+    it('provides localized compact membership overflow descriptions in every supported locale', () => {
+        expect(en['session.teamMemberships.more']).toBe('{count} more team memberships: {memberships}')
+        expect(viVN['session.teamMemberships.more']).toBe('Còn {count} nhóm chat khác: {memberships}')
+        expect(zhCN['session.teamMemberships.more']).toBe('还有 {count} 个团队聊天：{memberships}')
+    })
+
     it('shows the Codex goal button when a Codex session has goal state', () => {
         const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
         render(<QueryClientProvider client={qc}><SessionHeader session={makeSession()} onBack={vi.fn()} api={null} codexGoal={makeGoal()} onGoalCommand={vi.fn()} /></QueryClientProvider>)
@@ -565,14 +572,19 @@ describe('SessionHeader editor entry point', () => {
         expect(screen.getByText('Frontend Team: @UI')).toBeInTheDocument()
         expect(screen.queryByText('Backend Team: @API')).not.toBeInTheDocument()
         expect(screen.queryByText('QA Team: @Tester')).not.toBeInTheDocument()
-        expect(screen.getByText('+2')).toHaveAttribute(
-            'aria-label',
-            '2 more team memberships: Backend Team: @API, QA Team: @Tester'
+        const visualOverflow = screen.getByText('+2')
+        const overflowDescription = screen.getByText(
+            'Localized 2 more team memberships: Backend Team: @API, QA Team: @Tester'
         )
-        expect(screen.getByText('+2')).toHaveAttribute(
+
+        expect(visualOverflow).toHaveAttribute('aria-hidden', 'true')
+        expect(overflowDescription).toHaveClass('sr-only')
+        expect(overflowDescription).not.toHaveAttribute('aria-hidden')
+        expect(visualOverflow.parentElement).toHaveAttribute(
             'title',
-            '2 more team memberships: Backend Team: @API, QA Team: @Tester'
+            'Localized 2 more team memberships: Backend Team: @API, QA Team: @Tester'
         )
+        expect(visualOverflow.parentElement).not.toHaveAttribute('aria-label')
     })
 
     it('creates a Team Chat with the current session', async () => {

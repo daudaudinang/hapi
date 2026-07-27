@@ -350,7 +350,10 @@ export function SessionHeader(props: {
             .map((membership) => `${membership.teamChat.name}: @${membership.participant.displayName}`)
             .join(', ')
         const teamMembershipOverflowLabel = remainingTeamMemberships.length > 0
-            ? `${remainingTeamMemberships.length} more team memberships: ${remainingTeamMembershipLabels}`
+            ? t('session.teamMemberships.more', {
+                count: remainingTeamMemberships.length,
+                memberships: remainingTeamMembershipLabels
+            })
             : null
 
         return (
@@ -390,9 +393,9 @@ export function SessionHeader(props: {
                             <span
                                 className="db-pinned__compact-membership db-pinned__compact-membership-overflow"
                                 title={teamMembershipOverflowLabel}
-                                aria-label={teamMembershipOverflowLabel}
                             >
-                                +{remainingTeamMemberships.length}
+                                <span aria-hidden="true">+{remainingTeamMemberships.length}</span>
+                                <span className="sr-only">{teamMembershipOverflowLabel}</span>
                             </span>
                         ) : null}
 
