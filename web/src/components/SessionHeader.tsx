@@ -345,6 +345,13 @@ export function SessionHeader(props: {
             .filter(Boolean)
             .slice(-2)
             .join('/')
+        const remainingTeamMemberships = teamMemberships.slice(1)
+        const remainingTeamMembershipLabels = remainingTeamMemberships
+            .map((membership) => `${membership.teamChat.name}: @${membership.participant.displayName}`)
+            .join(', ')
+        const teamMembershipOverflowLabel = remainingTeamMemberships.length > 0
+            ? `${remainingTeamMemberships.length} more team memberships: ${remainingTeamMembershipLabels}`
+            : null
 
         return (
             <>
@@ -360,7 +367,7 @@ export function SessionHeader(props: {
                                 onClick={handleOpenCompactFiles}
                                 onDoubleClick={(event) => event.stopPropagation()}
                                 title={session.metadata.path}
-                                aria-label={`Open files in ${session.metadata.path}`}
+                                aria-label={t('session.files.openIn', { path: session.metadata.path })}
                             >
                                 <FolderIcon className="h-3.5 w-3.5" />
                                 <span>{compactPath}</span>
@@ -379,6 +386,15 @@ export function SessionHeader(props: {
                                 {membership.teamChat.name}: @{membership.participant.displayName}
                             </span>
                         ))}
+                        {teamMembershipOverflowLabel ? (
+                            <span
+                                className="db-pinned__compact-membership db-pinned__compact-membership-overflow"
+                                title={teamMembershipOverflowLabel}
+                                aria-label={teamMembershipOverflowLabel}
+                            >
+                                +{remainingTeamMemberships.length}
+                            </span>
+                        ) : null}
 
                         <div className="db-pinned__compact-actions">
                             {canFocusSession ? (
@@ -480,6 +496,7 @@ export function SessionHeader(props: {
                     onArchive={() => setArchiveOpen(true)}
                     onDelete={() => setDeleteOpen(true)}
                     onOpenFiles={handleOpenCompactFiles}
+                    filesVisibleOnDesktop={!session.metadata?.path}
                     onUnpin={props.compactCloseLabel ? undefined : props.onBack}
                     anchorPoint={menuAnchorPoint}
                     menuId={menuId}

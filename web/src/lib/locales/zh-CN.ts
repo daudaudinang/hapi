@@ -67,6 +67,7 @@ export default {
   // Session header
   'session.title': '文件',
   'session.more': '更多操作',
+  'session.files.openIn': '打开 {path} 中的文件',
   'session.tasks.label': '任务',
   'session.tasks.trigger': '会话任务：已完成 {completed}/{total}',
   'session.tasks.title': '会话任务',

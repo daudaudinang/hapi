@@ -33,6 +33,11 @@ describe('mobile dashboard CSS', () => {
     it('uses the approved compact header behavior on mobile', () => {
         expect(dashboardCss).toMatch(/@media \(max-width: 768px\)[\s\S]*\.db-pinned__compact-path-trigger\s*\{[\s\S]*display:\s*none;/)
         expect(dashboardCss).toMatch(/@media \(max-width: 768px\)[\s\S]*\.db-pinned__compact-action--focus[\s\S]*\.db-pinned__compact-action--team\s*\{[\s\S]*display:\s*none;/)
+        expect(dashboardCss).toMatch(/@media \(max-width: 768px\)[\s\S]*\.db-pinned__compact-membership-overflow\s*\{[\s\S]*display:\s*none;/)
+    })
+
+    it('keeps compact membership overflow on one desktop header row', () => {
+        expect(dashboardCss).toMatch(/\.db-pinned__compact-membership-overflow\s*\{[\s\S]*flex-shrink:\s*0;/)
     })
 
     it('adapts compact runtime controls to their panel width and rendered control count', () => {

@@ -1543,6 +1543,10 @@
     white-space: nowrap;
 }
 
+.db-pinned__compact-membership-overflow {
+    flex-shrink: 0;
+}
+
 /* ────────────────────────────────────────────────────────────────────────────
  * Compact Mode Overrides (Scrollbars, Spacing, Text Size)
  * ────────────────────────────────────────────────────────────────────────── */
@@ -1719,6 +1723,10 @@
     }
 
     .db-pinned__compact-membership {
+        display: none;
+    }
+
+    .db-pinned__compact-membership-overflow {
         display: none;
     }
 

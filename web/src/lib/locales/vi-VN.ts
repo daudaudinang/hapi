@@ -67,6 +67,7 @@ export default {
   // Session header
   'session.title': 'Tệp',
   'session.more': 'Thêm thao tác',
+  'session.files.openIn': 'Mở tệp trong {path}',
   'session.tasks.label': 'Công việc',
   'session.tasks.trigger': 'Công việc trong phiên: {completed} trên {total} đã hoàn thành',
   'session.tasks.title': 'Công việc trong phiên',

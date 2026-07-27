@@ -67,6 +67,7 @@ export default {
   // Session header
   'session.title': 'Files',
   'session.more': 'More actions',
+  'session.files.openIn': 'Open files in {path}',
   'session.tasks.label': 'Tasks',
   'session.tasks.trigger': 'Session tasks: {completed} of {total} completed',
   'session.tasks.title': 'Session tasks',

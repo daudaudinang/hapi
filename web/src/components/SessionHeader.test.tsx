@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CodexGoalState } from '@/chat/types'
 import type { Session, TeamChat, TeamParticipant } from '@/types/api'
+import { en, viVN, zhCN } from '@/lib/locales'
 import { SessionHeader } from './SessionHeader'
 
 const navigateMock = vi.fn()
@@ -49,10 +50,19 @@ vi.mock('@/components/SessionActionMenu', () => ({
         onArchive: () => void
         onOpenFiles?: () => void
         onUnpin?: () => void
+        filesVisibleOnDesktop?: boolean
     }) => props.isOpen ? (
         <>
             <button type="button" onClick={props.onArchive}>Archive session</button>
-            {props.onOpenFiles ? <button type="button" onClick={props.onOpenFiles}>button.files</button> : null}
+            {props.onOpenFiles ? (
+                <button
+                    type="button"
+                    className={props.filesVisibleOnDesktop ? undefined : 'session-action-menu__mobile-only'}
+                    onClick={props.onOpenFiles}
+                >
+                    button.files
+                </button>
+            ) : null}
             {props.onUnpin ? <button type="button" onClick={props.onUnpin}>dashboard.unpin</button> : null}
         </>
     ) : null
@@ -81,7 +91,8 @@ vi.mock('@/lib/use-translation', () => ({
                 'session.tasks.progress': '{completed} of {total} completed',
                 'session.tasks.status.pending': 'Pending',
                 'session.tasks.status.in_progress': 'In progress',
-                'session.tasks.status.completed': 'Completed'
+                'session.tasks.status.completed': 'Completed',
+                'session.files.openIn': 'Localized open files in {path}'
             }
             let value = messages[key] ?? key
             for (const [param, replacement] of Object.entries(params ?? {})) {
@@ -355,7 +366,7 @@ describe('SessionHeader editor entry point', () => {
             </QueryClientProvider>
         )
 
-        fireEvent.click(screen.getByRole('button', { name: 'Open files in /workspace/hapi' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Localized open files in /workspace/hapi' }))
 
         expect(navigateMock).toHaveBeenCalledWith(expect.objectContaining({
             search: expect.any(Function)
@@ -366,6 +377,55 @@ describe('SessionHeader editor entry point', () => {
             modal: 'files',
             modalSessionId: 'session-1'
         })
+    })
+
+    it('shows Files in the desktop More menu when the compact session has no path', () => {
+        const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+        render(
+            <QueryClientProvider client={qc}>
+                <SessionHeader
+                    session={makeSession({ metadata: undefined })}
+                    onBack={vi.fn()}
+                    api={null}
+                    compactMode
+                    pinIndex={1}
+                    compactCloseLabel="Close focus session"
+                />
+            </QueryClientProvider>
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: 'session.more' }))
+
+        expect(screen.getByRole('button', { name: 'button.files' })).not.toHaveClass('session-action-menu__mobile-only')
+    })
+
+    it('keeps Files mobile-only in More when the compact path trigger exists', () => {
+        const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+        render(
+            <QueryClientProvider client={qc}>
+                <SessionHeader
+                    session={makeSession({ metadata: { path: '/workspace/hapi', host: 'host', flavor: 'codex' } })}
+                    onBack={vi.fn()}
+                    api={null}
+                    compactMode
+                    pinIndex={1}
+                    compactCloseLabel="Close focus session"
+                />
+            </QueryClientProvider>
+        )
+
+        expect(screen.getByRole('button', { name: 'Localized open files in /workspace/hapi' })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'session.more' }))
+
+        expect(screen.getByRole('button', { name: 'button.files' })).toHaveClass('session-action-menu__mobile-only')
+    })
+
+    it('uses localized compact path trigger labels in every supported locale', () => {
+        expect(en['session.files.openIn']).toBe('Open files in {path}')
+        expect(viVN['session.files.openIn']).toBe('Mở tệp trong {path}')
+        expect(zhCN['session.files.openIn']).toBe('打开 {path} 中的文件')
     })
 
     it('shows the Codex goal button when a Codex session has goal state', () => {
@@ -472,6 +532,47 @@ describe('SessionHeader editor entry point', () => {
         render(<QueryClientProvider client={qc}><SessionHeader session={makeSession()} onBack={vi.fn()} api={{} as never} /></QueryClientProvider>)
 
         expect(screen.getByText('Frontend Team: @UI')).toBeInTheDocument()
+    })
+
+    it('shows compact overflow for additional Team Chat memberships', () => {
+        useSessionTeamMembershipsMock.mockReturnValue({
+            memberships: [
+                {
+                    teamChat: { id: 'team-1', namespace: 'default', name: 'Frontend Team', projectPath: '/repo', createdAt: 1, updatedAt: 2 },
+                    participant: { id: 'p1', teamChatId: 'team-1', type: 'session', sessionId: 'session-1', displayName: 'UI', role: 'frontend', color: '#60a5fa', joinedAt: 3 }
+                },
+                {
+                    teamChat: { id: 'team-2', namespace: 'default', name: 'Backend Team', projectPath: '/repo', createdAt: 1, updatedAt: 2 },
+                    participant: { id: 'p2', teamChatId: 'team-2', type: 'session', sessionId: 'session-1', displayName: 'API', role: 'backend', color: '#a78bfa', joinedAt: 3 }
+                },
+                {
+                    teamChat: { id: 'team-3', namespace: 'default', name: 'QA Team', projectPath: '/repo', createdAt: 1, updatedAt: 2 },
+                    participant: { id: 'p3', teamChatId: 'team-3', type: 'session', sessionId: 'session-1', displayName: 'Tester', role: 'tests', color: '#34d399', joinedAt: 3 }
+                }
+            ],
+            isLoading: false,
+            error: null,
+            refetch: vi.fn()
+        })
+        const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+        render(
+            <QueryClientProvider client={qc}>
+                <SessionHeader session={makeSession()} onBack={vi.fn()} api={null} compactMode pinIndex={1} />
+            </QueryClientProvider>
+        )
+
+        expect(screen.getByText('Frontend Team: @UI')).toBeInTheDocument()
+        expect(screen.queryByText('Backend Team: @API')).not.toBeInTheDocument()
+        expect(screen.queryByText('QA Team: @Tester')).not.toBeInTheDocument()
+        expect(screen.getByText('+2')).toHaveAttribute(
+            'aria-label',
+            '2 more team memberships: Backend Team: @API, QA Team: @Tester'
+        )
+        expect(screen.getByText('+2')).toHaveAttribute(
+            'title',
+            '2 more team memberships: Backend Team: @API, QA Team: @Tester'
+        )
     })
 
     it('creates a Team Chat with the current session', async () => {
@@ -622,7 +723,7 @@ describe('SessionHeader editor entry point', () => {
             </QueryClientProvider>
         )
 
-        fireEvent.doubleClick(screen.getByRole('button', { name: 'Open files in /repo' }))
+        fireEvent.doubleClick(screen.getByRole('button', { name: 'Localized open files in /repo' }))
         fireEvent.doubleClick(screen.getByRole('button', { name: 'button.terminal' }))
         fireEvent.doubleClick(screen.getByRole('button', { name: 'session.more' }))
 

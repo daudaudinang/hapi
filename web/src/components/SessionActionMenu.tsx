@@ -18,6 +18,7 @@ type SessionActionMenuProps = {
     onArchive: () => void
     onDelete: () => void
     onOpenFiles?: () => void
+    filesVisibleOnDesktop?: boolean
     onUnpin?: () => void
     anchorPoint: { x: number; y: number }
     menuId?: string
@@ -144,6 +145,7 @@ export function SessionActionMenu(props: SessionActionMenuProps) {
         onArchive,
         onDelete,
         onOpenFiles,
+        filesVisibleOnDesktop = false,
         onUnpin,
         anchorPoint,
         menuId
@@ -299,7 +301,7 @@ export function SessionActionMenu(props: SessionActionMenuProps) {
                     <button
                         type="button"
                         role="menuitem"
-                        className={`${baseItemClassName} session-action-menu__mobile-only hover:bg-[var(--app-subtle-bg)]`}
+                        className={`${baseItemClassName}${filesVisibleOnDesktop ? '' : ' session-action-menu__mobile-only'} hover:bg-[var(--app-subtle-bg)]`}
                         onClick={handleOpenFiles}
                     >
                         <FolderIcon className="text-[var(--app-hint)]" />
@@ -320,7 +322,10 @@ export function SessionActionMenu(props: SessionActionMenuProps) {
                 ) : null}
 
                 {(onOpenFiles || onUnpin) ? (
-                    <div className="mx-2 my-0.5 h-px bg-[var(--app-divider)]" role="separator" />
+                    <div
+                        className={`mx-2 my-0.5 h-px bg-[var(--app-divider)]${onOpenFiles && !filesVisibleOnDesktop && !onUnpin ? ' session-action-menu__mobile-only' : ''}`}
+                        role="separator"
+                    />
                 ) : null}
 
                 {sessionActive ? (
