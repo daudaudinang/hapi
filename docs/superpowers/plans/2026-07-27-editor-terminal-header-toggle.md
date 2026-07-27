@@ -51,20 +51,16 @@ Expected: FAIL; callback nhận `0` lần vì header chưa có click handler.
 
 - [ ] **Step 3: Thêm toggle tối thiểu trên header**
 
-Tại header desktop, thêm `cursor-pointer` và callback nền:
+Tạm thêm callback nền tối thiểu để chỉ làm xanh test đầu tiên:
 
 ```tsx
 <div
-    className={`flex h-8 shrink-0 items-center border-b border-[var(--app-border)] bg-[var(--app-subtle-bg)] ${
-        props.mobileMode ? '' : 'cursor-pointer'
-    }`}
-    onClick={() => {
-        if (!props.mobileMode) {
-            props.onToggleCollapsed()
-        }
-    }}
+    className="flex h-8 shrink-0 cursor-pointer items-center border-b border-[var(--app-border)] bg-[var(--app-subtle-bg)]"
+    onClick={() => props.onToggleCollapsed()}
 >
 ```
+
+Ngoại lệ mobile và điều khiển con được thêm sau khi các test tương ứng đã đỏ ở Task 2.
 
 - [ ] **Step 4: Chạy test để xác nhận xanh**
 
@@ -148,6 +144,9 @@ Expected: FAIL; click button nổi bọt lên header gây double-toggle và mobi
 Thay handler header bằng:
 
 ```tsx
+className={`flex h-8 shrink-0 items-center border-b border-[var(--app-border)] bg-[var(--app-subtle-bg)] ${
+    props.mobileMode ? '' : 'cursor-pointer'
+}`}
 onClick={(event) => {
     const target = event.target
     if (
@@ -214,4 +213,3 @@ Expected: chỉ hai file web thuộc tính năng được stage; các artifact p
 git add web/src/components/editor/EditorTerminal.tsx web/src/components/editor/EditorTerminal.test.tsx
 git commit -m "fix(web): toggle editor terminal from header"
 ```
-
