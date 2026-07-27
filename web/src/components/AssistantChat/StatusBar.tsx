@@ -5,7 +5,7 @@ import {
     isPermissionModeAllowedForFlavor
 } from '@hapi/protocol'
 import type { PermissionModeTone } from '@hapi/protocol'
-import { useMemo } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import type { AgentState, CodexCollaborationMode, PermissionMode } from '@/types/api'
 import type { ConversationStatus } from '@/realtime/types'
 import { getContextBudgetTokens } from '@/chat/modelConfig'
@@ -152,6 +152,7 @@ export function StatusBar(props: {
     collaborationMode?: CodexCollaborationMode
     agentFlavor?: string | null
     voiceStatus?: ConversationStatus
+    compactControls?: ReactNode
 }) {
     const { t } = useTranslation()
     const connectionStatus = useMemo(
@@ -202,10 +203,11 @@ export function StatusBar(props: {
     const codexFastMode = props.agentFlavor === 'codex'
         ? isCodexFastMode(props.model, props.modelReasoningEffort)
         : false
+    const isCompact = Boolean(props.compactControls)
 
     return (
-        <div className="flex items-center justify-between px-2 pb-1">
-            <div className="flex items-baseline gap-3">
+        <div className={isCompact ? 'compact-composer__status' : 'flex items-center justify-between px-2 pb-1'}>
+            <div className={isCompact ? 'compact-composer__telemetry' : 'flex items-baseline gap-3'}>
                 <div className="flex items-center gap-1.5">
                     <span
                         className={`h-2 w-2 rounded-full ${connectionStatus.dotColor} ${connectionStatus.isPulsing ? 'animate-pulse' : ''}`}
@@ -227,28 +229,30 @@ export function StatusBar(props: {
                 ) : null}
             </div>
 
-            <div className="flex min-w-0 items-center gap-2">
-                {codexReasoningLabel ? (
-                    <span className="text-xs text-[var(--app-hint)]">
-                        {codexReasoningLabel}
-                    </span>
-                ) : null}
-                {codexFastMode ? (
-                    <span className="text-xs text-[#34C759]">
-                        fast
-                    </span>
-                ) : null}
-                {collaborationModeLabel ? (
-                    <span className="text-xs text-blue-500">
-                        {collaborationModeLabel}
-                    </span>
-                ) : null}
-                {displayPermissionMode ? (
-                    <span className={`text-xs ${permissionModeColor}`}>
-                        {permissionModeLabel}
-                    </span>
-                ) : null}
-            </div>
+            {isCompact ? props.compactControls : (
+                <div className="flex min-w-0 items-center gap-2">
+                    {codexReasoningLabel ? (
+                        <span className="text-xs text-[var(--app-hint)]">
+                            {codexReasoningLabel}
+                        </span>
+                    ) : null}
+                    {codexFastMode ? (
+                        <span className="text-xs text-[#34C759]">
+                            fast
+                        </span>
+                    ) : null}
+                    {collaborationModeLabel ? (
+                        <span className="text-xs text-blue-500">
+                            {collaborationModeLabel}
+                        </span>
+                    ) : null}
+                    {displayPermissionMode ? (
+                        <span className={`text-xs ${permissionModeColor}`}>
+                            {permissionModeLabel}
+                        </span>
+                    ) : null}
+                </div>
+            )}
         </div>
     )
 }

@@ -17,6 +17,8 @@ type SessionActionMenuProps = {
     onRename: () => void
     onArchive: () => void
     onDelete: () => void
+    onOpenFiles?: () => void
+    onUnpin?: () => void
     anchorPoint: { x: number; y: number }
     menuId?: string
 }
@@ -85,6 +87,47 @@ function TrashIcon(props: { className?: string }) {
     )
 }
 
+function FolderIcon(props: { className?: string }) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={props.className}
+        >
+            <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
+        </svg>
+    )
+}
+
+function UnpinIcon(props: { className?: string }) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={props.className}
+        >
+            <path d="m12 17 5 5" />
+            <path d="M9 11 3 17l4 4 6-6" />
+            <path d="m14 4 6 6" />
+            <path d="m17 3 4 4-8 8-4-4Z" />
+        </svg>
+    )
+}
+
 type MenuPosition = {
     top: number
     left: number
@@ -100,6 +143,8 @@ export function SessionActionMenu(props: SessionActionMenuProps) {
         onRename,
         onArchive,
         onDelete,
+        onOpenFiles,
+        onUnpin,
         anchorPoint,
         menuId
     } = props
@@ -122,6 +167,16 @@ export function SessionActionMenu(props: SessionActionMenuProps) {
     const handleDelete = () => {
         onClose()
         onDelete()
+    }
+
+    const handleOpenFiles = () => {
+        onClose()
+        onOpenFiles?.()
+    }
+
+    const handleUnpin = () => {
+        onClose()
+        onUnpin?.()
     }
 
     const updatePosition = useCallback(() => {
@@ -239,6 +294,34 @@ export function SessionActionMenu(props: SessionActionMenuProps) {
                     <EditIcon className="text-[var(--app-hint)]" />
                     {t('session.action.rename')}
                 </button>
+
+                {onOpenFiles ? (
+                    <button
+                        type="button"
+                        role="menuitem"
+                        className={`${baseItemClassName} session-action-menu__mobile-only hover:bg-[var(--app-subtle-bg)]`}
+                        onClick={handleOpenFiles}
+                    >
+                        <FolderIcon className="text-[var(--app-hint)]" />
+                        {t('button.files')}
+                    </button>
+                ) : null}
+
+                {onUnpin ? (
+                    <button
+                        type="button"
+                        role="menuitem"
+                        className={`${baseItemClassName} hover:bg-[var(--app-subtle-bg)]`}
+                        onClick={handleUnpin}
+                    >
+                        <UnpinIcon className="text-[var(--app-hint)]" />
+                        {t('dashboard.unpin')}
+                    </button>
+                ) : null}
+
+                {(onOpenFiles || onUnpin) ? (
+                    <div className="mx-2 my-0.5 h-px bg-[var(--app-divider)]" role="separator" />
+                ) : null}
 
                 {sessionActive ? (
                     <button

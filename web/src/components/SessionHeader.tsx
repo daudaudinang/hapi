@@ -314,12 +314,38 @@ export function SessionHeader(props: {
         navigate({ to: '/team-chats' })
     }, [navigate])
 
+    const handleOpenCompactFiles = useCallback(() => {
+        navigate({
+            search: (previous: any) => ({
+                ...previous,
+                modal: 'files',
+                modalSessionId: session.id
+            })
+        } as any)
+    }, [navigate, session.id])
+
+    const handleOpenCompactTerminal = useCallback(() => {
+        navigate({
+            search: (previous: any) => ({
+                ...previous,
+                modal: 'terminal',
+                modalSessionId: session.id
+            })
+        } as any)
+    }, [navigate, session.id])
+
     // In Telegram, don't render header (Telegram provides its own)
     if (isTelegramApp()) {
         return null
     }
 
     if (compactMode) {
+        const compactPath = session.metadata?.path
+            ?.split('/')
+            .filter(Boolean)
+            .slice(-2)
+            .join('/')
+
         return (
             <>
                 <div className="db-pinned__compact-header" onDoubleClick={handleCompactHeaderDoubleClick}>
@@ -327,6 +353,19 @@ export function SessionHeader(props: {
                         {pinIndex !== undefined && <span className="db-pinned__index-badge">{pinIndex}</span>}
                         <span className={`db-card__dot db-card__dot--${sessionStatus}`} />
                         <span className="db-pinned__compact-title">{title}</span>
+                        {session.metadata?.path ? (
+                            <button
+                                type="button"
+                                className="db-pinned__compact-path-trigger"
+                                onClick={handleOpenCompactFiles}
+                                onDoubleClick={(event) => event.stopPropagation()}
+                                title={session.metadata.path}
+                                aria-label={`Open files in ${session.metadata.path}`}
+                            >
+                                <FolderIcon className="h-3.5 w-3.5" />
+                                <span>{compactPath}</span>
+                            </button>
+                        ) : null}
                         <span className="session-provider-tasks">
                             <span className={`db-card__agent db-card__agent--${agentFlavor}`}>{agentFlavor}</span>
                             <SessionTaskListControl todos={session.todos} compact />
@@ -334,14 +373,14 @@ export function SessionHeader(props: {
                         {teamMemberships.slice(0, 1).map((membership) => (
                             <span
                                 key={membership.participant.id}
-                                className="max-w-[140px] truncate rounded-full border border-[var(--app-border)] px-2 py-0.5 text-[11px] text-[var(--app-hint)]"
+                                className="db-pinned__compact-membership"
                                 title={`${membership.teamChat.name}: @${membership.participant.displayName}`}
                             >
                                 {membership.teamChat.name}: @{membership.participant.displayName}
                             </span>
                         ))}
-                        
-                        <div className="db-pinned__compact-actions flex items-center gap-1 ml-auto">
+
+                        <div className="db-pinned__compact-actions">
                             {canFocusSession ? (
                                 <button
                                     type="button"
@@ -382,22 +421,21 @@ export function SessionHeader(props: {
                             {api ? (
                                 <button
                                     type="button"
-                                    className="db-pinned__compact-action"
+                                    className="db-pinned__compact-action db-pinned__compact-action--team"
                                     onClick={() => { void handleCreateTeamChatWithSession() }}
                                     onDoubleClick={(event) => event.stopPropagation()}
                                     title="Create Team Chat with this session"
                                     aria-label="Create Team Chat with this session"
                                     disabled={creatingTeamChat}
                                 >
-                                    💬
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                        <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z" />
+                                        <path d="M8 9h8" />
+                                        <path d="M8 13h5" />
+                                    </svg>
                                 </button>
                             ) : null}
-                            <button type="button" className="db-pinned__compact-action" onClick={() => navigate({ search: (prev: any) => ({ ...prev, modal: 'files', modalSessionId: session.id }) } as any)} onDoubleClick={(event) => event.stopPropagation()} title={t('button.files')}
-                                aria-label={t('button.files')}
-                            >
-                                <FolderIcon className="w-4 h-4" />
-                            </button>
-                            <button type="button" className="db-pinned__compact-action" onClick={() => navigate({ search: (prev: any) => ({ ...prev, modal: 'terminal', modalSessionId: session.id }) } as any)} onDoubleClick={(event) => event.stopPropagation()} title={t('button.terminal')}
+                            <button type="button" className="db-pinned__compact-action" onClick={handleOpenCompactTerminal} onDoubleClick={(event) => event.stopPropagation()} title={t('button.terminal')}
                                 aria-label={t('button.terminal')}
                             >
                                 <TerminalIcon className="w-4 h-4" />
@@ -414,36 +452,24 @@ export function SessionHeader(props: {
                             >
                                 <MoreVerticalIcon className="w-4 h-4" />
                             </button>
-                            <button
-                                ref={props.compactCloseButtonRef}
-                                type="button"
-                                className="db-pinned__unpin-btn"
-                                onClick={props.onBack}
-                                onDoubleClick={(event) => event.stopPropagation()}
-                                title={props.compactCloseLabel ?? 'Unpin this session'}
-                                aria-label={props.compactCloseLabel ?? 'Unpin this session'}
-                            >
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                                </svg>
-                            </button>
+                            {props.compactCloseLabel ? (
+                                <button
+                                    ref={props.compactCloseButtonRef}
+                                    type="button"
+                                    className="db-pinned__compact-action db-pinned__compact-action--close"
+                                    onClick={props.onBack}
+                                    onDoubleClick={(event) => event.stopPropagation()}
+                                    title={props.compactCloseLabel}
+                                    aria-label={props.compactCloseLabel}
+                                >
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                        <line x1="18" y1="6" x2="6" y2="18" />
+                                        <line x1="6" y1="6" x2="18" y2="18" />
+                                    </svg>
+                                </button>
+                            ) : null}
                         </div>
                     </div>
-                    {session.metadata?.path && (
-                        <div className="db-pinned__compact-path" title={session.metadata.path}>
-                            {session.metadata.path.split('/').filter(Boolean).slice(-2).join('/')}
-                        </div>
-                    )}
-                    {teamMemberships.length > 1 ? (
-                        <div className="db-pinned__compact-path">
-                            {teamMemberships.slice(1, 3).map((membership) => (
-                                <span key={membership.participant.id} className="mr-2">
-                                    {membership.teamChat.name}: @{membership.participant.displayName}
-                                </span>
-                            ))}
-                        </div>
-                    ) : null}
                 </div>
 
                 <SessionActionMenu
@@ -453,6 +479,8 @@ export function SessionHeader(props: {
                     onRename={() => setRenameOpen(true)}
                     onArchive={() => setArchiveOpen(true)}
                     onDelete={() => setDeleteOpen(true)}
+                    onOpenFiles={handleOpenCompactFiles}
+                    onUnpin={props.compactCloseLabel ? undefined : props.onBack}
                     anchorPoint={menuAnchorPoint}
                     menuId={menuId}
                 />

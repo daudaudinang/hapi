@@ -762,3 +762,248 @@ html[data-theme="dark"] .shiki span {
         transform: none !important;
     }
 }
+
+/* ─── Compact Agent Mode composer ─────────────────────────────────────────── */
+
+.compact-composer {
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--app-fg) 11%, transparent);
+    border-radius: 999px;
+    background:
+        linear-gradient(180deg, color-mix(in srgb, var(--app-fg) 2%, transparent), transparent),
+        var(--app-secondary-bg);
+    box-shadow:
+        0 1px 0 color-mix(in srgb, var(--app-fg) 4%, transparent),
+        0 8px 24px color-mix(in srgb, var(--app-fg) 4%, transparent);
+    transition: border-radius 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.compact-composer:focus-within {
+    border-color: color-mix(in srgb, #7c6cff 62%, var(--app-border));
+    box-shadow:
+        0 0 0 3px color-mix(in srgb, #7c6cff 11%, transparent),
+        0 10px 28px color-mix(in srgb, var(--app-fg) 5%, transparent);
+}
+
+.compact-composer[data-multiline="true"] {
+    border-radius: 18px;
+}
+
+.compact-composer__attachments {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 10px 12px 0;
+}
+
+.compact-composer__row {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 7px;
+    padding: 6px;
+}
+
+.compact-composer[data-multiline="true"] .compact-composer__row {
+    align-items: flex-end;
+}
+
+.compact-composer__input {
+    min-width: 0;
+    min-height: 24px;
+    max-height: 7rem;
+    flex: 1 1 auto;
+    resize: none;
+    overflow-y: auto;
+    border: 0;
+    background: transparent;
+    padding: 3px 2px;
+    color: var(--app-fg);
+    font-size: 0.8125rem;
+    line-height: 1.35rem;
+    scrollbar-color: color-mix(in srgb, var(--app-hint) 55%, transparent) transparent;
+    scrollbar-width: thin;
+}
+
+.compact-composer__input::placeholder {
+    color: var(--app-hint);
+}
+
+.compact-composer__input:focus {
+    outline: none;
+}
+
+.compact-composer__input:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.compact-composer__input::-webkit-scrollbar {
+    width: 5px;
+}
+
+.compact-composer__input::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.compact-composer__input::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--app-hint) 55%, transparent);
+}
+
+.compact-composer__attachment,
+.compact-composer__action {
+    display: inline-flex;
+    width: 32px;
+    height: 32px;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 32px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease, transform 140ms ease;
+}
+
+.compact-composer__attachment {
+    color: var(--app-hint);
+}
+
+.compact-composer__attachment:hover:not(:disabled) {
+    border-color: var(--app-border);
+    background: var(--app-subtle-bg);
+    color: var(--app-fg);
+}
+
+.compact-composer__action[data-state="idle"] {
+    background: color-mix(in srgb, var(--app-hint) 35%, transparent);
+    color: color-mix(in srgb, var(--app-bg) 88%, white);
+}
+
+.compact-composer__action[data-state="ready"] {
+    background: linear-gradient(145deg, #8b7cff, #6856e8);
+    color: #fff;
+    box-shadow: 0 5px 14px rgb(105 86 232 / 28%);
+}
+
+.compact-composer__action[data-state="running"] {
+    background: linear-gradient(145deg, #ff625f, #dc3f45);
+    color: #fff;
+    box-shadow: 0 5px 14px rgb(220 63 69 / 24%);
+}
+
+.compact-composer__attachment:hover:not(:disabled),
+.compact-composer__action:hover:not(:disabled) {
+    transform: translateY(-1px);
+}
+
+.compact-composer__attachment:focus-visible,
+.compact-composer__action:focus-visible,
+.compact-runtime-controls select:focus-visible {
+    outline: 2px solid color-mix(in srgb, #7c6cff 72%, white);
+    outline-offset: 2px;
+}
+
+.compact-composer__attachment:disabled,
+.compact-composer__action:disabled {
+    cursor: not-allowed;
+    opacity: 0.52;
+}
+
+.compact-composer__status {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 3px max(4px, env(safe-area-inset-bottom));
+}
+
+.compact-composer__telemetry {
+    display: flex;
+    min-width: 0;
+    align-items: baseline;
+    gap: 9px;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.compact-runtime-controls {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 5px;
+}
+
+.compact-runtime-controls__field {
+    display: block;
+    min-width: 0;
+}
+
+.compact-runtime-controls select {
+    display: block;
+    width: 100%;
+    max-width: 118px;
+    height: 26px;
+    overflow: hidden;
+    border: 1px solid var(--app-border);
+    border-radius: 7px;
+    background: var(--app-subtle-bg);
+    padding: 0 20px 0 7px;
+    color: var(--app-hint);
+    font-size: 0.625rem;
+    line-height: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
+}
+
+.compact-runtime-controls select:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--app-link) 30%, var(--app-border));
+    background: var(--app-secondary-bg);
+    color: var(--app-fg);
+}
+
+.compact-runtime-controls select:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+@media (max-width: 520px) {
+    .compact-composer__status {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 6px;
+        padding-top: 7px;
+    }
+
+    .compact-composer__telemetry {
+        width: 100%;
+        min-height: 18px;
+        padding: 0 2px;
+    }
+
+    .compact-runtime-controls {
+        display: grid;
+        width: 100%;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+    }
+
+    .compact-runtime-controls select {
+        max-width: none;
+        height: 30px;
+        padding-right: 18px;
+        font-size: 0.6875rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .compact-composer,
+    .compact-composer__attachment,
+    .compact-composer__action,
+    .compact-runtime-controls select {
+        transition: none;
+        transform: none !important;
+    }
+}

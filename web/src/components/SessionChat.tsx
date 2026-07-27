@@ -673,6 +673,7 @@ export function SessionChat(props: {
                         onVoiceMicToggle={voice ? handleVoiceMicToggle : undefined}
                         appendText={props.composerAppendText}
                         onAppendTextConsumed={props.onComposerAppendTextConsumed}
+                        compactMode={props.compactMode}
                     />
                 </div>
             </AssistantRuntimeProvider>

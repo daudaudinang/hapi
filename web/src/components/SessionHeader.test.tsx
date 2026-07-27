@@ -44,9 +44,18 @@ vi.mock('@/hooks/mutations/useSessionActions', () => ({
 }))
 
 vi.mock('@/components/SessionActionMenu', () => ({
-    SessionActionMenu: (props: { isOpen: boolean; onArchive: () => void }) => (
-        props.isOpen ? <button type="button" onClick={props.onArchive}>Archive session</button> : null
-    )
+    SessionActionMenu: (props: {
+        isOpen: boolean
+        onArchive: () => void
+        onOpenFiles?: () => void
+        onUnpin?: () => void
+    }) => props.isOpen ? (
+        <>
+            <button type="button" onClick={props.onArchive}>Archive session</button>
+            {props.onOpenFiles ? <button type="button" onClick={props.onOpenFiles}>button.files</button> : null}
+            {props.onUnpin ? <button type="button" onClick={props.onUnpin}>dashboard.unpin</button> : null}
+        </>
+    ) : null
 }))
 
 vi.mock('@/components/RenameSessionDialog', () => ({
@@ -308,6 +317,57 @@ describe('SessionHeader editor entry point', () => {
         expect(screen.queryByRole('button', { name: 'Unpin this session' })).not.toBeInTheDocument()
     })
 
+    it('moves unpin into the compact action menu outside focus mode', () => {
+        const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        const onBack = vi.fn()
+
+        render(
+            <QueryClientProvider client={qc}>
+                <SessionHeader
+                    session={makeSession()}
+                    onBack={onBack}
+                    api={null}
+                    compactMode
+                    pinIndex={1}
+                />
+            </QueryClientProvider>
+        )
+
+        expect(screen.queryByRole('button', { name: 'Unpin this session' })).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'session.more' }))
+        fireEvent.click(screen.getByRole('button', { name: 'dashboard.unpin' }))
+
+        expect(onBack).toHaveBeenCalledTimes(1)
+    })
+
+    it('opens Files from the compact path pill for the current session', () => {
+        const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+        render(
+            <QueryClientProvider client={qc}>
+                <SessionHeader
+                    session={makeSession({ metadata: { path: '/workspace/hapi', host: 'host', machineId: 'machine-1', flavor: 'codex' } })}
+                    onBack={vi.fn()}
+                    api={null}
+                    compactMode
+                    pinIndex={1}
+                />
+            </QueryClientProvider>
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open files in /workspace/hapi' }))
+
+        expect(navigateMock).toHaveBeenCalledWith(expect.objectContaining({
+            search: expect.any(Function)
+        }))
+        const searchUpdater = navigateMock.mock.calls.at(-1)?.[0]?.search
+        expect(searchUpdater({ keep: 'value' })).toEqual({
+            keep: 'value',
+            modal: 'files',
+            modalSessionId: 'session-1'
+        })
+    })
+
     it('shows the Codex goal button when a Codex session has goal state', () => {
         const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
         render(<QueryClientProvider client={qc}><SessionHeader session={makeSession()} onBack={vi.fn()} api={null} codexGoal={makeGoal()} onGoalCommand={vi.fn()} /></QueryClientProvider>)
@@ -562,10 +622,9 @@ describe('SessionHeader editor entry point', () => {
             </QueryClientProvider>
         )
 
-        fireEvent.doubleClick(screen.getByRole('button', { name: 'button.files' }))
+        fireEvent.doubleClick(screen.getByRole('button', { name: 'Open files in /repo' }))
         fireEvent.doubleClick(screen.getByRole('button', { name: 'button.terminal' }))
         fireEvent.doubleClick(screen.getByRole('button', { name: 'session.more' }))
-        fireEvent.doubleClick(screen.getByRole('button', { name: 'Unpin this session' }))
 
         expect(onFocusSession).not.toHaveBeenCalled()
     })
