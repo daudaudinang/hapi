@@ -867,6 +867,7 @@ export function HappyComposer(props: {
                             <div
                                 className="compact-composer"
                                 data-multiline={composerMultiline ? 'true' : 'false'}
+                                data-has-attachments={hasAttachments ? 'true' : 'false'}
                             >
                                 {attachments.length > 0 ? (
                                     <div className="compact-composer__attachments">

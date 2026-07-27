@@ -477,4 +477,18 @@ describe('HappyComposer compact Agent mode', () => {
         view.unmount()
         expect(disconnect).toHaveBeenCalledTimes(1)
     })
+
+    it('marks the compact composer as expanded while attachments are present', () => {
+        assistant.state.composer.attachments = [{ status: { type: 'complete' } }]
+
+        const view = render(<HappyComposer compactComposerMode />)
+        const composer = document.querySelector('.compact-composer')
+
+        expect(composer).toHaveAttribute('data-has-attachments', 'true')
+
+        assistant.state.composer.attachments = []
+        view.rerender(<HappyComposer compactComposerMode />)
+
+        expect(composer).toHaveAttribute('data-has-attachments', 'false')
+    })
 })

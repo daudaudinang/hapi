@@ -785,7 +785,8 @@ html[data-theme="dark"] .shiki span {
         0 10px 28px color-mix(in srgb, var(--app-fg) 5%, transparent);
 }
 
-.compact-composer[data-multiline="true"] {
+.compact-composer[data-multiline="true"],
+.compact-composer[data-has-attachments="true"] {
     border-radius: 18px;
 }
 
@@ -793,7 +794,16 @@ html[data-theme="dark"] .shiki span {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    padding: 10px 12px 0;
+    padding: 8px 8px 0;
+}
+
+.compact-composer__attachments > * {
+    min-width: 0;
+    max-width: 100%;
+    border-radius: 999px;
+    padding: 6px 10px;
+    font-size: 0.75rem;
+    line-height: 1rem;
 }
 
 .compact-composer__row {
