@@ -448,6 +448,19 @@ describe('EditorTerminal', () => {
         expect(screen.queryByRole('region', { name: 'Snippet content' })).not.toBeInTheDocument()
     })
 
+    it('unmount closes the active editor Snippets panel and disconnects its terminal', () => {
+        const rendered = renderMachineTerminal({ mobileMode: true })
+        const disconnect = mocks.disconnectsByTerminalId.get('term-machine')
+
+        fireEvent.click(screen.getByRole('button', { name: 'Snippets' }))
+        expect(screen.getByRole('region', { name: 'Snippet content' })).toBeVisible()
+
+        rendered.unmount()
+
+        expect(screen.queryByRole('region', { name: 'Snippet content' })).not.toBeInTheDocument()
+        expect(disconnect).toHaveBeenCalledTimes(1)
+    })
+
     it('disables terminal interaction while the editor terminal is disconnected', () => {
         const props = {
             mobileMode: true,

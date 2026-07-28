@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useState, type ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -110,6 +110,7 @@ afterEach(() => {
     cleanup()
     vi.clearAllMocks()
     vi.unstubAllGlobals()
+    vi.useRealTimers()
 })
 
 describe('TerminalControlDock', () => {
@@ -188,6 +189,34 @@ describe('TerminalControlDock', () => {
         expect(onWritePlainInput).toHaveBeenCalledWith('pwd')
         expect(screen.getByRole('region', { name: 'Snippets' })).toBeVisible()
         expect(screen.getByRole('status')).toHaveTextContent('Could not insert the snippet.')
+    })
+
+    it('cleans up live snippet feedback when the dock unmounts', () => {
+        vi.useFakeTimers()
+        const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
+        const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout')
+        const queryClient = new QueryClient()
+        const rendered = render(
+            <QueryClientProvider client={queryClient}>
+                <ControlledDock onWritePlainInput={() => true} />
+            </QueryClientProvider>,
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: 'Snippets' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Insert Git status' }))
+        expect(screen.getByRole('status')).toHaveTextContent('Inserted · not executed')
+
+        const feedbackTimer = setTimeoutSpy.mock.results.find((_, index) => (
+            setTimeoutSpy.mock.calls[index]?.[1] === 1200
+        ))?.value
+        expect(feedbackTimer).toBeDefined()
+
+        rendered.unmount()
+
+        expect(clearTimeoutSpy).toHaveBeenCalledWith(feedbackTimer)
+        act(() => vi.runOnlyPendingTimers())
+        expect(screen.queryByRole('status')).not.toBeInTheDocument()
+        expect(screen.queryByRole('region', { name: 'Snippets' })).not.toBeInTheDocument()
     })
 
     it('opens an anchored panel instead of a dialog and toggles it closed', () => {

@@ -391,12 +391,16 @@ describe('SessionTerminalTabs', () => {
         expect(mocks.emittedEvents).not.toContain('terminal:close-all')
     })
 
-    it('unmount disconnects without close-one', () => {
+    it('unmount closes Snippets, disconnects, and does not close the terminal', () => {
         mocks.controller = makeController([state('t1')])
         const rendered = renderTabs()
 
+        fireEvent.click(screen.getByRole('button', { name: 'Snippets' }))
+        expect(screen.getByRole('region', { name: 'Snippet content' })).toBeVisible()
+
         rendered.unmount()
 
+        expect(screen.queryByRole('region', { name: 'Snippet content' })).not.toBeInTheDocument()
         expect(mocks.controller.disconnect).toHaveBeenCalledTimes(1)
         expect(mocks.controller.closeOne).not.toHaveBeenCalled()
     })
