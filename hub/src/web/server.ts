@@ -16,6 +16,7 @@ import { createMessagesRoutes } from './routes/messages'
 import { createPermissionsRoutes } from './routes/permissions'
 import { createMachinesRoutes } from './routes/machines'
 import { createTeamChatsRoutes } from './routes/teamChats'
+import { createTerminalSnippetsRoutes } from './routes/terminalSnippets'
 import { createGitRoutes } from './routes/git'
 import { createCliRoutes } from './routes/cli'
 import { createEditorRoutes } from './routes/editor'
@@ -98,6 +99,7 @@ function createWebApp(options: {
     }))
     app.route('/api', createMessagesRoutes(options.getSyncEngine))
     app.route('/api', createTeamChatsRoutes(options.getSyncEngine))
+    app.route('/api', createTerminalSnippetsRoutes(options.store, options.getSseManager))
     app.route('/api', createPermissionsRoutes(options.getSyncEngine))
     app.route('/api', createMachinesRoutes(options.getSyncEngine))
     app.route('/api', createEditorRoutes(options.getSyncEngine))
