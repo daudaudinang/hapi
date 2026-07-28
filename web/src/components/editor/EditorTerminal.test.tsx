@@ -376,6 +376,43 @@ describe('EditorTerminal', () => {
         expect(mocks.useTerminalSocket).not.toHaveBeenCalled()
     })
 
+    it('marks the shared session terminal inactive only while its desktop editor is collapsed', () => {
+        const commonProps = {
+            tabs: [tabs[1]],
+            activeTabId: 'term-1',
+            api: null,
+            onSelectTab: vi.fn(),
+            onCloseTab: vi.fn(),
+            onOpenTerminal: vi.fn(),
+            onToggleCollapsed: vi.fn(),
+        }
+        const rendered = render(
+            <EditorTerminal {...commonProps} isCollapsed={false} />,
+        )
+
+        expect(mocks.sessionTabsProps.at(-1)).toEqual(expect.objectContaining({
+            active: true,
+        }))
+
+        rendered.rerender(
+            <EditorTerminal {...commonProps} isCollapsed={true} />,
+        )
+        expect(mocks.sessionTabsProps.at(-1)).toEqual(expect.objectContaining({
+            active: false,
+        }))
+
+        rendered.rerender(
+            <EditorTerminal
+                {...commonProps}
+                isCollapsed={true}
+                mobileMode={true}
+            />,
+        )
+        expect(mocks.sessionTabsProps.at(-1)).toEqual(expect.objectContaining({
+            active: true,
+        }))
+    })
+
     it('connects machine-scoped terminals without session lookup', () => {
         render(
             <EditorTerminal

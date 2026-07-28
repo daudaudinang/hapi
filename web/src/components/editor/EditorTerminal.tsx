@@ -29,6 +29,7 @@ import { isRemoteTerminalSupported } from '@/utils/terminalSupport'
 function EditorSessionTerminalBody(props: {
     api: ApiClient | null
     tab: EditorTab
+    uiActive: boolean
     compactFontSize?: boolean
 }) {
     const sessionId = props.tab.sessionId ?? null
@@ -58,7 +59,7 @@ function EditorSessionTerminalBody(props: {
     return (
         <SessionTerminalTabs
             sessionId={sessionId}
-            active={Boolean(session.active)}
+            active={Boolean(session.active) && props.uiActive}
             terminalSupported={terminalSupported}
             cwd={session.metadata?.path}
             compactFontSize={props.compactFontSize}
@@ -537,6 +538,10 @@ export function EditorTerminal(props: {
                             <EditorSessionTerminalBody
                                 api={props.api}
                                 tab={activeSessionTerminal}
+                                uiActive={
+                                    Boolean(props.mobileMode)
+                                    || !props.isCollapsed
+                                }
                                 compactFontSize={props.mobileMode}
                             />
                         </div>

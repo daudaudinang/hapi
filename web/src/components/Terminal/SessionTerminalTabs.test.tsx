@@ -548,6 +548,43 @@ describe('SessionTerminalTabs', () => {
         expect(staleController.clear).toHaveBeenCalledTimes(1)
     })
 
+    it('clears Search on editor collapse and ignores stale state before reopening clean', () => {
+        mocks.controller = makeController([state('t1')])
+        const rendered = renderTabs()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+        const oldCallback = mocks.terminalMounts.at(-1)?.onSearchStateChange
+        const oldController = searchController()
+        act(() => oldCallback?.(readySearchState(oldController)))
+
+        rendered.rerender(
+            <SessionTerminalTabs
+                sessionId="session-1"
+                active={false}
+                terminalSupported={true}
+            />,
+        )
+        expect(oldController.clear).toHaveBeenCalledTimes(1)
+        expect(screen.queryByRole('region', { name: 'Search terminal output' }))
+            .not.toBeInTheDocument()
+        expect(mocks.terminalMounts.at(-1)?.searchActive).toBe(false)
+
+        const staleController = searchController()
+        act(() => oldCallback?.(readySearchState(staleController)))
+        expect(staleController.clear).toHaveBeenCalledTimes(1)
+
+        rendered.rerender(
+            <SessionTerminalTabs
+                sessionId="session-1"
+                active={true}
+                terminalSupported={true}
+            />,
+        )
+        fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+        expect(screen.getByRole('region', { name: 'Search terminal output' }))
+            .toHaveAttribute('data-search-status', EMPTY_TERMINAL_SEARCH_STATE.status)
+    })
+
     it('renders count n/3 from CLI list', () => {
         mocks.controller = makeController([state('t1', 'running'), state('t2', 'detached')])
 
