@@ -387,6 +387,8 @@ function EditorTerminalBody(props: {
                 disabled={quickInputDisabled}
                 activeTool={activeDockTool}
                 onActiveToolChange={handleActiveDockToolChange}
+                searchMounted={activeDockTool === 'search'}
+                onSearchClose={() => clearSearch()}
                 searchState={searchState}
                 ctrlActive={quickInput.ctrlActive}
                 altActive={quickInput.altActive}

@@ -46,18 +46,26 @@ vi.mock('@/components/Terminal/TerminalSnippetPanel', () => ({
 }))
 
 vi.mock('@/components/Terminal/TerminalSearchPanel', () => ({
-    TerminalSearchPanel: (props: {
+    TerminalSearchPanel: function TerminalSearchPanel(props: {
         state: TerminalSearchState
         onClose: () => void
-    }) => (
-        <section
-            role="region"
-            aria-label="Search terminal output"
-            data-search-status={props.state.status}
-        >
-            <button type="button" onClick={props.onClose}>Close search</button>
-        </section>
-    ),
+    }) {
+        const [query, setQuery] = useState('')
+        return (
+            <section
+                role="region"
+                aria-label="Search terminal output"
+                data-search-status={props.state.status}
+            >
+                <input
+                    aria-label="Search terminal output"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                />
+                <button type="button" onClick={props.onClose}>Close search</button>
+            </section>
+        )
+    },
 }))
 
 var mocks: {
@@ -255,6 +263,19 @@ function renderTabs(props: Partial<React.ComponentProps<typeof SessionTerminalTa
     )
 }
 
+function setDesktopViewport(desktop: boolean) {
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+        matches: query === '(min-width: 1024px)' ? desktop : !desktop,
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+    })))
+}
+
 describe('SessionTerminalTabs', () => {
     beforeEach(() => {
         vi.clearAllMocks()
@@ -262,9 +283,13 @@ describe('SessionTerminalTabs', () => {
         mocks.autoMountTerminal = null
         mocks.emittedEvents = []
         mocks.controller = makeController()
+        setDesktopViewport(true)
     })
 
-    afterEach(() => cleanup())
+    afterEach(() => {
+        cleanup()
+        vi.unstubAllGlobals()
+    })
 
     it('marks the terminal control dock as mobile and tablet only', () => {
         mocks.controller = makeController([state('t1')])
@@ -431,16 +456,26 @@ describe('SessionTerminalTabs', () => {
         expect(search).toHaveAttribute('aria-pressed', 'true')
         expect(search).toHaveClass('bg-violet-500/10')
         expect(mocks.terminalMounts.at(-1)?.searchActive).toBe(true)
+        fireEvent.change(screen.getByRole('textbox', {
+            name: 'Search terminal output',
+        }), {
+            target: { value: 'needle' },
+        })
 
         fireEvent.click(snippets)
         expect(snippets).toHaveAttribute('aria-pressed', 'true')
         expect(snippets).toHaveClass('bg-violet-500/10')
-        expect(mocks.terminalMounts.at(-1)?.searchActive).toBe(false)
+        expect(mocks.terminalMounts.at(-1)?.searchActive).toBe(true)
         expect(screen.getByRole('region', { name: 'Snippet content' }))
             .toBeInTheDocument()
+
+        fireEvent.click(search)
+        expect(screen.getByRole('textbox', {
+            name: 'Search terminal output',
+        })).toHaveValue('needle')
     })
 
-    it('scopes desktop Search shortcut and closes the tool with Escape', () => {
+    it('scopes desktop Search shortcut without handling Escape', () => {
         mocks.controller = makeController([state('t1')])
         const rendered = renderTabs()
 
@@ -475,8 +510,10 @@ describe('SessionTerminalTabs', () => {
             cancelable: true,
         })
         act(() => document.dispatchEvent(closeEvent))
-        expect(closeEvent.defaultPrevented).toBe(true)
-        expect(mocks.terminalMounts.at(-1)?.searchActive).toBe(false)
+        expect(closeEvent.defaultPrevented).toBe(false)
+        expect(mocks.terminalMounts.at(-1)?.searchActive).toBe(true)
+        expect(screen.getByRole('region', { name: 'Search terminal output' }))
+            .toBeVisible()
 
         rendered.rerender(
             <SessionTerminalTabs
@@ -497,7 +534,7 @@ describe('SessionTerminalTabs', () => {
         expect(mocks.terminalMounts.at(-1)?.searchActive).toBe(false)
     })
 
-    it('bridges active session Search state and clears it on toggle without focusing xterm', () => {
+    it('retains desktop Search on icon toggle and clears it from the panel close button', () => {
         const focus = vi.fn()
         mocks.autoMountTerminal = () => ({
             focus,
@@ -507,7 +544,10 @@ describe('SessionTerminalTabs', () => {
         mocks.controller = makeController([state('t1')])
         renderTabs()
 
-        fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+        const desktopSearch = screen.getByRole('button', {
+            name: 'terminal.search.title',
+        })
+        fireEvent.click(desktopSearch)
         expect(mocks.terminalMounts.at(-1)).toMatchObject({
             searchActive: true,
             dismissMobileInteraction: true,
@@ -538,23 +578,58 @@ describe('SessionTerminalTabs', () => {
         expect(screen.getByRole('region', { name: 'Search terminal output' }))
             .toHaveAttribute('data-search-status', 'ready')
 
-        fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+        fireEvent.change(screen.getByRole('textbox', {
+            name: 'Search terminal output',
+        }), {
+            target: { value: 'needle' },
+        })
+        fireEvent.click(desktopSearch)
+        expect(controller.clear).not.toHaveBeenCalled()
+        expect(screen.getByRole('region', {
+            name: 'Search terminal output',
+            hidden: true,
+        }).parentElement).toHaveAttribute('hidden')
+        expect(mocks.terminalMounts.at(-1)).toMatchObject({
+            searchActive: true,
+            dismissMobileInteraction: false,
+        })
+
+        fireEvent.click(desktopSearch)
+        expect(screen.getByRole('textbox', {
+            name: 'Search terminal output',
+        })).toHaveValue('needle')
+        fireEvent.click(screen.getByRole('button', { name: 'Close search' }))
         expect(controller.clear).toHaveBeenCalled()
         expect(screen.queryByRole('region', { name: 'Search terminal output' }))
             .not.toBeInTheDocument()
-        expect(mocks.terminalMounts.at(-1)).toMatchObject({
-            searchActive: false,
-            dismissMobileInteraction: false,
-        })
-        const closedController = searchController()
-        act(() => mocks.terminalMounts.at(-1)?.onSearchStateChange?.(
-            readySearchState(closedController),
-        ))
-        expect(closedController.clear).toHaveBeenCalled()
+        expect(mocks.terminalMounts.at(-1)?.searchActive).toBe(false)
         expect(focus).not.toHaveBeenCalled()
     })
 
-    it('clears session Search on body tap, tab change, disconnect, and unmount', () => {
+    it('keeps desktop Search open when terminal content is clicked', () => {
+        mocks.controller = makeController([state('t1')])
+        renderTabs()
+
+        fireEvent.click(screen.getByRole('button', {
+            name: 'terminal.search.title',
+        }))
+        const controller = searchController()
+        act(() => mocks.terminalMounts.at(-1)?.onSearchStateChange?.(
+            readySearchState(controller),
+        ))
+
+        fireEvent.pointerDown(screen.getByTestId('terminal-surface'))
+
+        expect(controller.clear).not.toHaveBeenCalled()
+        expect(screen.getByRole('region', { name: 'Search terminal output' }))
+            .toBeVisible()
+
+        fireEvent.click(screen.getByRole('button', { name: 't1' }))
+        expect(controller.clear).not.toHaveBeenCalled()
+    })
+
+    it('keeps mobile body dismissal and clears Search on tab change, disconnect, and unmount', () => {
+        setDesktopViewport(false)
         mocks.controller = makeController([state('t1'), state('t2')])
         const rendered = renderTabs()
         const openReadySearch = () => {

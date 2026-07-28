@@ -18,6 +18,7 @@
 | `web/src/components/Terminal/TerminalControlDock.test.tsx` | Chứng minh panel giữ state khi ẩn và `×` gọi callback xoá |
 | `web/src/components/Terminal/SessionTerminalTabs.tsx` | Điều phối vòng đời Search theo desktop/mobile và terminal identity |
 | `web/src/components/Terminal/SessionTerminalTabs.test.tsx` | Chứng minh body/icon/Snippets không xoá desktop; `×`/tab/disconnect xoá; không bắt `Esc` |
+| `web/src/components/editor/EditorTerminal.tsx` | Nối API Dock mới nhưng giữ nguyên lifecycle Search hiện tại của editor |
 
 ### Task 1: Giữ Search panel được mount khi thu gọn
 
@@ -107,6 +108,7 @@ git commit -m "refactor(web): preserve hidden terminal search panel"
 **Files:**
 - Modify: `web/src/components/Terminal/SessionTerminalTabs.tsx`
 - Test: `web/src/components/Terminal/SessionTerminalTabs.test.tsx`
+- Modify: `web/src/components/editor/EditorTerminal.tsx`
 
 - [ ] **Step 1: Viết test thất bại cho desktop**
 
@@ -184,6 +186,13 @@ searchMounted={searchMounted}
 onSearchClose={clearSearch}
 ```
 
+Ở `EditorTerminal`, nối API mới bằng lifecycle cũ để không đổi hành vi:
+
+```tsx
+searchMounted={activeDockTool === 'search'}
+onSearchClose={() => clearSearch()}
+```
+
 - [ ] **Step 5: Sửa body và keyboard lifecycle**
 
 Desktop body:
@@ -227,4 +236,3 @@ git add web/src/components/Terminal/SessionTerminalTabs.tsx \
         web/src/components/Terminal/SessionTerminalTabs.test.tsx
 git commit -m "fix(web): retain desktop terminal searches"
 ```
-

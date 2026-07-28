@@ -95,12 +95,18 @@ function appendBounded(current: string, next: string): string {
     return combined.slice(-UI_BUFFER_LIMIT)
 }
 
+function isDesktopTerminalViewport(): boolean {
+    return typeof window.matchMedia !== 'function'
+        || window.matchMedia('(min-width: 1024px)').matches
+}
+
 export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
     const { token, baseUrl, api } = useAppContext()
     const { t } = useTranslation()
     const controller = useSessionTerminalSocket({ token, baseUrl, sessionId: props.sessionId })
     const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null)
     const [activeDockTool, setActiveDockTool] = useState<TerminalDockTool | null>(null)
+    const [searchMounted, setSearchMounted] = useState(false)
     const [searchState, setSearchState] = useState<TerminalSearchState>(
         EMPTY_TERMINAL_SEARCH_STATE,
     )
@@ -159,6 +165,7 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
         searchStateRef.current.controller?.clear()
         searchStateRef.current = EMPTY_TERMINAL_SEARCH_STATE
         setSearchState(EMPTY_TERMINAL_SEARCH_STATE)
+        setSearchMounted(false)
         if (closeTool) {
             setActiveDockTool(null)
         }
@@ -169,11 +176,27 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
     }, [clearSearch, searchIdentity])
 
     const dismissDockTool = useCallback(() => {
+        if (isDesktopTerminalViewport()) {
+            if (activeDockTool !== 'search') {
+                setActiveDockTool(null)
+            }
+            return
+        }
         clearSearch()
-    }, [clearSearch])
+    }, [activeDockTool, clearSearch])
 
     const handleActiveDockToolChange = useCallback((tool: TerminalDockTool | null) => {
+        if (isDesktopTerminalViewport()) {
+            if (tool === 'search') {
+                setSearchMounted(true)
+            }
+            setActiveDockTool(tool)
+            return
+        }
         clearSearch(false)
+        if (tool === 'search') {
+            setSearchMounted(true)
+        }
         setActiveDockTool(tool)
     }, [clearSearch])
 
@@ -185,10 +208,8 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
                     event.target.isContentEditable
                     || event.target.matches('input, textarea, select')
                 )
-            const desktop = typeof window.matchMedia !== 'function'
-                || window.matchMedia('(min-width: 1024px)').matches
             if (
-                desktop
+                isDesktopTerminalViewport()
                 && !editable
                 && (event.ctrlKey || event.metaKey)
                 && event.key.toLowerCase() === 'f'
@@ -199,22 +220,17 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
                 }
                 return
             }
-            if (event.key === 'Escape' && activeDockTool !== null) {
-                event.preventDefault()
-                clearSearch()
-            }
         }
         document.addEventListener('keydown', handleKeyDown)
         return () => document.removeEventListener('keydown', handleKeyDown)
     }, [
         activeDockTool,
         canUseTerminal,
-        clearSearch,
         handleActiveDockToolChange,
         interactionActive,
     ])
 
-    const searchEnabled = activeDockTool === 'search' && searchIdentity !== null
+    const searchEnabled = searchMounted && searchIdentity !== null
     const searchCallbackIdentity = searchIdentity
     const searchCallbackGeneration = searchGenerationRef.current
     const handleSearchStateChange = useCallback((nextState: TerminalSearchState) => {
@@ -481,7 +497,9 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
                                 <button
                                     type="button"
                                     onClick={() => {
-                                        clearSearch()
+                                        if (terminal.terminalId !== activeTerminalId) {
+                                            clearSearch()
+                                        }
                                         setActiveTerminalId(terminal.terminalId)
                                     }}
                                     className="max-w-[140px] truncate hover:text-[var(--app-fg)]"
@@ -640,6 +658,8 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
                 disabled={dockDisabled}
                 activeTool={activeDockTool}
                 onActiveToolChange={handleActiveDockToolChange}
+                searchMounted={searchMounted}
+                onSearchClose={() => clearSearch()}
                 searchState={searchState}
                 ctrlActive={quickInput.ctrlActive}
                 altActive={quickInput.altActive}
