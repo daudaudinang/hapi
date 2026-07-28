@@ -227,21 +227,36 @@ describe('TerminalSnippetPanel custom loading', () => {
         expect(custom.id).not.toBe('')
         expect(builtIn).toHaveAttribute('aria-controls')
         expect(custom).toHaveAttribute('aria-controls')
-        expect(screen.getByRole('tabpanel')).toHaveAttribute(
-            'id',
-            builtIn.getAttribute('aria-controls'),
-        )
-        expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', builtIn.id)
+        const builtInPanel = document.getElementById(
+            builtIn.getAttribute('aria-controls') ?? '',
+        ) as HTMLElement
+        const customPanel = document.getElementById(
+            custom.getAttribute('aria-controls') ?? '',
+        ) as HTMLElement
+        expect(screen.getAllByRole('tabpanel', { hidden: true })).toHaveLength(2)
+        expect(builtInPanel).toHaveAttribute('aria-labelledby', builtIn.id)
+        expect(customPanel).toHaveAttribute('aria-labelledby', custom.id)
+        expect(builtInPanel).toBeVisible()
+        expect(customPanel).not.toBeVisible()
 
         builtIn.focus()
         fireEvent.keyDown(builtIn, { key: 'ArrowRight' })
         expect(custom).toHaveFocus()
         expect(custom).toHaveAttribute('aria-selected', 'true')
-        expect(screen.getByRole('tabpanel')).toHaveAttribute(
-            'id',
-            custom.getAttribute('aria-controls'),
+        expect(document.getElementById(
+            builtIn.getAttribute('aria-controls') ?? '',
+        )).toBe(builtInPanel)
+        expect(document.getElementById(
+            custom.getAttribute('aria-controls') ?? '',
+        )).toBe(customPanel)
+        expect(screen.getAllByRole('tabpanel', { hidden: true })).toHaveLength(2)
+        expect(builtInPanel).not.toBeVisible()
+        expect(customPanel).toBeVisible()
+        expect(screen.getByRole('tabpanel')).toBe(customPanel)
+        expect(customPanel).toHaveAttribute(
+            'aria-labelledby',
+            custom.id,
         )
-        expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', custom.id)
         await waitFor(() => expect(api.getTerminalSnippets).toHaveBeenCalledTimes(1))
 
         fireEvent.keyDown(custom, { key: 'ArrowRight' })

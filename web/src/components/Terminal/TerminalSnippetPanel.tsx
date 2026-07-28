@@ -246,29 +246,6 @@ export function TerminalSnippetPanel(props: TerminalSnippetPanelProps) {
         setEditor((current) => current ? { ...current, [field]: value } : current)
     }
 
-    const listContent = activeTab === 'built-in'
-        ? (
-            <BuiltInList
-                items={builtIns}
-                disabled={props.disabled}
-                onInsert={insert}
-            />
-        )
-        : (
-            <CustomList
-                api={props.api}
-                snippets={customSnippets}
-                hasAnySnippets={snippets.length > 0}
-                isLoading={isLoading}
-                error={error}
-                disabled={props.disabled}
-                onRetry={() => void refetch()}
-                onInsert={insert}
-                onEdit={startEdit}
-                onDelete={setDeleteTarget}
-            />
-        )
-
     return (
         <>
             <section
@@ -352,8 +329,22 @@ export function TerminalSnippetPanel(props: TerminalSnippetPanelProps) {
 
                 <div
                     role="tabpanel"
-                    id={`${tabIdPrefix}-${activeTab}-panel`}
-                    aria-labelledby={`${tabIdPrefix}-${activeTab}-tab`}
+                    id={`${tabIdPrefix}-built-in-panel`}
+                    aria-labelledby={`${tabIdPrefix}-built-in-tab`}
+                    hidden={activeTab !== 'built-in'}
+                    className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3"
+                >
+                    <BuiltInList
+                        items={builtIns}
+                        disabled={props.disabled}
+                        onInsert={insert}
+                    />
+                </div>
+                <div
+                    role="tabpanel"
+                    id={`${tabIdPrefix}-custom-panel`}
+                    aria-labelledby={`${tabIdPrefix}-custom-tab`}
+                    hidden={activeTab !== 'custom'}
                     className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3"
                 >
                     {editor ? (
@@ -369,7 +360,20 @@ export function TerminalSnippetPanel(props: TerminalSnippetPanelProps) {
                             }}
                             onSubmit={save}
                         />
-                    ) : listContent}
+                    ) : (
+                        <CustomList
+                            api={props.api}
+                            snippets={customSnippets}
+                            hasAnySnippets={snippets.length > 0}
+                            isLoading={isLoading}
+                            error={error}
+                            disabled={props.disabled}
+                            onRetry={() => void refetch()}
+                            onInsert={insert}
+                            onEdit={startEdit}
+                            onDelete={setDeleteTarget}
+                        />
+                    )}
                 </div>
 
                 <div
