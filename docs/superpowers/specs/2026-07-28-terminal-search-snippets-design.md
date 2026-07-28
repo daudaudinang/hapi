@@ -1,7 +1,7 @@
 # Terminal Search and Snippets — Design
 
 **Date:** 2026-07-28  
-**Status:** Approved for implementation
+**Status:** Implemented; automated verification complete; mobile browser and runtime performance acceptance pending
 
 ## 1. Goal
 
@@ -215,6 +215,23 @@ Search remains web-only. Snippet persistence touches shared schemas and Hub, but
 - Reduced-motion settings disable panel and feedback transitions.
 
 ## 11. Verification
+
+### Verification status — 2026-07-28
+
+Completed:
+
+- [x] Locale coverage: all 59 Search/Snippets keys referenced by the components and built-in catalog exist in English, Vietnamese and Simplified Chinese. Full locale parity against English reports zero missing and zero extra keys.
+- [x] Focused shared tests: 15 passed.
+- [x] Focused Hub store, migration and route tests: 16 passed.
+- [x] Full web suite: 1,156 tests in 136 files passed.
+- [x] Root typecheck completed for shared, CLI, web and Hub.
+- [x] Web production build completed.
+- [x] Static scope review found no CLI files, History implementation, desktop-only controls or scrollback changes in the feature diff. SearchAddon adds no HAPI output listener.
+
+Pending:
+
+- [ ] Mobile browser acceptance at 390px and 768px in light and dark themes, covering the session modal and Editor. The full local stack could not be started because port 3006 was already owned by an existing HAPI Hub, which was left untouched. A web-only server started on port 5174, but a fresh automated browser encountered Vite dependency-optimization reloads (`ERR_NETWORK_CHANGED`) and exposed no interactive UI before the acceptance timebox ended. No browser behavior is claimed as verified.
+- [ ] Representative runtime performance acceptance. No authenticated terminal with representative output and snippet data was available, so the search and snippet interaction thresholds were not measured. Static review is not a substitute for the required runtime measurements.
 
 ### Hub and shared
 
