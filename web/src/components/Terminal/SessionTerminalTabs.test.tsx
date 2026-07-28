@@ -429,10 +429,12 @@ describe('SessionTerminalTabs', () => {
 
         fireEvent.click(search)
         expect(search).toHaveAttribute('aria-pressed', 'true')
+        expect(search).toHaveClass('bg-violet-500/10')
         expect(mocks.terminalMounts.at(-1)?.searchActive).toBe(true)
 
         fireEvent.click(snippets)
         expect(snippets).toHaveAttribute('aria-pressed', 'true')
+        expect(snippets).toHaveClass('bg-violet-500/10')
         expect(mocks.terminalMounts.at(-1)?.searchActive).toBe(false)
         expect(screen.getByRole('region', { name: 'Snippet content' }))
             .toBeInTheDocument()

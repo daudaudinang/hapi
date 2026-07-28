@@ -524,7 +524,11 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
                         activeDockTool === 'search' ? null : 'search',
                     )}
                     title={t('terminal.controls.search')}
-                    className="hidden min-h-8 min-w-8 place-items-center border-l border-[var(--app-border)] text-[var(--app-hint)] transition-colors hover:bg-[var(--app-subtle-bg)] hover:text-[var(--app-fg)] disabled:cursor-not-allowed disabled:opacity-40 lg:grid"
+                    className={`hidden min-h-8 min-w-8 place-items-center border-l border-[var(--app-border)] transition-colors disabled:cursor-not-allowed disabled:opacity-40 lg:grid ${
+                        activeDockTool === 'search'
+                            ? 'bg-violet-500/10 text-violet-600 dark:text-violet-300'
+                            : 'text-[var(--app-hint)] hover:bg-[var(--app-subtle-bg)] hover:text-[var(--app-fg)]'
+                    }`}
                 >
                     <TerminalToolIcon tool="search" />
                 </button>
@@ -537,7 +541,11 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
                         activeDockTool === 'snippets' ? null : 'snippets',
                     )}
                     title={t('terminal.controls.snippets')}
-                    className="hidden min-h-8 min-w-8 place-items-center border-l border-[var(--app-border)] text-[var(--app-hint)] transition-colors hover:bg-[var(--app-subtle-bg)] hover:text-[var(--app-fg)] disabled:cursor-not-allowed disabled:opacity-40 lg:grid"
+                    className={`hidden min-h-8 min-w-8 place-items-center border-l border-[var(--app-border)] transition-colors disabled:cursor-not-allowed disabled:opacity-40 lg:grid ${
+                        activeDockTool === 'snippets'
+                            ? 'bg-violet-500/10 text-violet-600 dark:text-violet-300'
+                            : 'text-[var(--app-hint)] hover:bg-[var(--app-subtle-bg)] hover:text-[var(--app-fg)]'
+                    }`}
                 >
                     <TerminalToolIcon tool="snippets" />
                 </button>
