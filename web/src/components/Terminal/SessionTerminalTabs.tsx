@@ -26,6 +26,7 @@ export type SessionTerminalTabsProps = {
     sessionId: string
     active: boolean
     terminalSupported: boolean
+    interactionActive?: boolean
     cwd?: string
     compactFontSize?: boolean
     className?: string
@@ -128,8 +129,10 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
     const selectedIsLive = Boolean(activeLiveTerminal)
     const activeWarning = activeLiveTerminal ? warningReason(activeLiveTerminal) : null
     const canUseTerminal = props.active && props.terminalSupported
+    const interactionActive = props.interactionActive ?? true
     const terminalSocketConnected = controller.state.status === 'connected'
     const quickInputDisabled = !canUseTerminal || !selectedIsLive || controller.state.status !== 'connected'
+    const dockDisabled = quickInputDisabled || !interactionActive
     const quickInput = useTerminalQuickInput({
         disabled: quickInputDisabled,
         write: (data) => {
@@ -141,7 +144,7 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
     })
     const searchStateRef = useRef<TerminalSearchState>(EMPTY_TERMINAL_SEARCH_STATE)
     const searchGenerationRef = useRef(0)
-    const searchIdentity = quickInputDisabled
+    const searchIdentity = dockDisabled
         ? null
         : (activeLiveTerminal?.terminalId ?? null)
     const activeSearchIdentityRef = useRef(searchIdentity)
@@ -541,8 +544,10 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
                         onMount={handleTerminalMount}
                         onResize={handleResize}
                         compactFontSize={props.compactFontSize}
-                        mobileInteractionEnabled={!quickInputDisabled}
-                        dismissMobileInteraction={activeDockTool !== null}
+                        mobileInteractionEnabled={!dockDisabled}
+                        dismissMobileInteraction={
+                            activeDockTool !== null || !interactionActive
+                        }
                         searchActive={searchEnabled}
                         onSearchStateChange={handleSearchStateChange}
                         className={controller.terminals.length === 0 ? 'opacity-0' : 'h-full w-full'}
@@ -557,9 +562,9 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
             <TerminalControlDock
                 api={api}
                 terminalContextKey={
-                    quickInputDisabled ? null : (activeLiveTerminal?.terminalId ?? null)
+                    dockDisabled ? null : (activeLiveTerminal?.terminalId ?? null)
                 }
-                disabled={quickInputDisabled}
+                disabled={dockDisabled}
                 activeTool={activeDockTool}
                 onActiveToolChange={handleActiveDockToolChange}
                 searchState={searchState}

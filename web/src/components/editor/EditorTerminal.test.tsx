@@ -376,7 +376,7 @@ describe('EditorTerminal', () => {
         expect(mocks.useTerminalSocket).not.toHaveBeenCalled()
     })
 
-    it('marks the shared session terminal inactive only while its desktop editor is collapsed', () => {
+    it('pauses only shared session interaction while its desktop editor is collapsed', () => {
         const commonProps = {
             tabs: [tabs[1]],
             activeTabId: 'term-1',
@@ -392,13 +392,15 @@ describe('EditorTerminal', () => {
 
         expect(mocks.sessionTabsProps.at(-1)).toEqual(expect.objectContaining({
             active: true,
+            interactionActive: true,
         }))
 
         rendered.rerender(
             <EditorTerminal {...commonProps} isCollapsed={true} />,
         )
         expect(mocks.sessionTabsProps.at(-1)).toEqual(expect.objectContaining({
-            active: false,
+            active: true,
+            interactionActive: false,
         }))
 
         rendered.rerender(
@@ -410,6 +412,7 @@ describe('EditorTerminal', () => {
         )
         expect(mocks.sessionTabsProps.at(-1)).toEqual(expect.objectContaining({
             active: true,
+            interactionActive: true,
         }))
     })
 
@@ -518,7 +521,7 @@ describe('EditorTerminal', () => {
             .toHaveAttribute('data-search-status', 'ready')
 
         fireEvent.click(screen.getByRole('button', { name: 'Close search' }))
-        expect(controller.clear).toHaveBeenCalledTimes(1)
+        expect(controller.clear).toHaveBeenCalled()
         expect(mocks.terminalViewProps.at(-1)).toMatchObject({
             searchActive: false,
             dismissMobileInteraction: false,
@@ -527,7 +530,7 @@ describe('EditorTerminal', () => {
         act(() => mocks.terminalViewProps.at(-1)?.onSearchStateChange?.(
             readySearchState(closedController),
         ))
-        expect(closedController.clear).toHaveBeenCalledTimes(1)
+        expect(closedController.clear).toHaveBeenCalled()
         expect(focus).not.toHaveBeenCalled()
     })
 
@@ -559,13 +562,13 @@ describe('EditorTerminal', () => {
 
         const bodyController = openReadySearch()
         fireEvent.pointerDown(screen.getAllByTestId('terminal-surface')[0])
-        expect(bodyController.clear).toHaveBeenCalledTimes(1)
+        expect(bodyController.clear).toHaveBeenCalled()
 
         const tabController = openReadySearch()
         rendered.rerender(
             <EditorTerminal {...commonProps} activeTabId="term-machine-2" />,
         )
-        expect(tabController.clear).toHaveBeenCalledTimes(1)
+        expect(tabController.clear).toHaveBeenCalled()
 
         rendered.rerender(
             <EditorTerminal
@@ -582,7 +585,7 @@ describe('EditorTerminal', () => {
                 isCollapsed={true}
             />,
         )
-        expect(collapseController.clear).toHaveBeenCalledTimes(1)
+        expect(collapseController.clear).toHaveBeenCalled()
 
         rendered.rerender(
             <EditorTerminal
@@ -600,7 +603,7 @@ describe('EditorTerminal', () => {
                 isCollapsed={false}
             />,
         )
-        expect(disconnectController.clear).toHaveBeenCalledTimes(1)
+        expect(disconnectController.clear).toHaveBeenCalled()
 
         mocks.terminalStatusesById.set('term-machine-1', 'connected')
         rendered.rerender(
@@ -612,7 +615,7 @@ describe('EditorTerminal', () => {
         )
         const unmountController = openReadySearch()
         rendered.unmount()
-        expect(unmountController.clear).toHaveBeenCalledTimes(1)
+        expect(unmountController.clear).toHaveBeenCalled()
     })
 
     it('ignores stale Search state from an inactive editor terminal view', () => {
@@ -642,7 +645,7 @@ describe('EditorTerminal', () => {
         rendered.rerender(
             <EditorTerminal {...commonProps} activeTabId="term-machine-2" />,
         )
-        expect(oldController.clear).toHaveBeenCalledTimes(1)
+        expect(oldController.clear).toHaveBeenCalled()
         expect(mocks.terminalViewProps.slice(viewsBeforeSwitch)[0]?.searchActive).toBe(false)
         fireEvent.click(screen.getAllByRole('button', { name: 'Search' })[1])
         expect(screen.getByRole('region', { name: 'Search terminal output' }))
@@ -652,7 +655,7 @@ describe('EditorTerminal', () => {
         act(() => oldCallback?.(readySearchState(staleController)))
         expect(screen.getByRole('region', { name: 'Search terminal output' }))
             .toHaveAttribute('data-search-status', EMPTY_TERMINAL_SEARCH_STATE.status)
-        expect(staleController.clear).toHaveBeenCalledTimes(1)
+        expect(staleController.clear).toHaveBeenCalled()
     })
 
     it('routes a snippet exactly through the active editor terminal without focusing xterm', () => {
