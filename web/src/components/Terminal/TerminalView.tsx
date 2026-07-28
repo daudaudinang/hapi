@@ -8,7 +8,9 @@ import { ensureBuiltinFontLoaded, getFontProvider } from '@/lib/terminalFont'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { getCompactTerminalFontSize, getInitialTerminalFontSize } from '@/hooks/useTerminalFontSize'
 import { MobileTerminalInteractionOverlay } from './MobileTerminalInteractionOverlay'
+import { EMPTY_TERMINAL_SEARCH_STATE, type TerminalSearchState } from './terminalSearch'
 import { useMobileTerminalInteraction } from './useMobileTerminalInteraction'
+import { useTerminalSearchAddon } from './useTerminalSearchAddon'
 
 function resolveThemeColors(): { background: string; foreground: string; selectionBackground: string } {
     const styles = getComputedStyle(document.documentElement)
@@ -25,6 +27,8 @@ export function TerminalView(props: {
     compactFontSize?: boolean
     mobileInteractionEnabled?: boolean
     dismissMobileInteraction?: boolean
+    searchActive?: boolean
+    onSearchStateChange?: (state: TerminalSearchState) => void
 }) {
     const mobile = useMediaQuery('(max-width: 1023px)')
     const [terminal, setTerminal] = useState<Terminal | null>(null)
@@ -39,6 +43,10 @@ export function TerminalView(props: {
         enabled: props.mobileInteractionEnabled ?? true,
         dismissRequested: props.dismissMobileInteraction ?? false,
     })
+    const searchState = useTerminalSearchAddon({
+        terminal,
+        active: props.searchActive ?? false,
+    })
 
     useEffect(() => {
         onMountRef.current = props.onMount
@@ -47,6 +55,16 @@ export function TerminalView(props: {
     useEffect(() => {
         onResizeRef.current = props.onResize
     }, [props.onResize])
+
+    useEffect(() => {
+        props.onSearchStateChange?.(searchState)
+    }, [props.onSearchStateChange, searchState])
+
+    useEffect(() => {
+        return () => {
+            props.onSearchStateChange?.(EMPTY_TERMINAL_SEARCH_STATE)
+        }
+    }, [props.onSearchStateChange, terminal])
 
     useEffect(() => {
         const xtermHost = xtermHostRef.current

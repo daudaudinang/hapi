@@ -38,9 +38,29 @@ const mocks = vi.hoisted(() => {
         onResize: vi.fn(() => ({ dispose: resizeDispose })),
         dispose: vi.fn(),
     }
+    const emptySearchState = {
+        status: 'idle' as const,
+        controller: null,
+        error: null,
+        retry: null,
+    }
+    const readySearchState = {
+        status: 'ready' as const,
+        controller: {
+            findNext: vi.fn(),
+            findPrevious: vi.fn(),
+            clear: vi.fn(),
+            subscribe: vi.fn(() => vi.fn()),
+        },
+        error: null,
+        retry: null,
+    }
 
     return {
         terminal,
+        emptySearchState,
+        readySearchState,
+        useTerminalSearchAddon: vi.fn(),
         cursorDispose,
         selectionDispose,
         resizeDispose,
@@ -77,6 +97,10 @@ vi.mock('@xterm/addon-canvas', () => ({
     CanvasAddon: vi.fn(function CanvasAddon() {
         return { dispose: mocks.canvasDispose }
     }),
+}))
+
+vi.mock('./useTerminalSearchAddon', () => ({
+    useTerminalSearchAddon: mocks.useTerminalSearchAddon,
 }))
 
 vi.mock('@/lib/terminalFont', () => ({
@@ -117,6 +141,11 @@ describe('TerminalView mobile interaction integration', () => {
         mobile = true
         mocks.terminal.element = null
         mocks.terminal.textarea = null
+        mocks.useTerminalSearchAddon.mockImplementation(
+            ({ terminal }: { terminal: unknown }) => (
+                terminal ? mocks.readySearchState : mocks.emptySearchState
+            ),
+        )
         mocks.terminal.open.mockImplementation((host: HTMLElement) => {
             const terminalElement = document.createElement('div')
             terminalElement.className = 'xterm'
@@ -237,5 +266,25 @@ describe('TerminalView mobile interaction integration', () => {
         expect(mocks.webLinksDispose).toHaveBeenCalledOnce()
         expect(mocks.canvasDispose).toHaveBeenCalledOnce()
         expect(mocks.observerDisconnect).toHaveBeenCalledOnce()
+    })
+
+    it('publishes the owned terminal search state and resets it on cleanup', () => {
+        const onSearchStateChange = vi.fn()
+        const rendered = render(
+            <TerminalView
+                searchActive
+                onSearchStateChange={onSearchStateChange}
+            />,
+        )
+
+        expect(mocks.useTerminalSearchAddon).toHaveBeenLastCalledWith({
+            terminal: mocks.terminal,
+            active: true,
+        })
+        expect(onSearchStateChange).toHaveBeenLastCalledWith(mocks.readySearchState)
+
+        rendered.unmount()
+
+        expect(onSearchStateChange).toHaveBeenLastCalledWith(mocks.emptySearchState)
     })
 })
