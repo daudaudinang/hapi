@@ -7,6 +7,7 @@ import { MessageStore } from './messageStore'
 import { PushStore } from './pushStore'
 import { SessionStore } from './sessionStore'
 import { TeamChatStore } from './teamChatStore'
+import { TerminalSnippetStore } from './terminalSnippetStore'
 import { UserStore } from './userStore'
 
 export type {
@@ -18,6 +19,7 @@ export type {
     StoredTeamMentionRequest,
     StoredTeamMessage,
     StoredTeamParticipant,
+    StoredTerminalSnippet,
     StoredUser,
     VersionedUpdateResult
 } from './types'
@@ -26,9 +28,10 @@ export { MessageStore } from './messageStore'
 export { PushStore } from './pushStore'
 export { SessionStore } from './sessionStore'
 export { TeamChatStore } from './teamChatStore'
+export { TerminalSnippetStore } from './terminalSnippetStore'
 export { UserStore } from './userStore'
 
-const SCHEMA_VERSION: number = 10
+const SCHEMA_VERSION: number = 11
 const REQUIRED_TABLES = [
     'sessions',
     'machines',
@@ -38,7 +41,8 @@ const REQUIRED_TABLES = [
     'team_chats',
     'team_participants',
     'team_messages',
-    'team_mention_requests'
+    'team_mention_requests',
+    'terminal_snippets'
 ] as const
 
 export class Store {
@@ -51,6 +55,7 @@ export class Store {
     readonly users: UserStore
     readonly push: PushStore
     readonly teamChats: TeamChatStore
+    readonly terminalSnippets: TerminalSnippetStore
 
     constructor(dbPath: string) {
         this.dbPath = dbPath
@@ -93,6 +98,7 @@ export class Store {
         this.users = new UserStore(this.db)
         this.push = new PushStore(this.db)
         this.teamChats = new TeamChatStore(this.db)
+        this.terminalSnippets = new TerminalSnippetStore(this.db)
     }
 
     private initSchema(): void {
@@ -111,6 +117,7 @@ export class Store {
             7: () => this.migrateFromV7ToV8(),
             8: () => this.migrateFromV8ToV9(),
             9: () => this.migrateFromV9ToV10(),
+            10: () => this.migrateFromV10ToV11(),
         })
 
         if (currentVersion === 0) {
@@ -237,6 +244,7 @@ export class Store {
             CREATE INDEX IF NOT EXISTS idx_push_subscriptions_namespace ON push_subscriptions(namespace);
         `)
         this.createTeamChatSchema()
+        this.createTerminalSnippetSchema()
     }
 
     private createTeamChatSchema(): void {
@@ -320,6 +328,22 @@ export class Store {
                 ON team_mention_requests(namespace, target_session_id, status, created_at);
             CREATE INDEX IF NOT EXISTS idx_team_mentions_message
                 ON team_mention_requests(source_message_id);
+        `)
+    }
+
+    private createTerminalSnippetSchema(): void {
+        this.db.exec(`
+            CREATE TABLE IF NOT EXISTS terminal_snippets (
+                id TEXT PRIMARY KEY,
+                namespace TEXT NOT NULL,
+                name TEXT NOT NULL,
+                command TEXT NOT NULL,
+                description TEXT,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_terminal_snippets_namespace_created
+                ON terminal_snippets(namespace, created_at DESC, id DESC);
         `)
     }
 
@@ -468,6 +492,10 @@ export class Store {
 
     private migrateFromV9ToV10(): void {
         this.createTeamChatSchema()
+    }
+
+    private migrateFromV10ToV11(): void {
+        this.createTerminalSnippetSchema()
     }
 
     private migrateFromV7ToV8(): void {
