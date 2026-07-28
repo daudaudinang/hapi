@@ -42,10 +42,14 @@ export function createTerminalSnippetsRoutes(
     const app = new Hono<WebAppEnv>()
 
     const broadcastUpdate = (namespace: string): void => {
-        getSseManager()?.broadcast({
-            type: 'terminal-snippets-updated',
-            namespace
-        })
+        try {
+            getSseManager()?.broadcast({
+                type: 'terminal-snippets-updated',
+                namespace
+            })
+        } catch {
+            // Mutations are already committed; invalidation is best-effort.
+        }
     }
 
     app.get('/terminal-snippets', (c) => {

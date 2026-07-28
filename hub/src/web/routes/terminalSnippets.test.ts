@@ -312,4 +312,27 @@ describe('terminal snippet routes', () => {
         expect(TerminalSnippetResponseSchema.parse(await response.json()).snippet.name).toBe('No manager')
         expect(store.terminalSnippets.list('ns-a')).toHaveLength(1)
     })
+
+    it('keeps a committed mutation successful when broadcasting throws synchronously', async () => {
+        const store = new Store(':memory:')
+        let broadcastCalls = 0
+        const manager = {
+            broadcast(_event: SyncEvent): void {
+                broadcastCalls += 1
+                throw new Error('notification failed')
+            }
+        } as SSEManager
+        const app = createApp('ns-a', store, () => manager)
+
+        const response = await jsonRequest(
+            app,
+            '/api/terminal-snippets',
+            'POST',
+            { name: 'Committed', command: 'echo committed', description: null }
+        )
+
+        expect(response.status).toBe(201)
+        expect(store.terminalSnippets.list('ns-a')).toHaveLength(1)
+        expect(broadcastCalls).toBe(1)
+    })
 })
