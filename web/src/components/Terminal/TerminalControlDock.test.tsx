@@ -84,12 +84,28 @@ const defaultProps: TerminalControlDockProps = {
     disabled: false,
     activeTool: null,
     onActiveToolChange: vi.fn(),
+    searchMounted: false,
+    onSearchClose: vi.fn(),
     searchState: EMPTY_TERMINAL_SEARCH_STATE,
     ctrlActive: false,
     altActive: false,
     onQuickInput: vi.fn(),
     onModifierToggle: vi.fn(),
     onWritePlainInput: vi.fn(() => true),
+}
+
+function makeReadySearchState(): TerminalSearchState {
+    return {
+        status: 'ready',
+        controller: {
+            findNext: vi.fn(() => true),
+            findPrevious: vi.fn(() => true),
+            clear: vi.fn(),
+            subscribe: vi.fn(() => () => undefined),
+        },
+        error: null,
+        retry: null,
+    }
 }
 
 function makeDock(overrides: Partial<TerminalControlDockProps> = {}) {
@@ -180,6 +196,7 @@ describe('TerminalControlDock', () => {
         rendered.rerender(makeDock({
             activeTool: 'search',
             onActiveToolChange,
+            searchMounted: true,
             searchState: readyState,
         }))
 
@@ -199,7 +216,44 @@ describe('TerminalControlDock', () => {
             .not.toHaveFocus()
 
         fireEvent.click(screen.getByRole('button', { name: 'Close search' }))
-        expect(onActiveToolChange).toHaveBeenLastCalledWith(null)
+        expect(defaultProps.onSearchClose).toHaveBeenCalledOnce()
+        expect(onActiveToolChange).not.toHaveBeenCalledWith(null)
+    })
+
+    it('keeps the Search panel state mounted while another desktop tool is visible', () => {
+        const readyState = makeReadySearchState()
+        const rendered = renderDock({
+            activeTool: 'search',
+            searchMounted: true,
+            searchState: readyState,
+        })
+
+        fireEvent.change(screen.getByRole('searchbox', {
+            name: 'Search terminal output',
+        }), {
+            target: { value: 'needle' },
+        })
+
+        rendered.rerender(makeDock({
+            activeTool: 'snippets',
+            searchMounted: true,
+            searchState: readyState,
+        }))
+
+        const hiddenPanel = screen.getByRole('region', {
+            name: 'Search terminal output',
+            hidden: true,
+        }).parentElement
+        expect(hiddenPanel).toHaveAttribute('hidden')
+
+        rendered.rerender(makeDock({
+            activeTool: 'search',
+            searchMounted: true,
+            searchState: readyState,
+        }))
+        expect(screen.getByRole('searchbox', {
+            name: 'Search terminal output',
+        })).toHaveValue('needle')
     })
 
     it('bridges Search loading, error, and ready states without changing dock behavior', () => {
@@ -212,6 +266,7 @@ describe('TerminalControlDock', () => {
         }
         const rendered = renderDock({
             activeTool: 'search',
+            searchMounted: true,
             searchState: {
                 status: 'loading',
                 controller: null,
@@ -224,6 +279,7 @@ describe('TerminalControlDock', () => {
 
         rendered.rerender(makeDock({
             activeTool: 'search',
+            searchMounted: true,
             searchState: {
                 status: 'error',
                 controller: null,
@@ -237,6 +293,7 @@ describe('TerminalControlDock', () => {
 
         rendered.rerender(makeDock({
             activeTool: 'search',
+            searchMounted: true,
             searchState: {
                 status: 'ready',
                 controller,

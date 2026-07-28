@@ -28,6 +28,8 @@ export type TerminalControlDockProps = {
     disabled: boolean
     activeTool: TerminalDockTool | null
     onActiveToolChange: (tool: TerminalDockTool | null) => void
+    searchMounted: boolean
+    onSearchClose: () => void
     searchState: TerminalSearchState
     ctrlActive: boolean
     altActive: boolean
@@ -407,15 +409,16 @@ export function TerminalControlDock(props: TerminalControlDockProps) {
                 </section>
             ) : null}
 
-            {props.activeTool === 'search' ? (
+            {props.searchMounted ? (
                 <section
+                    hidden={props.activeTool !== 'search'}
                     role="region"
                     aria-label={t('terminal.controls.search')}
                     className="pointer-events-auto absolute bottom-full left-2 right-2 mb-2 lg:bottom-auto lg:left-auto lg:right-2 lg:top-10 lg:mb-0 lg:w-[520px] lg:max-w-[calc(100%-1rem)]"
                 >
                     <TerminalSearchPanel
                         state={props.searchState}
-                        onClose={() => props.onActiveToolChange(null)}
+                        onClose={props.onSearchClose}
                     />
                 </section>
             ) : null}
