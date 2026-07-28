@@ -80,6 +80,7 @@ export function TerminalView(props: {
             : getInitialTerminalFontSize()
         const { background, foreground, selectionBackground } = resolveThemeColors()
         const terminal = new Terminal({
+            allowProposedApi: true,
             cursorBlink: true,
             fontFamily: fontProvider.getFontFamily(),
             fontSize,

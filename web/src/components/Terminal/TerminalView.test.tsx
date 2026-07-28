@@ -258,6 +258,14 @@ describe('TerminalView mobile interaction integration', () => {
         }))
     })
 
+    it('enables the proposed xterm API required by search decorations', () => {
+        render(<TerminalView />)
+
+        expect(vi.mocked(Terminal)).toHaveBeenCalledWith(expect.objectContaining({
+            allowProposedApi: true,
+        }))
+    })
+
     it('clears a visible mobile choice when dismissal is requested', async () => {
         const rendered = render(<TerminalView dismissMobileInteraction={false} />)
         tapTerminal()
