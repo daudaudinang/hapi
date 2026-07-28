@@ -30,6 +30,7 @@ type TerminalFixture = {
     clearSelection: ReturnType<typeof vi.fn>
     focus: ReturnType<typeof vi.fn>
     blur: ReturnType<typeof vi.fn>
+    input: ReturnType<typeof vi.fn>
     scrollLines: ReturnType<typeof vi.fn>
     onBlur: ReturnType<typeof vi.fn>
     onResize: ReturnType<typeof vi.fn>
@@ -125,6 +126,7 @@ function createTerminalFixture(
     })
     const focus = vi.fn(() => textarea.focus())
     const blur = vi.fn(() => textarea.blur())
+    const input = vi.fn()
     const scrollLines = vi.fn((amount: number) => {
         activeBuffer.viewportY = Math.max(
             0,
@@ -168,6 +170,7 @@ function createTerminalFixture(
         buffer: { active: activeBuffer },
         focus,
         blur,
+        input,
         scrollLines,
         select,
         selectAll,
@@ -202,6 +205,7 @@ function createTerminalFixture(
         clearSelection,
         focus,
         blur,
+        input,
         scrollLines,
         onBlur,
         onResize,
@@ -504,6 +508,33 @@ describe('useMobileTerminalInteraction', () => {
         expect(fixture.textarea.readOnly).toBe(false)
         expect(fixture.focus).toHaveBeenCalledOnce()
         expect(fixture.blur).not.toHaveBeenCalled()
+    })
+
+    it('sends Enter without opening input mode or dismissing the choice', () => {
+        const fixture = createTerminalFixture()
+        const { result } = renderInteraction(fixture)
+        const point = touch(1, 55, 130)
+
+        act(() => {
+            dispatchTouch(fixture.terminalElement, 'touchstart', [point])
+            dispatchTouch(fixture.terminalElement, 'touchend', [], [point])
+            vi.runOnlyPendingTimers()
+        })
+        expect(result.current.overlayProps.mode).toBe('choice')
+
+        const onEnter = (
+            result.current.overlayProps as typeof result.current.overlayProps & {
+                onEnter?: () => void
+            }
+        ).onEnter
+        expect(onEnter).toBeTypeOf('function')
+        act(() => onEnter?.())
+
+        expect(fixture.input).toHaveBeenCalledOnce()
+        expect(fixture.input).toHaveBeenCalledWith('\r', true)
+        expect(fixture.focus).not.toHaveBeenCalled()
+        expect(fixture.textarea.readOnly).toBe(true)
+        expect(result.current.overlayProps.mode).toBe('choice')
     })
 
     it('lets a new long press enter selection without a stale choice reveal', () => {

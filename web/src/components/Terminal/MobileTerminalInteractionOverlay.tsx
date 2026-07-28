@@ -147,6 +147,7 @@ export type MobileTerminalOverlayProps = {
     toolbarAnchor: ScreenPoint | null
     feedback: 'copied' | 'copy-error' | null
     onInput: () => void
+    onEnter: () => void
     onSelect: () => void
     onCopy: () => void
     onSelectAll: () => void

@@ -486,6 +486,16 @@ export function useMobileTerminalInteraction(
         updateOverlay,
     ])
 
+    const onEnter = useCallback(() => {
+        const terminal = terminalRef.current
+        if (
+            !terminal
+            || !activeRef.current
+            || overlayRef.current.mode !== 'choice'
+        ) return
+        terminal.input('\r', true)
+    }, [])
+
     const onSelect = useCallback(() => {
         const seedCell = seedCellRef.current
         if (seedCell) selectWord(seedCell)
@@ -921,6 +931,7 @@ export function useMobileTerminalInteraction(
     const overlayProps = useMemo<MobileTerminalOverlayProps>(() => ({
         ...overlay,
         onInput,
+        onEnter,
         onSelect,
         onCopy,
         onSelectAll,
@@ -930,6 +941,7 @@ export function useMobileTerminalInteraction(
     }), [
         onCopy,
         onHandlePointerDown,
+        onEnter,
         onInput,
         onSelect,
         onSelectAll,
