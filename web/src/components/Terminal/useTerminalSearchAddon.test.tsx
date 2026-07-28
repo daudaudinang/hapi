@@ -169,11 +169,11 @@ describe('useTerminalSearchAddon', () => {
         })
 
         fixture.emit({
-            resultIndex: -1,
+            resultIndex: 0,
             resultCount: TERMINAL_SEARCH_HIGHLIGHT_LIMIT,
         })
         expect(listener).toHaveBeenLastCalledWith({
-            resultIndex: -1,
+            resultIndex: 0,
             resultCount: 1_000,
             limitExceeded: true,
         })
@@ -213,18 +213,54 @@ describe('useTerminalSearchAddon', () => {
             ({ terminal }) => useTerminalSearchAddon({ terminal, active: true }),
             { initialProps: { terminal: firstTerminal } },
         )
-        await waitUntilReady(rendered.result)
+        const firstController = await waitUntilReady(rendered.result)
 
         rendered.rerender({ terminal: secondTerminal })
-        await waitUntilReady(rendered.result)
+        const secondController = await waitUntilReady(rendered.result)
         expect(first.resultSubscriptionDispose).toHaveBeenCalledOnce()
         expect(first.addon.dispose).toHaveBeenCalledOnce()
         expect(secondTerminal.loadAddon).toHaveBeenCalledOnce()
+
+        const staleReplacementListener = vi.fn()
+        const staleReplacementUnsubscribe = firstController.subscribe(staleReplacementListener)
+        expect(firstController.findNext('stale', {
+            caseSensitive: false,
+            incremental: false,
+        })).toBe(false)
+        expect(firstController.findPrevious('stale', {
+            caseSensitive: false,
+            incremental: false,
+        })).toBe(false)
+        firstController.clear()
+        staleReplacementUnsubscribe()
+        staleReplacementUnsubscribe()
+        expect(first.addon.findNext).not.toHaveBeenCalled()
+        expect(first.addon.findPrevious).not.toHaveBeenCalled()
+        expect(first.addon.clearDecorations).not.toHaveBeenCalled()
+        expect(staleReplacementListener).not.toHaveBeenCalled()
 
         rendered.unmount()
         expect(second.resultSubscriptionDispose).toHaveBeenCalledOnce()
         expect(second.addon.dispose).toHaveBeenCalledOnce()
         expect(first.addon.dispose).toHaveBeenCalledOnce()
+
+        const staleUnmountListener = vi.fn()
+        const staleUnmountUnsubscribe = secondController.subscribe(staleUnmountListener)
+        expect(secondController.findNext('stale', {
+            caseSensitive: false,
+            incremental: false,
+        })).toBe(false)
+        expect(secondController.findPrevious('stale', {
+            caseSensitive: false,
+            incremental: false,
+        })).toBe(false)
+        secondController.clear()
+        staleUnmountUnsubscribe()
+        staleUnmountUnsubscribe()
+        expect(second.addon.findNext).not.toHaveBeenCalled()
+        expect(second.addon.findPrevious).not.toHaveBeenCalled()
+        expect(second.addon.clearDecorations).not.toHaveBeenCalled()
+        expect(staleUnmountListener).not.toHaveBeenCalled()
     })
 
     it('disposes a delayed addon without loading it after unmount', async () => {
@@ -294,6 +330,58 @@ describe('useTerminalSearchAddon', () => {
         await waitUntilReady(rendered.result)
         expect(terminal.loadAddon).toHaveBeenCalledOnce()
         expect(fixture.addon.onDidChangeResults).toHaveBeenCalledOnce()
+    })
+
+    it('keeps idle after a delayed loader failure while closed and retries on reopen', async () => {
+        const terminal = createTerminal()
+        const pending = deferred<ReturnType<typeof createAddon>['addon']>()
+        const fixture = createAddon()
+        const load = vi.spyOn(terminalSearchAddonLoader, 'load')
+            .mockReturnValueOnce(pending.promise)
+            .mockResolvedValueOnce(fixture.addon)
+        const rendered = renderHook(
+            ({ active }) => useTerminalSearchAddon({ terminal, active }),
+            { initialProps: { active: true } },
+        )
+
+        rendered.rerender({ active: false })
+        expect(rendered.result.current).toEqual(EMPTY_TERMINAL_SEARCH_STATE)
+        await act(async () => pending.reject(new Error('stale loader failure')))
+        expect(rendered.result.current).toEqual(EMPTY_TERMINAL_SEARCH_STATE)
+
+        rendered.rerender({ active: true })
+        await waitUntilReady(rendered.result)
+        expect(load).toHaveBeenCalledTimes(2)
+        expect(terminal.loadAddon).toHaveBeenCalledOnce()
+    })
+
+    it('keeps idle after loadAddon throws while closed and retries on reopen', async () => {
+        const terminal = createTerminal()
+        const pending = deferred<ReturnType<typeof createAddon>['addon']>()
+        const stale = createAddon()
+        const retry = createAddon()
+        const load = vi.spyOn(terminalSearchAddonLoader, 'load')
+            .mockReturnValueOnce(pending.promise)
+            .mockResolvedValueOnce(retry.addon)
+        vi.mocked(terminal.loadAddon)
+            .mockImplementationOnce(() => {
+                throw new Error('stale loadAddon failure')
+            })
+        const rendered = renderHook(
+            ({ active }) => useTerminalSearchAddon({ terminal, active }),
+            { initialProps: { active: true } },
+        )
+
+        rendered.rerender({ active: false })
+        expect(rendered.result.current).toEqual(EMPTY_TERMINAL_SEARCH_STATE)
+        await act(async () => pending.resolve(stale.addon))
+        expect(rendered.result.current).toEqual(EMPTY_TERMINAL_SEARCH_STATE)
+        expect(stale.addon.dispose).toHaveBeenCalledOnce()
+
+        rendered.rerender({ active: true })
+        await waitUntilReady(rendered.result)
+        expect(load).toHaveBeenCalledTimes(2)
+        expect(terminal.loadAddon).toHaveBeenCalledTimes(2)
     })
 
     it('does not expose unsafe thrown values in load errors', async () => {

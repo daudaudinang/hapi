@@ -64,6 +64,7 @@ type SearchResource = {
     terminal: Terminal
     active: boolean
     disposed: boolean
+    liveToken: { current: boolean }
     loading: boolean
     addon: TerminalSearchAddonAdapter | null
     resultSubscription: { dispose: () => void } | null
@@ -81,8 +82,7 @@ function normalizeResults(event: SearchResultEvent): TerminalSearchResults {
     return {
         resultIndex,
         resultCount,
-        limitExceeded: resultIndex < 0
-            && resultCount >= TERMINAL_SEARCH_HIGHLIGHT_LIMIT,
+        limitExceeded: resultCount >= TERMINAL_SEARCH_HIGHLIGHT_LIMIT,
     }
 }
 
@@ -96,13 +96,16 @@ function safeLoadError(error: unknown): string {
 function createController(
     addon: TerminalSearchAddonAdapter,
     listeners: Set<(results: TerminalSearchResults) => void>,
+    liveToken: { current: boolean },
 ): TerminalSearchController {
     const emit = (results: TerminalSearchResults) => {
+        if (!liveToken.current) return
         for (const listener of listeners) {
             listener(results)
         }
     }
     const clear = () => {
+        if (!liveToken.current) return
         addon.clearDecorations()
         emit(EMPTY_TERMINAL_SEARCH_RESULTS)
     }
@@ -113,6 +116,7 @@ function createController(
     })
     return {
         findNext(query, options) {
+            if (!liveToken.current) return false
             if (!query) {
                 clear()
                 return false
@@ -120,6 +124,7 @@ function createController(
             return addon.findNext(query, searchOptions(options))
         },
         findPrevious(query, options) {
+            if (!liveToken.current) return false
             if (!query) {
                 clear()
                 return false
@@ -128,6 +133,7 @@ function createController(
         },
         clear,
         subscribe(listener) {
+            if (!liveToken.current) return () => {}
             listeners.add(listener)
             return () => listeners.delete(listener)
         },
@@ -162,6 +168,7 @@ export function useTerminalSearchAddon(options: {
             terminal: options.terminal,
             active: options.active,
             disposed: false,
+            liveToken: { current: true },
             loading: false,
             addon: null,
             resultSubscription: null,
@@ -175,6 +182,7 @@ export function useTerminalSearchAddon(options: {
         })
 
         return () => {
+            resource.liveToken.current = false
             resource.disposed = true
             resource.resultSubscription?.dispose()
             resource.resultSubscription = null
@@ -196,9 +204,19 @@ export function useTerminalSearchAddon(options: {
         resource.active = options.active
 
         const publish = (state: TerminalSearchState) => {
-            if (resource.disposed || resourceRef.current !== resource) return
+            if (
+                !resource.liveToken.current
+                || resource.disposed
+                || resourceRef.current !== resource
+            ) return
             setSnapshot({ terminal: resource.terminal, state })
         }
+        const isCurrentActiveResource = () => (
+            resource.liveToken.current
+            && !resource.disposed
+            && resourceRef.current === resource
+            && resource.active
+        )
 
         if (!options.active) {
             resource.controller?.clear()
@@ -238,7 +256,11 @@ export function useTerminalSearchAddon(options: {
             try {
                 resource.terminal.loadAddon(addon as unknown as ITerminalAddon)
                 resource.addon = addon
-                resource.controller = createController(addon, resource.listeners)
+                resource.controller = createController(
+                    addon,
+                    resource.listeners,
+                    resource.liveToken,
+                )
                 resource.resultSubscription = addon.onDidChangeResults((event) => {
                     const results = normalizeResults(event)
                     for (const listener of resource.listeners) {
@@ -250,6 +272,7 @@ export function useTerminalSearchAddon(options: {
                 resource.addon = null
                 resource.controller = null
                 resource.resultSubscription = null
+                if (!isCurrentActiveResource()) return
                 publish({
                     status: 'error',
                     controller: null,
@@ -272,7 +295,7 @@ export function useTerminalSearchAddon(options: {
             }
         }).catch((error: unknown) => {
             resource.loading = false
-            if (resource.disposed || resourceRef.current !== resource) return
+            if (!isCurrentActiveResource()) return
             publish({
                 status: 'error',
                 controller: null,
