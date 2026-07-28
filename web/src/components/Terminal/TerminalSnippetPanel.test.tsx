@@ -217,6 +217,51 @@ describe('TerminalSnippetPanel built-in catalog', () => {
 })
 
 describe('TerminalSnippetPanel custom loading', () => {
+    it('associates tabs with panels and supports roving keyboard selection', async () => {
+        const api = apiMock()
+        renderPanel({ api })
+        const builtIn = screen.getByRole('tab', { name: 'Built-in' })
+        const custom = screen.getByRole('tab', { name: 'My snippets' })
+
+        expect(builtIn.id).not.toBe('')
+        expect(custom.id).not.toBe('')
+        expect(builtIn).toHaveAttribute('aria-controls')
+        expect(custom).toHaveAttribute('aria-controls')
+        expect(screen.getByRole('tabpanel')).toHaveAttribute(
+            'id',
+            builtIn.getAttribute('aria-controls'),
+        )
+        expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', builtIn.id)
+
+        builtIn.focus()
+        fireEvent.keyDown(builtIn, { key: 'ArrowRight' })
+        expect(custom).toHaveFocus()
+        expect(custom).toHaveAttribute('aria-selected', 'true')
+        expect(screen.getByRole('tabpanel')).toHaveAttribute(
+            'id',
+            custom.getAttribute('aria-controls'),
+        )
+        expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', custom.id)
+        await waitFor(() => expect(api.getTerminalSnippets).toHaveBeenCalledTimes(1))
+
+        fireEvent.keyDown(custom, { key: 'ArrowRight' })
+        expect(builtIn).toHaveFocus()
+        expect(builtIn).toHaveAttribute('aria-selected', 'true')
+
+        fireEvent.keyDown(builtIn, { key: 'ArrowLeft' })
+        expect(custom).toHaveFocus()
+        expect(custom).toHaveAttribute('aria-selected', 'true')
+
+        fireEvent.keyDown(custom, { key: 'Home' })
+        expect(builtIn).toHaveFocus()
+        expect(builtIn).toHaveAttribute('aria-selected', 'true')
+
+        fireEvent.keyDown(builtIn, { key: 'End' })
+        expect(custom).toHaveFocus()
+        expect(custom).toHaveAttribute('aria-selected', 'true')
+        expect(api.getTerminalSnippets).toHaveBeenCalledTimes(1)
+    })
+
     it('starts one lazy request on the first custom-tab selection and retains enablement', async () => {
         const api = apiMock()
         renderPanel({ api })
@@ -266,7 +311,9 @@ describe('TerminalSnippetPanel custom loading', () => {
 
         openCustomTab()
 
-        expect(await screen.findByRole('alert')).toHaveTextContent('Refresh failed')
+        await waitFor(() => {
+            expect(screen.getByRole('alert')).toHaveTextContent('Refresh failed')
+        })
         expect(screen.getByText(cached.name)).toBeVisible()
     })
 
@@ -313,6 +360,73 @@ describe('TerminalSnippetPanel custom loading', () => {
 })
 
 describe('TerminalSnippetPanel editor', () => {
+    it('refetches a missing list after create succeeds and shows the full server list', async () => {
+        const created = snippet({ id: 'created', name: 'Created after error' })
+        const existing = snippet({
+            id: 'existing',
+            name: 'Existing server snippet',
+            createdAt: 10,
+            updatedAt: 10,
+        })
+        const getTerminalSnippets = vi.fn()
+            .mockRejectedValueOnce(new Error('Initial load failed'))
+            .mockResolvedValueOnce({ snippets: [created, existing] })
+        const createTerminalSnippet = vi.fn(async () => ({ snippet: created }))
+        renderPanel({
+            api: apiMock({ getTerminalSnippets, createTerminalSnippet }),
+        })
+
+        openCustomTab()
+        expect(await screen.findByRole('alert')).toHaveTextContent('Initial load failed')
+        fireEvent.click(screen.getByRole('button', { name: 'New' }))
+        fireEvent.change(screen.getByLabelText('Name'), {
+            target: { value: created.name },
+        })
+        fireEvent.change(screen.getByLabelText('Command'), {
+            target: { value: created.command },
+        })
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+        await waitFor(() => expect(createTerminalSnippet).toHaveBeenCalledTimes(1))
+        await waitFor(() => expect(getTerminalSnippets).toHaveBeenCalledTimes(2))
+        expect(await screen.findByText(created.name)).toBeVisible()
+        expect(screen.getByText(existing.name)).toBeVisible()
+        expect(screen.queryByLabelText('Name')).not.toBeInTheDocument()
+    })
+
+    it('returns to the errored list when post-create refetch fails without resubmitting', async () => {
+        const created = snippet({ id: 'created', name: 'Created once' })
+        const getTerminalSnippets = vi.fn()
+            .mockRejectedValueOnce(new Error('Initial load failed'))
+            .mockRejectedValueOnce(new Error('Refresh failed'))
+            .mockResolvedValueOnce({ snippets: [created] })
+        const createTerminalSnippet = vi.fn(async () => ({ snippet: created }))
+        renderPanel({
+            api: apiMock({ getTerminalSnippets, createTerminalSnippet }),
+        })
+
+        openCustomTab()
+        expect(await screen.findByRole('alert')).toHaveTextContent('Initial load failed')
+        fireEvent.click(screen.getByRole('button', { name: 'New' }))
+        fireEvent.change(screen.getByLabelText('Name'), {
+            target: { value: created.name },
+        })
+        fireEvent.change(screen.getByLabelText('Command'), {
+            target: { value: created.command },
+        })
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Refresh failed')
+        expect(getTerminalSnippets).toHaveBeenCalledTimes(2)
+        expect(createTerminalSnippet).toHaveBeenCalledTimes(1)
+        expect(screen.queryByLabelText('Name')).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Saving…' })).not.toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+        expect(await screen.findByText(created.name)).toBeVisible()
+        expect(createTerminalSnippet).toHaveBeenCalledTimes(1)
+    })
+
     it('creates a snippet, updates the cache, and returns to the custom list', async () => {
         const created = snippet({ id: 'created', name: 'Restart app' })
         const createTerminalSnippet = vi.fn(async () => ({ snippet: created }))

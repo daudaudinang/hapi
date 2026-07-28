@@ -30,6 +30,18 @@ type MutationScope = {
     queryKey: TerminalSnippetsQueryKey
 }
 
+function withCreatedSnippet(
+    previous: TerminalSnippetsResponse,
+    snippet: TerminalSnippet
+): TerminalSnippetsResponse {
+    return {
+        snippets: [
+            ...previous.snippets.filter((item) => item.id !== snippet.id),
+            snippet
+        ].sort(sortTerminalSnippets)
+    }
+}
+
 export function useTerminalSnippets(
     api: ApiClient | null,
     enabled: boolean
@@ -39,6 +51,7 @@ export function useTerminalSnippets(
     error: string | null
     refetch: () => Promise<unknown>
     createSnippet: (input: CreateTerminalSnippetInput) => Promise<TerminalSnippet>
+    ensureCreatedSnippetVisible: (snippet: TerminalSnippet) => Promise<void>
     updateSnippet: (id: string, input: UpdateTerminalSnippetInput) => Promise<TerminalSnippet>
     deleteSnippet: (id: string) => Promise<void>
     isPending: boolean
@@ -71,14 +84,7 @@ export function useTerminalSnippets(
                     if (!previous) {
                         return previous
                     }
-                    return {
-                        snippets: [
-                            ...previous.snippets.filter((item) => (
-                                item.id !== snippet.id
-                            )),
-                            snippet
-                        ].sort(sortTerminalSnippets)
-                    }
+                    return withCreatedSnippet(previous, snippet)
                 }
             )
         }
@@ -148,6 +154,27 @@ export function useTerminalSnippets(
                 queryKey,
                 input
             })
+        },
+        ensureCreatedSnippetVisible: async (snippet) => {
+            const cached = queryClient.getQueryData<TerminalSnippetsResponse>(
+                queryKey
+            )
+            if (cached?.snippets.some((item) => item.id === snippet.id)) {
+                return
+            }
+            const result = await query.refetch()
+            if (!result.isSuccess) {
+                return
+            }
+            if (result.data.snippets.some((item) => item.id === snippet.id)) {
+                return
+            }
+            queryClient.setQueryData<TerminalSnippetsResponse>(
+                queryKey,
+                (previous) => previous
+                    ? withCreatedSnippet(previous, snippet)
+                    : previous
+            )
         },
         updateSnippet: async (id, input) => {
             if (!api) {

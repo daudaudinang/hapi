@@ -100,6 +100,37 @@ describe('useTerminalSnippets', () => {
         )).toEqual({ snippets })
     })
 
+    it('refetches a complete list after create succeeds without a usable cache', async () => {
+        const created = snippet({ id: 'created', name: 'Created' })
+        const existing = snippet({ id: 'existing', name: 'Existing' })
+        const api = apiMock({
+            getTerminalSnippets: vi.fn()
+                .mockRejectedValueOnce(new Error('load failed'))
+                .mockResolvedValueOnce({ snippets: [created, existing] }),
+            createTerminalSnippet: vi.fn(async () => ({ snippet: created }))
+        })
+        const harness = createHarness()
+        const { result } = renderHook(
+            () => useTerminalSnippets(api, true),
+            { wrapper: harness.wrapper }
+        )
+
+        await waitFor(() => expect(result.current.error).toBe('load failed'))
+
+        await act(async () => {
+            const response = await result.current.createSnippet({
+                name: created.name,
+                command: created.command
+            })
+            await result.current.ensureCreatedSnippetVisible(response)
+        })
+
+        await waitFor(() => {
+            expect(result.current.snippets).toEqual([created, existing])
+        })
+        expect(api.getTerminalSnippets).toHaveBeenCalledTimes(2)
+    })
+
     it('does not render or reuse snippets when the authenticated cache scope changes', async () => {
         const namespaceA = snippet({ id: 'ns-a', name: 'Namespace A' })
         const namespaceB = snippet({ id: 'ns-b', name: 'Namespace B' })

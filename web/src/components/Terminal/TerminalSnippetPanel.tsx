@@ -1,8 +1,10 @@
 import {
+    useId,
     useMemo,
     useRef,
     useState,
     type FormEvent,
+    type KeyboardEvent,
     type ReactNode,
 } from 'react'
 import type { TerminalSnippet } from '@hapi/protocol'
@@ -28,6 +30,8 @@ export type TerminalSnippetPanelProps = {
 }
 
 type ActiveTab = 'built-in' | 'custom'
+
+const TAB_ORDER: readonly ActiveTab[] = ['built-in', 'custom']
 
 const GROUP_ORDER: readonly TerminalSnippetCatalogGroup[] = [
     'navigation',
@@ -104,12 +108,18 @@ export function TerminalSnippetPanel(props: TerminalSnippetPanelProps) {
     const [insertStatus, setInsertStatus] = useState('')
     const [deleteTarget, setDeleteTarget] = useState<TerminalSnippet | null>(null)
     const savingRef = useRef(false)
+    const tabIdPrefix = useId()
+    const tabRefs = useRef<Record<ActiveTab, HTMLButtonElement | null>>({
+        'built-in': null,
+        custom: null,
+    })
     const {
         snippets,
         isLoading,
         error,
         refetch,
         createSnippet,
+        ensureCreatedSnippetVisible,
         updateSnippet,
         deleteSnippet,
         isPending,
@@ -137,6 +147,29 @@ export function TerminalSnippetPanel(props: TerminalSnippetPanelProps) {
         setEditorError(null)
         setInsertStatus('')
         if (tab === 'custom') setCustomEnabled(true)
+    }
+
+    const selectTabFromKeyboard = (
+        event: KeyboardEvent<HTMLButtonElement>,
+        currentTab: ActiveTab,
+    ) => {
+        const currentIndex = TAB_ORDER.indexOf(currentTab)
+        let nextTab: ActiveTab | null = null
+        if (event.key === 'ArrowRight') {
+            nextTab = TAB_ORDER[(currentIndex + 1) % TAB_ORDER.length]
+        } else if (event.key === 'ArrowLeft') {
+            nextTab = TAB_ORDER[
+                (currentIndex - 1 + TAB_ORDER.length) % TAB_ORDER.length
+            ]
+        } else if (event.key === 'Home') {
+            nextTab = TAB_ORDER[0]
+        } else if (event.key === 'End') {
+            nextTab = TAB_ORDER[TAB_ORDER.length - 1]
+        }
+        if (!nextTab) return
+        event.preventDefault()
+        selectTab(nextTab)
+        tabRefs.current[nextTab]?.focus()
     }
 
     const startCreate = () => {
@@ -178,6 +211,7 @@ export function TerminalSnippetPanel(props: TerminalSnippetPanelProps) {
         if (!editor || !props.api || savingRef.current) return
         savingRef.current = true
         setEditorError(null)
+        let createdSnippet: TerminalSnippet | null = null
         const input = {
             name: editor.name.trim(),
             command: editor.command,
@@ -187,13 +221,21 @@ export function TerminalSnippetPanel(props: TerminalSnippetPanelProps) {
             if (editor.mode === 'edit' && editor.id) {
                 await updateSnippet(editor.id, input)
             } else {
-                await createSnippet(input)
+                createdSnippet = await createSnippet(input)
             }
-            setEditor(null)
         } catch (saveError) {
             setEditorError(errorMessage(saveError, t('dialog.error.default')))
+            return
         } finally {
             savingRef.current = false
+        }
+        setEditor(null)
+        if (createdSnippet) {
+            try {
+                await ensureCreatedSnippetVisible(createdSnippet)
+            } catch {
+                // The query exposes refresh failures in the custom list.
+            }
         }
     }
 
@@ -278,21 +320,42 @@ export function TerminalSnippetPanel(props: TerminalSnippetPanelProps) {
                         className="grid grid-cols-2 rounded-xl bg-[var(--app-secondary-bg)] p-1"
                     >
                         <TabButton
+                            id={`${tabIdPrefix}-built-in-tab`}
+                            controls={`${tabIdPrefix}-built-in-panel`}
                             active={activeTab === 'built-in'}
+                            buttonRef={(node) => {
+                                tabRefs.current['built-in'] = node
+                            }}
                             onClick={() => selectTab('built-in')}
+                            onKeyDown={(event) => {
+                                selectTabFromKeyboard(event, 'built-in')
+                            }}
                         >
                             {t('terminal.snippets.builtIn')}
                         </TabButton>
                         <TabButton
+                            id={`${tabIdPrefix}-custom-tab`}
+                            controls={`${tabIdPrefix}-custom-panel`}
                             active={activeTab === 'custom'}
+                            buttonRef={(node) => {
+                                tabRefs.current.custom = node
+                            }}
                             onClick={() => selectTab('custom')}
+                            onKeyDown={(event) => {
+                                selectTabFromKeyboard(event, 'custom')
+                            }}
                         >
                             {t('terminal.snippets.mySnippets')}
                         </TabButton>
                     </div>
                 </div>
 
-                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3">
+                <div
+                    role="tabpanel"
+                    id={`${tabIdPrefix}-${activeTab}-panel`}
+                    aria-labelledby={`${tabIdPrefix}-${activeTab}-tab`}
+                    className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3"
+                >
                     {editor ? (
                         <TerminalSnippetEditor
                             editor={editor}
@@ -344,17 +407,25 @@ export function TerminalSnippetPanel(props: TerminalSnippetPanelProps) {
 }
 
 function TabButton(props: {
+    id: string
+    controls: string
     active: boolean
+    buttonRef: (node: HTMLButtonElement | null) => void
     onClick: () => void
+    onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => void
     children: ReactNode
 }) {
     return (
         <button
             type="button"
             role="tab"
+            id={props.id}
+            aria-controls={props.controls}
             aria-selected={props.active}
             tabIndex={props.active ? 0 : -1}
+            ref={props.buttonRef}
             onClick={props.onClick}
+            onKeyDown={props.onKeyDown}
             className={`min-h-11 rounded-lg px-3 text-xs font-semibold transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
                 props.active
                     ? 'bg-[var(--app-bg)] text-[var(--app-fg)] shadow-sm'
