@@ -1,4 +1,4 @@
-export default {
+const en = {
   // Loading states
   'loading': 'Loading…',
   'authorizing': 'Authorizing…',
@@ -607,3 +607,7 @@ export default {
   'mermaid.retry': 'Retry preview',
   'mermaid.fullscreenUnavailable': 'Fullscreen is unavailable in this browser.',
 } as const
+
+export type TranslationKey = keyof typeof en
+
+export default en

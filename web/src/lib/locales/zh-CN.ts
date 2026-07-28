@@ -1,3 +1,5 @@
+import type { TranslationKey } from './en'
+
 export default {
   // Loading states
   'loading': '加载中…',
@@ -201,7 +203,7 @@ export default {
   'terminal.paste.placeholder': '在此粘贴终端输入…',
   'terminal.controls.toolbar': '终端控件',
   'terminal.controls.paste': '粘贴',
-  'terminal.controls.snippets': '代码片段',
+  'terminal.controls.snippets': '命令片段',
   'terminal.controls.search': '搜索',
   'terminal.controls.history': '历史记录',
   'terminal.controls.keys': '按键',
@@ -608,4 +610,4 @@ export default {
   'mermaid.renderError': '无法预览此 Mermaid 图表。',
   'mermaid.retry': '重试预览',
   'mermaid.fullscreenUnavailable': '此浏览器不支持全屏。',
-} as const
+} as const satisfies Record<TranslationKey, string>

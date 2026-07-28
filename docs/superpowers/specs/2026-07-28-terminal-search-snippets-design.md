@@ -220,7 +220,8 @@ Search remains web-only. Snippet persistence touches shared schemas and Hub, but
 
 Completed:
 
-- [x] Locale coverage: all 59 Search/Snippets keys referenced by the components and built-in catalog exist in English, Vietnamese and Simplified Chinese. Full locale parity against English reports zero missing and zero extra keys.
+- [x] Locale coverage: all 59 Search/Snippets keys referenced by the components and built-in catalog exist in English, Vietnamese and Simplified Chinese. English exports the authoritative locale-key type; Vietnamese and Simplified Chinese must contain exactly those keys at typecheck time. This authority enforces locale parity only; call-site `t(...)` key typing remains out of scope.
+- [x] Exact typed parity also closed 8 pre-existing Vietnamese and 3 pre-existing Simplified Chinese `newSession.*` gaps. These additions only complete translations; they do not introduce separate feature behavior.
 - [x] Focused shared tests: 15 passed.
 - [x] Focused Hub store, migration and route tests: 16 passed.
 - [x] Full web suite: 1,156 tests in 136 files passed.

@@ -1,3 +1,5 @@
+import type { TranslationKey } from './en'
+
 export default {
   // Loading states
   'loading': 'Đang tải…',
@@ -608,4 +610,4 @@ export default {
   'mermaid.renderError': 'Không thể xem trước sơ đồ Mermaid này.',
   'mermaid.retry': 'Thử xem trước lại',
   'mermaid.fullscreenUnavailable': 'Trình duyệt này không hỗ trợ toàn màn hình.',
-} as const
+} as const satisfies Record<TranslationKey, string>
