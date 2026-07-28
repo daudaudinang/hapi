@@ -1,0 +1,246 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { act, renderHook, waitFor } from '@testing-library/react'
+import type {
+    CreateTerminalSnippetInput,
+    TerminalSnippet,
+    UpdateTerminalSnippetInput
+} from '@hapi/protocol'
+import type { ReactNode } from 'react'
+import { describe, expect, it, vi } from 'vitest'
+import type { ApiClient } from '@/api/client'
+import { queryKeys } from '@/lib/query-keys'
+import { useTerminalSnippets } from './useTerminalSnippets'
+
+function snippet(overrides: Partial<TerminalSnippet> = {}): TerminalSnippet {
+    return {
+        id: 'snippet-1',
+        name: 'List files',
+        command: 'ls -la',
+        description: null,
+        createdAt: 10,
+        updatedAt: 10,
+        ...overrides
+    }
+}
+
+function createHarness() {
+    const queryClient = new QueryClient({
+        defaultOptions: {
+            queries: { retry: false },
+            mutations: { retry: false }
+        }
+    })
+    const wrapper = ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    )
+    return { queryClient, wrapper }
+}
+
+function apiMock(overrides: {
+    getTerminalSnippets?: () => Promise<{ snippets: TerminalSnippet[] }>
+    createTerminalSnippet?: (input: CreateTerminalSnippetInput) => Promise<{ snippet: TerminalSnippet }>
+    updateTerminalSnippet?: (id: string, input: UpdateTerminalSnippetInput) => Promise<{ snippet: TerminalSnippet }>
+    deleteTerminalSnippet?: (id: string) => Promise<void>
+} = {}): ApiClient {
+    return {
+        getTerminalSnippets: vi.fn(async () => ({ snippets: [] })),
+        createTerminalSnippet: vi.fn(),
+        updateTerminalSnippet: vi.fn(),
+        deleteTerminalSnippet: vi.fn(),
+        ...overrides
+    } as unknown as ApiClient
+}
+
+describe('useTerminalSnippets', () => {
+    it('does not fetch with a null API or while disabled', () => {
+        const disabledApi = apiMock()
+        const nullHarness = createHarness()
+        const disabledHarness = createHarness()
+
+        renderHook(() => useTerminalSnippets(null, true), { wrapper: nullHarness.wrapper })
+        const { result } = renderHook(
+            () => useTerminalSnippets(disabledApi, false),
+            { wrapper: disabledHarness.wrapper }
+        )
+
+        expect(disabledApi.getTerminalSnippets).not.toHaveBeenCalled()
+        expect(result.current.snippets).toEqual([])
+        expect(result.current.isLoading).toBe(false)
+        expect(result.current.error).toBeNull()
+    })
+
+    it('fetches once when enabled and exposes server-ordered snippets', async () => {
+        const snippets = [
+            snippet({ id: 'newer', name: 'Newer' }),
+            snippet({ id: 'older', name: 'Older' })
+        ]
+        const api = apiMock({
+            getTerminalSnippets: vi.fn(async () => ({ snippets }))
+        })
+        const harness = createHarness()
+        const { result, rerender } = renderHook(
+            ({ enabled }) => useTerminalSnippets(api, enabled),
+            {
+                initialProps: { enabled: false },
+                wrapper: harness.wrapper
+            }
+        )
+
+        expect(api.getTerminalSnippets).not.toHaveBeenCalled()
+        rerender({ enabled: true })
+
+        await waitFor(() => {
+            expect(result.current.snippets).toEqual(snippets)
+        })
+        expect(api.getTerminalSnippets).toHaveBeenCalledTimes(1)
+        expect(harness.queryClient.getQueryData(queryKeys.terminalSnippets)).toEqual({ snippets })
+    })
+
+    it('prepends a created snippet to the current cache after server success', async () => {
+        const existing = snippet({ id: 'existing' })
+        const created = snippet({ id: 'created', name: 'Created' })
+        const api = apiMock({
+            getTerminalSnippets: vi.fn(async () => ({ snippets: [existing] })),
+            createTerminalSnippet: vi.fn(async () => ({ snippet: created }))
+        })
+        const harness = createHarness()
+        const { result } = renderHook(
+            () => useTerminalSnippets(api, true),
+            { wrapper: harness.wrapper }
+        )
+        await waitFor(() => expect(result.current.snippets).toEqual([existing]))
+
+        await act(async () => {
+            await result.current.createSnippet({
+                name: created.name,
+                command: created.command
+            })
+        })
+
+        await waitFor(() => {
+            expect(result.current.snippets).toEqual([created, existing])
+        })
+        expect(harness.queryClient.getQueryData(queryKeys.terminalSnippets)).toEqual({
+            snippets: [created, existing]
+        })
+    })
+
+    it('replaces an updated snippet without changing its position', async () => {
+        const first = snippet({ id: 'first', name: 'First' })
+        const second = snippet({ id: 'second', name: 'Second' })
+        const updated = { ...second, name: 'Updated second', updatedAt: 20 }
+        const api = apiMock({
+            getTerminalSnippets: vi.fn(async () => ({ snippets: [first, second] })),
+            updateTerminalSnippet: vi.fn(async () => ({ snippet: updated }))
+        })
+        const harness = createHarness()
+        const { result } = renderHook(
+            () => useTerminalSnippets(api, true),
+            { wrapper: harness.wrapper }
+        )
+        await waitFor(() => expect(result.current.snippets).toEqual([first, second]))
+
+        await act(async () => {
+            await result.current.updateSnippet(second.id, {
+                name: updated.name,
+                command: updated.command
+            })
+        })
+
+        await waitFor(() => {
+            expect(result.current.snippets).toEqual([first, updated])
+        })
+    })
+
+    it('removes a deleted snippet from the current cache', async () => {
+        const first = snippet({ id: 'first', name: 'First' })
+        const second = snippet({ id: 'second', name: 'Second' })
+        const api = apiMock({
+            getTerminalSnippets: vi.fn(async () => ({ snippets: [first, second] })),
+            deleteTerminalSnippet: vi.fn(async () => undefined)
+        })
+        const harness = createHarness()
+        const { result } = renderHook(
+            () => useTerminalSnippets(api, true),
+            { wrapper: harness.wrapper }
+        )
+        await waitFor(() => expect(result.current.snippets).toEqual([first, second]))
+
+        await act(async () => {
+            await result.current.deleteSnippet(first.id)
+        })
+
+        await waitFor(() => {
+            expect(result.current.snippets).toEqual([second])
+        })
+    })
+
+    it('keeps the cached list unchanged and rejects a failed mutation', async () => {
+        const existing = snippet()
+        const failure = new Error('create failed')
+        const api = apiMock({
+            getTerminalSnippets: vi.fn(async () => ({ snippets: [existing] })),
+            createTerminalSnippet: vi.fn(async () => {
+                throw failure
+            })
+        })
+        const harness = createHarness()
+        const { result } = renderHook(
+            () => useTerminalSnippets(api, true),
+            { wrapper: harness.wrapper }
+        )
+        await waitFor(() => expect(result.current.snippets).toEqual([existing]))
+
+        await expect(result.current.createSnippet({
+            name: 'Will fail',
+            command: 'false'
+        })).rejects.toBe(failure)
+
+        expect(result.current.snippets).toEqual([existing])
+        expect(harness.queryClient.getQueryData(queryKeys.terminalSnippets)).toEqual({
+            snippets: [existing]
+        })
+    })
+
+    it('guards mutations when the API is unavailable', async () => {
+        const { result } = renderHook(
+            () => useTerminalSnippets(null, true),
+            { wrapper: createHarness().wrapper }
+        )
+        const input = { name: 'List files', command: 'ls' }
+
+        await expect(result.current.createSnippet(input)).rejects.toThrow('API unavailable')
+        await expect(result.current.updateSnippet('snippet-1', input)).rejects.toThrow('API unavailable')
+        await expect(result.current.deleteSnippet('snippet-1')).rejects.toThrow('API unavailable')
+    })
+
+    it('reports pending while any snippet mutation is running', async () => {
+        let resolveCreate!: (value: { snippet: TerminalSnippet }) => void
+        const createPromise = new Promise<{ snippet: TerminalSnippet }>((resolve) => {
+            resolveCreate = resolve
+        })
+        const created = snippet({ id: 'created' })
+        const api = apiMock({
+            createTerminalSnippet: vi.fn(() => createPromise)
+        })
+        const { result } = renderHook(
+            () => useTerminalSnippets(api, false),
+            { wrapper: createHarness().wrapper }
+        )
+
+        let mutation!: Promise<TerminalSnippet>
+        act(() => {
+            mutation = result.current.createSnippet({
+                name: created.name,
+                command: created.command
+            })
+        })
+        await waitFor(() => expect(result.current.isPending).toBe(true))
+
+        await act(async () => {
+            resolveCreate({ snippet: created })
+            await mutation
+        })
+        await waitFor(() => expect(result.current.isPending).toBe(false))
+    })
+})

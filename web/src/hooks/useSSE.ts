@@ -555,6 +555,12 @@ export function useSSE(options: {
                 }
             }
 
+            if (event.type === 'terminal-snippets-updated') {
+                void queryClient.invalidateQueries({
+                    queryKey: queryKeys.terminalSnippets
+                }).catch(() => {})
+            }
+
             onEventRef.current(event)
         }
 

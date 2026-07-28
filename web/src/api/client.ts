@@ -40,7 +40,15 @@ import type {
     TeamMentionRequest,
     TeamChatMessage
 } from '@/types/api'
-import type { AgentFlavor } from '@hapi/protocol'
+import {
+    TerminalSnippetResponseSchema,
+    TerminalSnippetsResponseSchema,
+    type AgentFlavor,
+    type CreateTerminalSnippetInput,
+    type TerminalSnippetResponse,
+    type TerminalSnippetsResponse,
+    type UpdateTerminalSnippetInput
+} from '@hapi/protocol'
 
 type ApiClientOptions = {
     baseUrl?: string
@@ -221,6 +229,44 @@ export class ApiClient {
 
     async getSessions(): Promise<SessionsResponse> {
         return await this.request<SessionsResponse>('/api/sessions')
+    }
+
+    async getTerminalSnippets(): Promise<TerminalSnippetsResponse> {
+        return TerminalSnippetsResponseSchema.parse(
+            await this.request<unknown>('/api/terminal-snippets')
+        )
+    }
+
+    async createTerminalSnippet(
+        input: CreateTerminalSnippetInput
+    ): Promise<TerminalSnippetResponse> {
+        return TerminalSnippetResponseSchema.parse(
+            await this.request<unknown>('/api/terminal-snippets', {
+                method: 'POST',
+                body: JSON.stringify(input)
+            })
+        )
+    }
+
+    async updateTerminalSnippet(
+        id: string,
+        input: UpdateTerminalSnippetInput
+    ): Promise<TerminalSnippetResponse> {
+        return TerminalSnippetResponseSchema.parse(
+            await this.request<unknown>(
+                `/api/terminal-snippets/${encodeURIComponent(id)}`,
+                {
+                    method: 'PATCH',
+                    body: JSON.stringify(input)
+                }
+            )
+        )
+    }
+
+    async deleteTerminalSnippet(id: string): Promise<void> {
+        await this.request(`/api/terminal-snippets/${encodeURIComponent(id)}`, {
+            method: 'DELETE'
+        })
     }
 
     async getTeamChats(): Promise<TeamChatsResponse> {
