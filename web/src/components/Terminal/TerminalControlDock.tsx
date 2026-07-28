@@ -22,6 +22,7 @@ export type TerminalDockAction = 'paste' | TerminalDockTool
 
 export type TerminalControlDockProps = {
     api: ApiClient | null
+    terminalContextKey: string | null
     disabled: boolean
     activeTool: TerminalDockTool | null
     onActiveToolChange: (tool: TerminalDockTool | null) => void
@@ -297,7 +298,7 @@ export function TerminalControlDock(props: TerminalControlDockProps) {
     const [pasteDialogOpen, setPasteDialogOpen] = useState(false)
     const [manualPasteText, setManualPasteText] = useState('')
     const [pasteFeedback, setPasteFeedback] = useState(false)
-    const [snippetFeedback, setSnippetFeedback] = useState(false)
+    const [snippetAnnouncement, setSnippetAnnouncement] = useState(0)
     const [functionLayer, setFunctionLayer] = useState(false)
     const pasteFeedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
     const snippetFeedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -306,10 +307,21 @@ export function TerminalControlDock(props: TerminalControlDockProps) {
         if (pasteFeedbackTimer.current) {
             clearTimeout(pasteFeedbackTimer.current)
         }
+    }, [])
+
+    useEffect(() => {
+        setSnippetAnnouncement(0)
         if (snippetFeedbackTimer.current) {
             clearTimeout(snippetFeedbackTimer.current)
+            snippetFeedbackTimer.current = null
         }
-    }, [])
+        return () => {
+            if (snippetFeedbackTimer.current) {
+                clearTimeout(snippetFeedbackTimer.current)
+                snippetFeedbackTimer.current = null
+            }
+        }
+    }, [props.terminalContextKey])
 
     const announcePaste = useCallback(() => {
         if (pasteFeedbackTimer.current) {
@@ -367,9 +379,9 @@ export function TerminalControlDock(props: TerminalControlDockProps) {
         if (snippetFeedbackTimer.current) {
             clearTimeout(snippetFeedbackTimer.current)
         }
-        setSnippetFeedback(true)
+        setSnippetAnnouncement((current) => current + 1)
         snippetFeedbackTimer.current = setTimeout(() => {
-            setSnippetFeedback(false)
+            setSnippetAnnouncement(0)
             snippetFeedbackTimer.current = null
         }, 1200)
     }, [])
@@ -475,8 +487,8 @@ export function TerminalControlDock(props: TerminalControlDockProps) {
                     {t('terminal.controls.pasted')}
                 </span>
             ) : null}
-            {snippetFeedback ? (
-                <span role="status" className="sr-only">
+            {snippetAnnouncement > 0 ? (
+                <span key={snippetAnnouncement} role="status" className="sr-only">
                     {t('terminal.snippets.inserted')}
                 </span>
             ) : null}

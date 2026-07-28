@@ -65,6 +65,7 @@ vi.mock('@/lib/use-translation', () => ({
 
 const defaultProps: TerminalControlDockProps = {
     api: null,
+    terminalContextKey: 'terminal-1',
     disabled: false,
     activeTool: null,
     onActiveToolChange: vi.fn(),
@@ -94,15 +95,18 @@ function renderDock(overrides: Partial<TerminalControlDockProps> = {}) {
 
 function ControlledDock(props: {
     onWritePlainInput: (text: string) => boolean
+    terminalContextKey?: string | null
 }) {
     const [activeTool, setActiveTool] = useState<TerminalControlDockProps['activeTool']>(null)
+    const dockProps = {
+        ...defaultProps,
+        terminalContextKey: props.terminalContextKey ?? 'terminal-1',
+        activeTool,
+        onActiveToolChange: setActiveTool,
+        onWritePlainInput: props.onWritePlainInput,
+    } as TerminalControlDockProps
     return (
-        <TerminalControlDock
-            {...defaultProps}
-            activeTool={activeTool}
-            onActiveToolChange={setActiveTool}
-            onWritePlainInput={props.onWritePlainInput}
-        />
+        <TerminalControlDock {...dockProps} />
     )
 }
 
@@ -217,6 +221,62 @@ describe('TerminalControlDock', () => {
         act(() => vi.runOnlyPendingTimers())
         expect(screen.queryByRole('status')).not.toBeInTheDocument()
         expect(screen.queryByRole('region', { name: 'Snippets' })).not.toBeInTheDocument()
+    })
+
+    it('publishes a distinct live-region node for every rapid successful insert', () => {
+        const queryClient = new QueryClient()
+        render(
+            <QueryClientProvider client={queryClient}>
+                <ControlledDock onWritePlainInput={() => true} />
+            </QueryClientProvider>,
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: 'Snippets' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Insert Git status' }))
+        const firstAnnouncement = screen.getByRole('status')
+
+        fireEvent.click(screen.getByRole('button', { name: 'Snippets' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Insert Git status' }))
+        const secondAnnouncement = screen.getByRole('status')
+
+        expect(secondAnnouncement).toHaveTextContent('Inserted · not executed')
+        expect(secondAnnouncement).not.toBe(firstAnnouncement)
+    })
+
+    it('clears snippet feedback and its timer when terminal context changes', () => {
+        vi.useFakeTimers()
+        const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
+        const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout')
+        const queryClient = new QueryClient()
+        const rendered = render(
+            <QueryClientProvider client={queryClient}>
+                <ControlledDock
+                    terminalContextKey="terminal-1"
+                    onWritePlainInput={() => true}
+                />
+            </QueryClientProvider>,
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: 'Snippets' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Insert Git status' }))
+        const feedbackTimer = setTimeoutSpy.mock.results.find((_, index) => (
+            setTimeoutSpy.mock.calls[index]?.[1] === 1200
+        ))?.value
+        expect(screen.getByRole('status')).toHaveTextContent('Inserted · not executed')
+
+        rendered.rerender(
+            <QueryClientProvider client={queryClient}>
+                <ControlledDock
+                    terminalContextKey="terminal-2"
+                    onWritePlainInput={() => true}
+                />
+            </QueryClientProvider>,
+        )
+
+        expect(clearTimeoutSpy).toHaveBeenCalledWith(feedbackTimer)
+        expect(screen.queryByRole('status')).not.toBeInTheDocument()
+        act(() => vi.runOnlyPendingTimers())
+        expect(screen.queryByRole('status')).not.toBeInTheDocument()
     })
 
     it('opens an anchored panel instead of a dialog and toggles it closed', () => {

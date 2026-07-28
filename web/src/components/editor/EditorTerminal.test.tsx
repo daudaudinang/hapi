@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EditorTab } from '@/hooks/useEditorState'
 import { EditorTerminal } from './EditorTerminal'
@@ -10,21 +11,32 @@ vi.mock('@/components/Terminal/TerminalSnippetPanel', () => ({
         onInsert: (command: string) => boolean
         onClose: () => void
         onInserted?: () => void
-    }) => (
-        <section role="region" aria-label="Snippet content" data-api={String(Boolean(props.api))}>
-            <button
-                type="button"
-                onClick={() => {
-                    if (props.onInsert('git status --short')) {
-                        props.onInserted?.()
-                        props.onClose()
-                    }
-                }}
-            >
-                Insert Git status
-            </button>
-        </section>
-    ),
+    }) => {
+        const [search, setSearch] = useState('')
+        const [editing, setEditing] = useState(false)
+        return (
+            <section role="region" aria-label="Snippet content" data-api={String(Boolean(props.api))}>
+                <input
+                    aria-label="Search snippets"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                />
+                <button type="button" onClick={() => setEditing(true)}>New</button>
+                {editing ? <input aria-label="Name" /> : null}
+                <button
+                    type="button"
+                    onClick={() => {
+                        if (props.onInsert('git status --short')) {
+                            props.onInserted?.()
+                            props.onClose()
+                        }
+                    }}
+                >
+                    Insert Git status
+                </button>
+            </section>
+        )
+    },
 }))
 
 var mocks = {
@@ -446,6 +458,59 @@ describe('EditorTerminal', () => {
         )
 
         expect(screen.queryByRole('region', { name: 'Snippet content' })).not.toBeInTheDocument()
+
+        rendered.rerender(
+            <EditorTerminal {...commonProps} activeTabId="term-machine-1" />,
+        )
+        expect(screen.queryByRole('region', { name: 'Snippet content' })).not.toBeInTheDocument()
+    })
+
+    it('drops stale Snippets state when the active editor terminal disconnects', () => {
+        const props = { mobileMode: true }
+        const rendered = renderMachineTerminal(props)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Snippets' }))
+        fireEvent.change(screen.getByRole('textbox', { name: 'Search snippets' }), {
+            target: { value: 'stale search' },
+        })
+        fireEvent.click(screen.getByRole('button', { name: 'New' }))
+        expect(screen.getByRole('textbox', { name: 'Name' })).toBeVisible()
+
+        mocks.terminalStatusesById.set('term-machine', 'disconnected')
+        rendered.rerender(
+            <EditorTerminal
+                tabs={[{ id: 'term-machine', type: 'terminal', label: 'Terminal: bash', shell: 'bash', machineId: 'machine-1', cwd: '/repo' }]}
+                activeTabId="term-machine"
+                isCollapsed={false}
+                api={null}
+                onSelectTab={vi.fn()}
+                onCloseTab={vi.fn()}
+                onOpenTerminal={vi.fn()}
+                onToggleCollapsed={vi.fn()}
+                {...props}
+            />,
+        )
+        expect(screen.queryByRole('region', { name: 'Snippet content' })).not.toBeInTheDocument()
+
+        mocks.terminalStatusesById.set('term-machine', 'connected')
+        rendered.rerender(
+            <EditorTerminal
+                tabs={[{ id: 'term-machine', type: 'terminal', label: 'Terminal: bash', shell: 'bash', machineId: 'machine-1', cwd: '/repo' }]}
+                activeTabId="term-machine"
+                isCollapsed={false}
+                api={null}
+                onSelectTab={vi.fn()}
+                onCloseTab={vi.fn()}
+                onOpenTerminal={vi.fn()}
+                onToggleCollapsed={vi.fn()}
+                {...props}
+            />,
+        )
+        expect(screen.queryByRole('region', { name: 'Snippet content' })).not.toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Snippets' }))
+        expect(screen.getByRole('textbox', { name: 'Search snippets' })).toHaveValue('')
+        expect(screen.queryByRole('textbox', { name: 'Name' })).not.toBeInTheDocument()
     })
 
     it('unmount closes the active editor Snippets panel and disconnects its terminal', () => {

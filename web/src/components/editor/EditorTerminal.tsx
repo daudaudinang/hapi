@@ -115,10 +115,10 @@ function EditorTerminalBody(props: {
     })
 
     useEffect(() => {
-        if (!props.isActive) {
+        if (!props.isActive || quickInputDisabled) {
             setActiveDockTool(null)
         }
-    }, [props.isActive])
+    }, [props.isActive, quickInputDisabled])
 
     useEffect(() => {
         props.onRegisterClose?.(props.tab.id, close)
@@ -323,6 +323,9 @@ function EditorTerminalBody(props: {
             </div>
             <TerminalControlDock
                 api={props.api}
+                terminalContextKey={
+                    quickInputDisabled || !props.isActive ? null : props.tab.id
+                }
                 disabled={quickInputDisabled}
                 activeTool={activeDockTool}
                 onActiveToolChange={setActiveDockTool}

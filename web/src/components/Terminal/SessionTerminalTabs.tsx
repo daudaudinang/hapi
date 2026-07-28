@@ -136,6 +136,12 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
     terminalDataHandlerRef.current = quickInput.writeTerminalData
 
     useEffect(() => {
+        if (quickInputDisabled) {
+            setActiveDockTool(null)
+        }
+    }, [quickInputDisabled])
+
+    useEffect(() => {
         setActiveDockTool(null)
     }, [displayTerminal?.terminalId])
 
@@ -491,6 +497,9 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
 
             <TerminalControlDock
                 api={api}
+                terminalContextKey={
+                    quickInputDisabled ? null : (activeLiveTerminal?.terminalId ?? null)
+                }
                 disabled={quickInputDisabled}
                 activeTool={activeDockTool}
                 onActiveToolChange={setActiveDockTool}

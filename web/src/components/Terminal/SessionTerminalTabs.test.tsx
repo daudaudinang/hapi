@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TerminalState } from '@hapi/protocol'
@@ -12,21 +12,32 @@ vi.mock('@/components/Terminal/TerminalSnippetPanel', () => ({
         onInsert: (command: string) => boolean
         onClose: () => void
         onInserted?: () => void
-    }) => (
-        <section role="region" aria-label="Snippet content" data-api={String(Boolean(props.api))}>
-            <button
-                type="button"
-                onClick={() => {
-                    if (props.onInsert('git status --short')) {
-                        props.onInserted?.()
-                        props.onClose()
-                    }
-                }}
-            >
-                Insert Git status
-            </button>
-        </section>
-    ),
+    }) => {
+        const [search, setSearch] = useState('')
+        const [editing, setEditing] = useState(false)
+        return (
+            <section role="region" aria-label="Snippet content" data-api={String(Boolean(props.api))}>
+                <input
+                    aria-label="Search snippets"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                />
+                <button type="button" onClick={() => setEditing(true)}>New</button>
+                {editing ? <input aria-label="Name" /> : null}
+                <button
+                    type="button"
+                    onClick={() => {
+                        if (props.onInsert('git status --short')) {
+                            props.onInserted?.()
+                            props.onClose()
+                        }
+                    }}
+                >
+                    Insert Git status
+                </button>
+            </section>
+        )
+    },
 }))
 
 var mocks: {
@@ -279,6 +290,61 @@ describe('SessionTerminalTabs', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Snippets' }))
         fireEvent.click(screen.getByRole('button', { name: 't2' }))
         expect(screen.queryByRole('region', { name: 'Snippet content' })).not.toBeInTheDocument()
+    })
+
+    it('drops stale Snippets state when the active session terminal disconnects', () => {
+        mocks.controller = makeController([state('t1')])
+        const rendered = renderTabs()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Snippets' }))
+        fireEvent.change(screen.getByRole('textbox', { name: 'Search snippets' }), {
+            target: { value: 'stale search' },
+        })
+        fireEvent.click(screen.getByRole('button', { name: 'New' }))
+        expect(screen.getByRole('textbox', { name: 'Name' })).toBeVisible()
+
+        mocks.controller = {
+            ...mocks.controller,
+            state: { status: 'idle' as const },
+        }
+        rendered.rerender(
+            <SessionTerminalTabs
+                sessionId="session-1"
+                active={true}
+                terminalSupported={true}
+            />,
+        )
+        expect(screen.queryByRole('region', { name: 'Snippet content' })).not.toBeInTheDocument()
+
+        mocks.controller = {
+            ...mocks.controller,
+            state: { status: 'connected' as const },
+        }
+        rendered.rerender(
+            <SessionTerminalTabs
+                sessionId="session-1"
+                active={true}
+                terminalSupported={true}
+            />,
+        )
+        expect(screen.queryByRole('region', { name: 'Snippet content' })).not.toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Snippets' }))
+        expect(screen.getByRole('textbox', { name: 'Search snippets' })).toHaveValue('')
+        expect(screen.queryByRole('textbox', { name: 'Name' })).not.toBeInTheDocument()
+    })
+
+    it('clears snippet feedback when switching session terminal context', () => {
+        mocks.controller = makeController([state('t1'), state('t2')])
+        renderTabs()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Snippets' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Insert Git status' }))
+        expect(screen.getByRole('status')).toHaveTextContent('terminal.snippets.inserted')
+
+        fireEvent.click(screen.getByRole('button', { name: 't2' }))
+
+        expect(screen.queryByRole('status')).not.toBeInTheDocument()
     })
 
     it('coordinates mobile terminal interaction with terminal availability and dock tools', () => {
