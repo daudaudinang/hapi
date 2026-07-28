@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { Terminal } from '@xterm/xterm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TerminalView } from './TerminalView'
 
@@ -237,6 +238,24 @@ describe('TerminalView mobile interaction integration', () => {
         expect(mocks.terminal.textarea).toHaveProperty('readOnly', false)
         expect(screen.queryByRole('toolbar', { name: 'Terminal action' })).not.toBeInTheDocument()
         expect(mocks.terminal.onCursorMove).not.toHaveBeenCalled()
+    })
+
+    it('uses the dedicated high-contrast terminal selection color', () => {
+        vi.spyOn(window, 'getComputedStyle').mockReturnValue({
+            getPropertyValue: (property: string) => (
+                property === '--app-terminal-selection-bg'
+                    ? 'rgba(79, 70, 229, 0.36)'
+                    : ''
+            ),
+        } as CSSStyleDeclaration)
+
+        render(<TerminalView />)
+
+        expect(vi.mocked(Terminal)).toHaveBeenCalledWith(expect.objectContaining({
+            theme: expect.objectContaining({
+                selectionBackground: 'rgba(79, 70, 229, 0.36)',
+            }),
+        }))
     })
 
     it('clears a visible mobile choice when dismissal is requested', async () => {

@@ -17,6 +17,7 @@
     --app-border: rgba(0, 0, 0, 0.1);
     --app-divider: rgba(0, 0, 0, 0.08);
     --app-subtle-bg: rgba(0, 0, 0, 0.05);
+    --app-terminal-selection-bg: rgba(79, 70, 229, 0.36);
     --app-code-bg: #f6f8fa;
     --app-inline-code-bg: rgba(0, 0, 0, 0.08);
 
@@ -83,6 +84,7 @@
     --app-border: rgba(255, 255, 255, 0.1);
     --app-divider: rgba(255, 255, 255, 0.08);
     --app-subtle-bg: rgba(255, 255, 255, 0.05);
+    --app-terminal-selection-bg: rgba(129, 140, 248, 0.40);
     --app-code-bg: #282c34;
     --app-inline-code-bg: rgba(255, 255, 255, 0.1);
 

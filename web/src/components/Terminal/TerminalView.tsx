@@ -16,7 +16,9 @@ function resolveThemeColors(): { background: string; foreground: string; selecti
     const styles = getComputedStyle(document.documentElement)
     const background = styles.getPropertyValue('--app-bg').trim() || '#000000'
     const foreground = styles.getPropertyValue('--app-fg').trim() || '#ffffff'
-    const selectionBackground = styles.getPropertyValue('--app-subtle-bg').trim() || 'rgba(255, 255, 255, 0.2)'
+    const selectionBackground = styles
+        .getPropertyValue('--app-terminal-selection-bg')
+        .trim() || 'rgba(99, 102, 241, 0.38)'
     return { background, foreground, selectionBackground }
 }
 

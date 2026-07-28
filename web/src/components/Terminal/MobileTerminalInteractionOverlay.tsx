@@ -17,6 +17,8 @@ type ScreenPoint = {
 
 const MOBILE_TOOLBAR_MARGIN = 8
 const MOBILE_TOOLBAR_GAP = 8
+const COMPACT_TOOLBAR_CLASS = 'absolute flex overflow-hidden rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)]/95 p-0.5 shadow-lg backdrop-blur'
+const COMPACT_ACTION_CLASS = 'min-h-[44px] min-w-[44px] px-3 text-[13px] font-medium'
 
 type ToolbarPlacement = 'above' | 'below' | 'clamped'
 
@@ -212,12 +214,12 @@ function SelectionToolbar(props: SelectionToolbarProps) {
             anchor={props.toolbarAnchor}
             belowAnchorY={belowAnchorY}
             label={props.toolbarLabel}
-            className="absolute flex overflow-hidden rounded-full border border-[var(--app-border)] bg-[var(--app-bg)]/95 p-1 shadow-xl backdrop-blur"
+            className={COMPACT_TOOLBAR_CLASS}
             onPointerDown={(event) => event.stopPropagation()}
         >
             <button
                 type="button"
-                className="min-h-[44px] min-w-[44px] px-4 text-sm font-medium"
+                className={COMPACT_ACTION_CLASS}
                 onClick={props.onCopy}
             >
                 {props.copyLabel}
@@ -225,7 +227,7 @@ function SelectionToolbar(props: SelectionToolbarProps) {
             <span aria-hidden="true" className="my-2 w-px bg-[var(--app-border)]" />
             <button
                 type="button"
-                className="min-h-[44px] min-w-[44px] px-4 text-sm font-medium"
+                className={COMPACT_ACTION_CLASS}
                 onClick={props.onSelectAll}
             >
                 {props.selectAllLabel}
@@ -233,7 +235,7 @@ function SelectionToolbar(props: SelectionToolbarProps) {
             <span aria-hidden="true" className="my-2 w-px bg-[var(--app-border)]" />
             <button
                 type="button"
-                className="min-h-[44px] min-w-[44px] px-4 text-sm font-medium"
+                className={COMPACT_ACTION_CLASS}
                 onClick={props.onCancel}
             >
                 {props.cancelLabel}
@@ -267,7 +269,7 @@ function ChoiceAction(props: {
     return (
         <button
             type="button"
-            className="min-h-[44px] min-w-[44px] px-3 text-[13px] font-medium"
+            className={COMPACT_ACTION_CLASS}
             onPointerDown={(event) => {
                 pointerArmedRef.current = true
                 pointerArmedAtRef.current = event.timeStamp
@@ -298,7 +300,7 @@ export function MobileTerminalInteractionOverlay(props: MobileTerminalOverlayPro
                 <PositionedToolbar
                     anchor={props.choiceAnchor}
                     label={t('terminal.interaction.choice')}
-                    className="pointer-events-auto absolute flex overflow-hidden rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)]/95 p-0.5 shadow-lg backdrop-blur"
+                    className={`pointer-events-auto ${COMPACT_TOOLBAR_CLASS}`}
                 >
                     <ChoiceAction onActivate={props.onInput}>
                         {t('terminal.interaction.input')}

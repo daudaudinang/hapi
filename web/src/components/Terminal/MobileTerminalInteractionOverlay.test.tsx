@@ -203,6 +203,7 @@ describe('MobileTerminalInteractionOverlay', () => {
         const startHandle = screen.getByRole('button', { name: 'Selection start' })
         const endHandle = screen.getByRole('button', { name: 'Selection end' })
         const toolbar = screen.getByRole('toolbar', { name: 'Selection actions' })
+        expect(toolbar).toHaveClass('rounded-xl', 'p-0.5', 'shadow-lg')
         expect(startHandle).toBeVisible()
         expect(endHandle).toBeVisible()
         expect(startHandle).toHaveClass('h-[44px]', 'w-[44px]')
@@ -213,9 +214,14 @@ describe('MobileTerminalInteractionOverlay', () => {
         const copyAction = screen.getByRole('button', { name: 'Copy' })
         const selectAllAction = screen.getByRole('button', { name: 'Select all' })
         const cancelAction = screen.getByRole('button', { name: 'Cancel' })
-        expect(copyAction).toHaveClass('min-h-[44px]', 'min-w-[44px]')
-        expect(selectAllAction).toHaveClass('min-h-[44px]', 'min-w-[44px]')
-        expect(cancelAction).toHaveClass('min-h-[44px]', 'min-w-[44px]')
+        for (const action of [copyAction, selectAllAction, cancelAction]) {
+            expect(action).toHaveClass(
+                'min-h-[44px]',
+                'min-w-[44px]',
+                'px-3',
+                'text-[13px]',
+            )
+        }
 
         fireEvent.click(copyAction)
         fireEvent.click(selectAllAction)
