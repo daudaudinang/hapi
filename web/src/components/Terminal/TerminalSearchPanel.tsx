@@ -5,6 +5,7 @@ import {
     useState,
     type ChangeEvent,
     type CompositionEvent,
+    type FormEvent,
 } from 'react'
 import { useTranslation } from '@/lib/use-translation'
 import {
@@ -67,6 +68,7 @@ export function TerminalSearchPanel(props: TerminalSearchPanelProps) {
         EMPTY_TERMINAL_SEARCH_RESULTS,
     )
     const [isComposing, setIsComposing] = useState(false)
+    const inputRef = useRef<HTMLInputElement>(null)
     const composingRef = useRef(false)
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -177,26 +179,50 @@ export function TerminalSearchPanel(props: TerminalSearchPanelProps) {
         }
     }
 
+    const submitSearch = (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault()
+        composingRef.current = false
+        setIsComposing(false)
+        cancelPendingSearch()
+        const nextQuery = (inputRef.current?.value ?? query).slice(
+            0,
+            TERMINAL_SEARCH_QUERY_MAX,
+        )
+        setQuery(nextQuery)
+        if (!controller || !nextQuery) {
+            controller?.clear()
+            setResults(EMPTY_TERMINAL_SEARCH_RESULTS)
+            return
+        }
+        controller.findNext(nextQuery, {
+            caseSensitive,
+            incremental: false,
+        })
+    }
+
     const close = () => {
         cancelPendingSearch()
         props.onClose()
     }
 
     return (
-        <section
+        <form
             role="region"
             aria-label={t('terminal.search.title')}
             aria-busy={props.state.status === 'loading'}
-            className="flex min-h-14 w-full items-center gap-1 rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)]/95 p-1.5 text-[var(--app-fg)] shadow-lg backdrop-blur transition-[opacity,transform] duration-150 motion-reduce:transition-none"
+            onSubmit={submitSearch}
+            className="grid min-h-14 w-full grid-cols-[minmax(0,1fr)_44px] gap-1.5 rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)]/95 p-1.5 text-[var(--app-fg)] shadow-lg backdrop-blur transition-[opacity,transform] duration-150 motion-reduce:transition-none lg:flex lg:items-center"
         >
             {controller ? (
                 <>
-                    <label className="min-w-0 flex-1">
+                    <label className="col-start-1 row-start-1 min-w-0 flex-1">
                         <span className="sr-only">{t('terminal.search.input')}</span>
                         <input
+                            ref={inputRef}
                             type="search"
                             value={query}
                             maxLength={TERMINAL_SEARCH_QUERY_MAX}
+                            enterKeyHint="search"
                             autoCapitalize="none"
                             autoCorrect="off"
                             spellCheck={false}
@@ -208,37 +234,42 @@ export function TerminalSearchPanel(props: TerminalSearchPanelProps) {
                             className="min-h-11 w-full min-w-0 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg)] px-3 text-sm text-[var(--app-fg)] outline-none placeholder:text-[var(--app-hint)] focus-visible:ring-2 focus-visible:ring-violet-500"
                         />
                     </label>
-                    <output
-                        aria-live="polite"
-                        aria-atomic="true"
-                        className="min-w-10 shrink-0 text-center text-xs tabular-nums text-[var(--app-hint)]"
+                    <div
+                        data-testid="terminal-search-controls"
+                        className="col-span-2 row-start-2 flex items-center justify-end gap-1 lg:contents"
                     >
-                        {displayResults(results)}
-                    </output>
-                    <SearchButton
-                        label={t('terminal.search.caseSensitive')}
-                        pressed={caseSensitive}
-                        onClick={toggleCaseSensitive}
-                    >
-                        Aa
-                    </SearchButton>
-                    <SearchButton
-                        label={t('terminal.search.previous')}
-                        disabled={!query || isComposing}
-                        onClick={() => navigate('previous')}
-                    >
-                        ‹
-                    </SearchButton>
-                    <SearchButton
-                        label={t('terminal.search.next')}
-                        disabled={!query || isComposing}
-                        onClick={() => navigate('next')}
-                    >
-                        ›
-                    </SearchButton>
+                        <output
+                            aria-live="polite"
+                            aria-atomic="true"
+                            className="mr-auto min-w-10 shrink-0 text-center text-xs tabular-nums text-[var(--app-hint)] lg:mr-0"
+                        >
+                            {displayResults(results)}
+                        </output>
+                        <SearchButton
+                            label={t('terminal.search.caseSensitive')}
+                            pressed={caseSensitive}
+                            onClick={toggleCaseSensitive}
+                        >
+                            Aa
+                        </SearchButton>
+                        <SearchButton
+                            label={t('terminal.search.previous')}
+                            disabled={!query || isComposing}
+                            onClick={() => navigate('previous')}
+                        >
+                            ‹
+                        </SearchButton>
+                        <SearchButton
+                            label={t('terminal.search.next')}
+                            disabled={!query || isComposing}
+                            onClick={() => navigate('next')}
+                        >
+                            ›
+                        </SearchButton>
+                    </div>
                 </>
             ) : (
-                <div className="min-w-0 flex-1 px-2 text-sm text-[var(--app-hint)]">
+                <div className="col-start-1 row-start-1 min-w-0 flex-1 px-2 text-sm text-[var(--app-hint)]">
                     {props.state.status === 'error' ? (
                         <div className="flex min-w-0 items-center gap-2">
                             <span role="alert" className="min-w-0 flex-1 truncate">
@@ -268,6 +299,6 @@ export function TerminalSearchPanel(props: TerminalSearchPanelProps) {
             >
                 ×
             </SearchButton>
-        </section>
+        </form>
     )
 }

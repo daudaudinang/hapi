@@ -112,6 +112,7 @@ describe('TerminalSearchPanel search input', () => {
         expect(input).toHaveAttribute('autocapitalize', 'none')
         expect(input).toHaveAttribute('autocorrect', 'off')
         expect(input).toHaveAttribute('spellcheck', 'false')
+        expect(input).toHaveAttribute('enterkeyhint', 'search')
         expect(fixture.findNext).not.toHaveBeenCalled()
         expect(fixture.findPrevious).not.toHaveBeenCalled()
     })
@@ -129,6 +130,21 @@ describe('TerminalSearchPanel search input', () => {
             caseSensitive: false,
             incremental: true,
         })
+    })
+
+    it('submits immediately from the mobile Search key and cancels debounce', () => {
+        const { fixture } = renderReady()
+
+        fireEvent.change(searchbox(), { target: { value: 'needle' } })
+        fireEvent.submit(searchbox().closest('form')!)
+
+        expect(fixture.findNext).toHaveBeenCalledOnce()
+        expect(fixture.findNext).toHaveBeenCalledWith('needle', {
+            caseSensitive: false,
+            incremental: false,
+        })
+        advance(150)
+        expect(fixture.findNext).toHaveBeenCalledOnce()
     })
 
     it('waits for IME composition to end before starting one debounce', () => {
@@ -477,6 +493,16 @@ describe('TerminalSearchPanel availability and accessibility', () => {
             name: 'terminal.search.title',
         })
         expect(region).toHaveClass('motion-reduce:transition-none')
+        expect(region.tagName).toBe('FORM')
+        expect(region).toHaveClass(
+            'grid',
+            'grid-cols-[minmax(0,1fr)_44px]',
+            'lg:flex',
+        )
+        expect(screen.getByTestId('terminal-search-controls')).toHaveClass(
+            'col-span-2',
+            'lg:contents',
+        )
         expect(region.className).toContain('bg-[var(--app-bg)]')
         expect(searchbox()).toHaveClass('min-h-11')
         for (const button of screen.getAllByRole('button')) {
