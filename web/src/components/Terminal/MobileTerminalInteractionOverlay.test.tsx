@@ -10,6 +10,7 @@ vi.mock('@/lib/use-translation', () => ({
         t: (key: string) => ({
             'terminal.interaction.choice': 'Terminal action',
             'terminal.interaction.input': 'Input',
+            'terminal.interaction.enter': 'Enter',
             'terminal.interaction.select': 'Select',
             'terminal.interaction.selectionToolbar': 'Selection actions',
             'terminal.interaction.selectionStart': 'Selection start',
@@ -31,6 +32,7 @@ const baseProps: MobileTerminalOverlayProps = {
     toolbarAnchor: null,
     feedback: null,
     onInput: vi.fn(),
+    onEnter: vi.fn(),
     onSelect: vi.fn(),
     onCopy: vi.fn(),
     onSelectAll: vi.fn(),
@@ -85,15 +87,28 @@ describe('MobileTerminalInteractionOverlay', () => {
         const toolbar = screen.getByRole('toolbar', { name: 'Terminal action' })
         expect(toolbar).toHaveStyle({ left: '40px', top: '20px' })
         expect(toolbar).toHaveAttribute('data-placement', 'above')
+        expect(toolbar).toHaveClass('rounded-xl', 'p-0.5')
 
         const inputAction = screen.getByRole('button', { name: 'Input' })
+        const enterAction = screen.getByRole('button', { name: 'Enter' })
         const selectAction = screen.getByRole('button', { name: 'Select' })
-        expect(inputAction).toHaveClass('min-h-[44px]', 'min-w-[44px]')
-        expect(selectAction).toHaveClass('min-h-[44px]', 'min-w-[44px]')
+        expect(
+            screen.getAllByRole('button').map((action) => action.textContent),
+        ).toEqual(['Input', 'Enter', 'Select'])
+        for (const action of [inputAction, enterAction, selectAction]) {
+            expect(action).toHaveClass(
+                'min-h-[44px]',
+                'min-w-[44px]',
+                'px-3',
+                'text-[13px]',
+            )
+        }
 
         fireEvent.click(inputAction)
+        fireEvent.click(enterAction)
         fireEvent.click(selectAction)
         expect(baseProps.onInput).toHaveBeenCalledOnce()
+        expect(baseProps.onEnter).toHaveBeenCalledOnce()
         expect(baseProps.onSelect).toHaveBeenCalledOnce()
     })
 

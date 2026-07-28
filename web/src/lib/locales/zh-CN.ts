@@ -275,6 +275,7 @@ export default {
   'terminal.snippets.builtin.disk.description': '显示文件系统的磁盘使用情况。',
   'terminal.interaction.choice': '终端操作',
   'terminal.interaction.input': '输入',
+  'terminal.interaction.enter': '回车',
   'terminal.interaction.select': '选择',
   'terminal.interaction.selectionToolbar': '选择操作',
   'terminal.interaction.selectionStart': '选择起点',

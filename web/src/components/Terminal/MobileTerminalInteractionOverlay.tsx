@@ -267,7 +267,7 @@ function ChoiceAction(props: {
     return (
         <button
             type="button"
-            className="min-h-[44px] min-w-[44px] px-4 text-sm font-medium"
+            className="min-h-[44px] min-w-[44px] px-3 text-[13px] font-medium"
             onPointerDown={(event) => {
                 pointerArmedRef.current = true
                 pointerArmedAtRef.current = event.timeStamp
@@ -298,12 +298,16 @@ export function MobileTerminalInteractionOverlay(props: MobileTerminalOverlayPro
                 <PositionedToolbar
                     anchor={props.choiceAnchor}
                     label={t('terminal.interaction.choice')}
-                    className="pointer-events-auto absolute flex overflow-hidden rounded-full border border-[var(--app-border)] bg-[var(--app-bg)]/95 p-1 shadow-xl backdrop-blur"
+                    className="pointer-events-auto absolute flex overflow-hidden rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)]/95 p-0.5 shadow-lg backdrop-blur"
                 >
                     <ChoiceAction onActivate={props.onInput}>
                         {t('terminal.interaction.input')}
                     </ChoiceAction>
-                    <span aria-hidden="true" className="my-2 w-px bg-[var(--app-border)]" />
+                    <span aria-hidden="true" className="my-2.5 w-px bg-[var(--app-border)]" />
+                    <ChoiceAction onActivate={props.onEnter}>
+                        {t('terminal.interaction.enter')}
+                    </ChoiceAction>
+                    <span aria-hidden="true" className="my-2.5 w-px bg-[var(--app-border)]" />
                     <ChoiceAction onActivate={props.onSelect}>
                         {t('terminal.interaction.select')}
                     </ChoiceAction>

@@ -1067,6 +1067,7 @@ describe('SessionTerminalTabs', () => {
             'terminal.controls.keysPanel',
             'terminal.interaction.choice',
             'terminal.interaction.input',
+            'terminal.interaction.enter',
             'terminal.interaction.select',
             'terminal.interaction.selectionToolbar',
             'terminal.interaction.selectionStart',

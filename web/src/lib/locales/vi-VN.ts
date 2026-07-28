@@ -275,6 +275,7 @@ export default {
   'terminal.snippets.builtin.disk.description': 'Hiển thị dung lượng sử dụng của hệ thống tệp.',
   'terminal.interaction.choice': 'Thao tác terminal',
   'terminal.interaction.input': 'Nhập',
+  'terminal.interaction.enter': 'Enter',
   'terminal.interaction.select': 'Chọn',
   'terminal.interaction.selectionToolbar': 'Thao tác vùng chọn',
   'terminal.interaction.selectionStart': 'Đầu vùng chọn',

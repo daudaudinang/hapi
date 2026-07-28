@@ -120,6 +120,7 @@ vi.mock('@/lib/use-translation', () => ({
         t: (key: string) => ({
             'terminal.interaction.choice': 'Terminal action',
             'terminal.interaction.input': 'Input',
+            'terminal.interaction.enter': 'Enter',
             'terminal.interaction.select': 'Select',
             'terminal.interaction.selectionToolbar': 'Selection actions',
             'terminal.interaction.selectionStart': 'Selection start',
