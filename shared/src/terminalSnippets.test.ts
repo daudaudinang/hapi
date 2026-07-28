@@ -10,6 +10,10 @@ import {
     TerminalSnippetsResponseSchema,
     UpdateTerminalSnippetInputSchema
 } from './terminalSnippets'
+import type {
+    CreateTerminalSnippetInput,
+    UpdateTerminalSnippetInput
+} from './terminalSnippets'
 
 const validSnippet = {
     id: 'snippet-1',
@@ -19,6 +23,26 @@ const validSnippet = {
     createdAt: 1,
     updatedAt: 2
 }
+
+it('types description as optional and normalizes its omission', () => {
+    const createInput: CreateTerminalSnippetInput = {
+        name: 'Status',
+        command: 'git status'
+    }
+    const updateInput: UpdateTerminalSnippetInput = {
+        name: 'Status',
+        command: 'git status'
+    }
+
+    expect(CreateTerminalSnippetInputSchema.parse(createInput)).toEqual({
+        ...createInput,
+        description: null
+    })
+    expect(UpdateTerminalSnippetInputSchema.parse(updateInput)).toEqual({
+        ...updateInput,
+        description: null
+    })
+})
 
 describe.each([
     ['create', CreateTerminalSnippetInputSchema],

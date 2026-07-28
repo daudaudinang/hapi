@@ -43,7 +43,7 @@ export const TerminalSnippetResponseSchema = z.object({
 })
 
 export type TerminalSnippet = z.infer<typeof TerminalSnippetSchema>
-export type CreateTerminalSnippetInput = z.infer<typeof CreateTerminalSnippetInputSchema>
-export type UpdateTerminalSnippetInput = z.infer<typeof UpdateTerminalSnippetInputSchema>
+export type CreateTerminalSnippetInput = z.input<typeof CreateTerminalSnippetInputSchema>
+export type UpdateTerminalSnippetInput = z.input<typeof UpdateTerminalSnippetInputSchema>
 export type TerminalSnippetsResponse = z.infer<typeof TerminalSnippetsResponseSchema>
 export type TerminalSnippetResponse = z.infer<typeof TerminalSnippetResponseSchema>
