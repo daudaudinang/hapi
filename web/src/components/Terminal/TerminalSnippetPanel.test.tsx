@@ -430,6 +430,7 @@ describe('TerminalSnippetPanel editor', () => {
         const getTerminalSnippets = vi.fn()
             .mockRejectedValueOnce(new Error('Initial load failed'))
             .mockRejectedValueOnce(new Error('Refresh failed'))
+            .mockRejectedValueOnce(new Error('Refresh failed'))
             .mockResolvedValueOnce({ snippets: [created] })
         const createTerminalSnippet = vi.fn(async () => ({ snippet: created }))
         renderPanel({
@@ -448,7 +449,7 @@ describe('TerminalSnippetPanel editor', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
         expect(await screen.findByRole('alert')).toHaveTextContent('Refresh failed')
-        expect(getTerminalSnippets).toHaveBeenCalledTimes(2)
+        expect(getTerminalSnippets).toHaveBeenCalledTimes(3)
         expect(createTerminalSnippet).toHaveBeenCalledTimes(1)
         expect(screen.queryByLabelText('Name')).not.toBeInTheDocument()
         expect(screen.queryByRole('button', { name: 'Saving…' })).not.toBeInTheDocument()
@@ -518,7 +519,9 @@ describe('TerminalSnippetPanel editor', () => {
         const updateTerminalSnippet = vi.fn(async () => ({ snippet: updated }))
         renderPanel({
             api: apiMock({
-                getTerminalSnippets: vi.fn(async () => ({ snippets: [first, second] })),
+                getTerminalSnippets: vi.fn()
+                    .mockResolvedValueOnce({ snippets: [first, second] })
+                    .mockResolvedValue({ snippets: [updated, second] }),
                 updateTerminalSnippet,
             }),
         })
@@ -563,7 +566,9 @@ describe('TerminalSnippetPanel deletion and accessibility', () => {
         const deleteTerminalSnippet = vi.fn(async () => undefined)
         renderPanel({
             api: apiMock({
-                getTerminalSnippets: vi.fn(async () => ({ snippets: [saved] })),
+                getTerminalSnippets: vi.fn()
+                    .mockResolvedValueOnce({ snippets: [saved] })
+                    .mockResolvedValue({ snippets: [] }),
                 deleteTerminalSnippet,
             }),
         })

@@ -118,7 +118,7 @@ function shouldResetModifiers(sequence: string, state: ModifierState): boolean {
 
 export function useTerminalQuickInput(args: {
     disabled: boolean
-    write: (text: string) => void
+    write: (text: string) => boolean
 }): TerminalQuickInput {
     const modifierStateRef = useRef<ModifierState>({ ctrl: false, alt: false })
     const [ctrlActive, setCtrlActive] = useState(false)
@@ -134,10 +134,11 @@ export function useTerminalQuickInput(args: {
     }, [])
 
     const writeWithModifiers = useCallback((sequence: string, state: ModifierState) => {
-        args.write(applyTerminalModifierState(sequence, state))
+        const accepted = args.write(applyTerminalModifierState(sequence, state))
         if (shouldResetModifiers(sequence, state)) {
             resetModifiers()
         }
+        return accepted
     }, [args, resetModifiers])
 
     const sendQuickInput = useCallback((sequence: string) => {
@@ -164,9 +165,9 @@ export function useTerminalQuickInput(args: {
         if (!text || args.disabled) {
             return false
         }
-        args.write(text)
+        const accepted = args.write(text)
         resetModifiers()
-        return true
+        return accepted
     }, [args, resetModifiers])
 
     const writeTerminalData = useCallback((text: string) => {

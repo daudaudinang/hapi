@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+    useMutation,
+    useQuery,
+    useQueryClient,
+    type QueryClient
+} from '@tanstack/react-query'
 import type {
     CreateTerminalSnippetInput,
     TerminalSnippet,
@@ -28,6 +33,16 @@ type TerminalSnippetsQueryKey = ReturnType<
 type MutationScope = {
     api: ApiClient
     queryKey: TerminalSnippetsQueryKey
+}
+
+function invalidateMutationScope(
+    queryClient: QueryClient,
+    scope: MutationScope
+) {
+    return queryClient.invalidateQueries({
+        queryKey: scope.queryKey,
+        exact: true
+    })
 }
 
 function withCreatedSnippet(
@@ -87,6 +102,9 @@ export function useTerminalSnippets(
                     return withCreatedSnippet(previous, snippet)
                 }
             )
+        },
+        onSettled: (_snippet, _error, args) => {
+            return invalidateMutationScope(queryClient, args)
         }
     })
 
@@ -113,6 +131,9 @@ export function useTerminalSnippets(
                     }
                 }
             )
+        },
+        onSettled: (_snippet, _error, args) => {
+            return invalidateMutationScope(queryClient, args)
         }
     })
 
@@ -133,6 +154,9 @@ export function useTerminalSnippets(
                     }
                 }
             )
+        },
+        onSettled: (_id, _error, args) => {
+            return invalidateMutationScope(queryClient, args)
         }
     })
 

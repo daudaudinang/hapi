@@ -332,7 +332,9 @@ describe('useTerminalSnippets', () => {
             updatedAt: 20
         })
         const api = apiMock({
-            getTerminalSnippets: vi.fn(async () => ({ snippets: [existing] })),
+            getTerminalSnippets: vi.fn()
+                .mockResolvedValueOnce({ snippets: [existing] })
+                .mockResolvedValue({ snippets: [created, existing] }),
             createTerminalSnippet: vi.fn(async () => ({ snippet: created }))
         })
         const harness = createHarness()
@@ -448,7 +450,14 @@ describe('useTerminalSnippets', () => {
             updatedAt: 40
         })
         const api = apiMock({
-            getTerminalSnippets: vi.fn(async () => ({ snippets: [sameTimestampExisting] })),
+            getTerminalSnippets: vi.fn()
+                .mockResolvedValueOnce({ snippets: [sameTimestampExisting] })
+                .mockResolvedValueOnce({
+                    snippets: [createdB, sameTimestampExisting]
+                })
+                .mockResolvedValue({
+                    snippets: [createdB, sameTimestampExisting, createdA]
+                }),
             createTerminalSnippet: vi.fn()
                 .mockReturnValueOnce(promiseA)
                 .mockReturnValueOnce(promiseB)
@@ -497,7 +506,9 @@ describe('useTerminalSnippets', () => {
         const second = snippet({ id: 'second', name: 'Second' })
         const updated = { ...second, name: 'Updated second', updatedAt: 20 }
         const api = apiMock({
-            getTerminalSnippets: vi.fn(async () => ({ snippets: [first, second] })),
+            getTerminalSnippets: vi.fn()
+                .mockResolvedValueOnce({ snippets: [first, second] })
+                .mockResolvedValue({ snippets: [first, updated] }),
             updateTerminalSnippet: vi.fn(async () => ({ snippet: updated }))
         })
         const harness = createHarness()
@@ -519,11 +530,72 @@ describe('useTerminalSnippets', () => {
         })
     })
 
+    it('refetches after a deferred update so its stale response cannot overwrite newer authoritative data', async () => {
+        let resolveUpdate!: (value: { snippet: TerminalSnippet }) => void
+        const updatePromise = new Promise<{ snippet: TerminalSnippet }>((resolve) => {
+            resolveUpdate = resolve
+        })
+        const original = snippet({ name: 'Original', updatedAt: 10 })
+        const staleMutationResponse = snippet({
+            name: 'Client one',
+            updatedAt: 20
+        })
+        const newerAuthoritative = snippet({
+            name: 'Client two',
+            updatedAt: 30
+        })
+        const api = apiMock({
+            getTerminalSnippets: vi.fn()
+                .mockResolvedValueOnce({ snippets: [original] })
+                .mockResolvedValue({ snippets: [newerAuthoritative] }),
+            updateTerminalSnippet: vi.fn(() => updatePromise)
+        })
+        const harness = createHarness()
+        const queryKey = queryKeys.terminalSnippets(api.cacheScope)
+        const { result } = renderHook(
+            () => useTerminalSnippets(api, true),
+            { wrapper: harness.wrapper }
+        )
+        await waitFor(() => expect(result.current.snippets).toEqual([original]))
+
+        let mutation!: Promise<TerminalSnippet>
+        act(() => {
+            mutation = result.current.updateSnippet(original.id, {
+                name: staleMutationResponse.name,
+                command: staleMutationResponse.command
+            })
+        })
+        await act(async () => {
+            await harness.queryClient.invalidateQueries({
+                queryKey,
+                exact: true
+            })
+        })
+        await waitFor(() => {
+            expect(result.current.snippets).toEqual([newerAuthoritative])
+        })
+
+        await act(async () => {
+            resolveUpdate({ snippet: staleMutationResponse })
+            await mutation
+        })
+
+        await waitFor(() => {
+            expect(result.current.snippets).toEqual([newerAuthoritative])
+        })
+        expect(harness.queryClient.getQueryData(queryKey)).toEqual({
+            snippets: [newerAuthoritative]
+        })
+        expect(api.getTerminalSnippets).toHaveBeenCalledTimes(3)
+    })
+
     it('removes a deleted snippet from the current cache', async () => {
         const first = snippet({ id: 'first', name: 'First' })
         const second = snippet({ id: 'second', name: 'Second' })
         const api = apiMock({
-            getTerminalSnippets: vi.fn(async () => ({ snippets: [first, second] })),
+            getTerminalSnippets: vi.fn()
+                .mockResolvedValueOnce({ snippets: [first, second] })
+                .mockResolvedValue({ snippets: [second] }),
             deleteTerminalSnippet: vi.fn(async () => undefined)
         })
         const harness = createHarness()

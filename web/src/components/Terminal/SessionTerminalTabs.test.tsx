@@ -215,7 +215,7 @@ function makeController(terminals: TerminalState[] = []) {
             mocks.emittedEvents.push(`terminal:create:${input.terminalId}`)
             return true
         }),
-        write: vi.fn(),
+        write: vi.fn(() => true),
         resize: vi.fn(),
         closeOne: vi.fn((terminalId: string) => mocks.emittedEvents.push(`terminal:close:${terminalId}`)),
         keepalive: vi.fn(),

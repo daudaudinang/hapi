@@ -40,7 +40,7 @@ type TerminalErrorPayload = {
 export function useTerminalSocket(options: UseTerminalSocketOptions): {
     state: TerminalConnectionState
     connect: (cols: number, rows: number) => void
-    write: (data: string) => void
+    write: (data: string) => boolean
     resize: (cols: number, rows: number) => void
     disconnect: () => void
     close: () => void
@@ -199,9 +199,10 @@ export function useTerminalSocket(options: UseTerminalSocketOptions): {
     const write = useCallback((data: string) => {
         const socket = socketRef.current
         if (!socket || !socket.connected) {
-            return
+            return false
         }
         socket.emit('terminal:write', { terminalId: terminalIdRef.current, data })
+        return true
     }, [])
 
     const resize = useCallback((cols: number, rows: number) => {
@@ -273,7 +274,7 @@ export type SessionTerminalController = {
     disconnect: () => void
     subscribe: () => void
     create: (input: { terminalId: string; cols: number; rows: number; cwd?: string; replay?: boolean }) => boolean
-    write: (terminalId: string, data: string) => void
+    write: (terminalId: string, data: string) => boolean
     resize: (terminalId: string, cols: number, rows: number) => void
     closeOne: (terminalId: string) => void
     keepalive: (terminalId: string) => void
@@ -485,9 +486,10 @@ export function useSessionTerminalSocket(options: {
     const write = useCallback((terminalId: string, data: string) => {
         const socket = socketRef.current
         if (!socket?.connected) {
-            return
+            return false
         }
         socket.emit('terminal:write', { terminalId, data })
+        return true
     }, [])
 
     const resize = useCallback((terminalId: string, cols: number, rows: number) => {

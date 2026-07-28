@@ -138,8 +138,9 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
         write: (data) => {
             const terminalId = activeLiveTerminal?.terminalId
             if (terminalId) {
-                controller.write(terminalId, data)
+                return controller.write(terminalId, data)
             }
+            return false
         }
     })
     const searchStateRef = useRef<TerminalSearchState>(EMPTY_TERMINAL_SEARCH_STATE)

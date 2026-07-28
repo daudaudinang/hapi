@@ -257,7 +257,7 @@ describe('EditorTerminal', () => {
         mocks.useTerminalSocket.mockImplementation((options: { terminalId: string }) => {
             const disconnect = vi.fn()
             const close = vi.fn()
-            const write = vi.fn()
+            const write = vi.fn(() => true)
             mocks.disconnectsByTerminalId.set(options.terminalId, disconnect)
             mocks.closesByTerminalId.set(options.terminalId, close)
             mocks.writesByTerminalId.set(options.terminalId, write)
