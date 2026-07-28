@@ -66,6 +66,7 @@ export function TerminalSearchPanel(props: TerminalSearchPanelProps) {
     const [results, setResults] = useState<TerminalSearchResults>(
         EMPTY_TERMINAL_SEARCH_RESULTS,
     )
+    const [isComposing, setIsComposing] = useState(false)
     const composingRef = useRef(false)
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -91,6 +92,8 @@ export function TerminalSearchPanel(props: TerminalSearchPanelProps) {
     }, [cancelPendingSearch])
 
     useEffect(() => {
+        composingRef.current = false
+        setIsComposing(false)
         cancelPendingSearch()
         setResults(EMPTY_TERMINAL_SEARCH_RESULTS)
         if (!controller) return
@@ -126,11 +129,13 @@ export function TerminalSearchPanel(props: TerminalSearchPanelProps) {
 
     const startComposition = () => {
         composingRef.current = true
+        setIsComposing(true)
         cancelPendingSearch()
     }
 
     const endComposition = (event: CompositionEvent<HTMLInputElement>) => {
         composingRef.current = false
+        setIsComposing(false)
         const nextQuery = event.currentTarget.value.slice(
             0,
             TERMINAL_SEARCH_QUERY_MAX,
@@ -150,7 +155,7 @@ export function TerminalSearchPanel(props: TerminalSearchPanelProps) {
         const nextCaseSensitive = !caseSensitive
         setCaseSensitive(nextCaseSensitive)
         cancelPendingSearch()
-        if (!controller || !query) return
+        if (composingRef.current || !controller || !query) return
         controller.findNext(query, {
             caseSensitive: nextCaseSensitive,
             incremental: true,
@@ -158,6 +163,7 @@ export function TerminalSearchPanel(props: TerminalSearchPanelProps) {
     }
 
     const navigate = (direction: 'previous' | 'next') => {
+        if (composingRef.current) return
         cancelPendingSearch()
         if (!controller || !query) return
         const options = {
@@ -218,14 +224,14 @@ export function TerminalSearchPanel(props: TerminalSearchPanelProps) {
                     </SearchButton>
                     <SearchButton
                         label={t('terminal.search.previous')}
-                        disabled={!query}
+                        disabled={!query || isComposing}
                         onClick={() => navigate('previous')}
                     >
                         ‹
                     </SearchButton>
                     <SearchButton
                         label={t('terminal.search.next')}
-                        disabled={!query}
+                        disabled={!query || isComposing}
                         onClick={() => navigate('next')}
                     >
                         ›

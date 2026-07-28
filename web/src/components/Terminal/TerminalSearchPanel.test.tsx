@@ -151,6 +151,43 @@ describe('TerminalSearchPanel search input', () => {
         })
     })
 
+    it.each(['loading', 'idle'] as const)(
+        'resets interrupted IME composition after becoming %s',
+        (status) => {
+            const { fixture, rerender } = renderReady()
+            const input = searchbox()
+
+            fireEvent.compositionStart(input)
+            fireEvent.change(input, { target: { value: '未確定' } })
+            rerender(
+                <TerminalSearchPanel
+                    state={{
+                        status,
+                        controller: null,
+                        error: null,
+                        retry: null,
+                    }}
+                    onClose={vi.fn()}
+                />,
+            )
+            rerender(
+                <TerminalSearchPanel
+                    state={readyState(fixture.controller)}
+                    onClose={vi.fn()}
+                />,
+            )
+
+            fireEvent.change(searchbox(), { target: { value: 'ready' } })
+            advance(150)
+
+            expect(fixture.findNext).toHaveBeenCalledTimes(1)
+            expect(fixture.findNext).toHaveBeenCalledWith('ready', {
+                caseSensitive: false,
+                incremental: true,
+            })
+        },
+    )
+
     it('hard-truncates programmatic input to 256 characters', () => {
         const { fixture } = renderReady()
         const longQuery = 'x'.repeat(300)
@@ -187,6 +224,57 @@ describe('TerminalSearchPanel controls', () => {
         })
         advance(150)
         expect(fixture.findNext).toHaveBeenCalledTimes(1)
+    })
+
+    it('defers a case-sensitive IME query until composition ends', () => {
+        const { fixture } = renderReady()
+        const input = searchbox()
+        const toggle = screen.getByRole('button', {
+            name: 'terminal.search.caseSensitive',
+        })
+
+        fireEvent.compositionStart(input)
+        fireEvent.change(input, { target: { value: '未確定' } })
+        fireEvent.click(toggle)
+
+        expect(toggle).toHaveAttribute('aria-pressed', 'true')
+        advance(500)
+        expect(fixture.findNext).not.toHaveBeenCalled()
+
+        fireEvent.change(input, { target: { value: '確定' } })
+        fireEvent.compositionEnd(input, { data: '確定' })
+        expect(fixture.findNext).not.toHaveBeenCalled()
+        advance(149)
+        expect(fixture.findNext).not.toHaveBeenCalled()
+        advance(1)
+        expect(fixture.findNext).toHaveBeenCalledTimes(1)
+        expect(fixture.findNext).toHaveBeenCalledWith('確定', {
+            caseSensitive: true,
+            incremental: true,
+        })
+        advance(500)
+        expect(fixture.findNext).toHaveBeenCalledTimes(1)
+    })
+
+    it('disables previous and next navigation during IME composition', () => {
+        const { fixture } = renderReady()
+        const input = searchbox()
+        const previous = screen.getByRole('button', {
+            name: 'terminal.search.previous',
+        })
+        const next = screen.getByRole('button', {
+            name: 'terminal.search.next',
+        })
+
+        fireEvent.compositionStart(input)
+        fireEvent.change(input, { target: { value: '未確定' } })
+
+        expect(previous).toBeDisabled()
+        expect(next).toBeDisabled()
+        fireEvent.click(previous)
+        fireEvent.click(next)
+        expect(fixture.findPrevious).not.toHaveBeenCalled()
+        expect(fixture.findNext).not.toHaveBeenCalled()
     })
 
     it('navigates previous and next immediately with non-incremental search', () => {
