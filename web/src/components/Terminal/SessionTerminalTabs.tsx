@@ -90,7 +90,7 @@ function appendBounded(current: string, next: string): string {
 }
 
 export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
-    const { token, baseUrl } = useAppContext()
+    const { token, baseUrl, api } = useAppContext()
     const { t } = useTranslation()
     const controller = useSessionTerminalSocket({ token, baseUrl, sessionId: props.sessionId })
     const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null)
@@ -490,6 +490,7 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
             </div>
 
             <TerminalControlDock
+                api={api}
                 disabled={quickInputDisabled}
                 activeTool={activeDockTool}
                 onActiveToolChange={setActiveDockTool}

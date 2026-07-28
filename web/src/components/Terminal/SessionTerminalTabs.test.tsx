@@ -5,6 +5,30 @@ import type { TerminalState } from '@hapi/protocol'
 import { en, viVN, zhCN } from '@/lib/locales'
 import { SessionTerminalTabs } from './SessionTerminalTabs'
 
+vi.mock('@/components/Terminal/TerminalSnippetPanel', () => ({
+    TerminalSnippetPanel: (props: {
+        api: unknown
+        disabled: boolean
+        onInsert: (command: string) => boolean
+        onClose: () => void
+        onInserted?: () => void
+    }) => (
+        <section role="region" aria-label="Snippet content" data-api={String(Boolean(props.api))}>
+            <button
+                type="button"
+                onClick={() => {
+                    if (props.onInsert('git status --short')) {
+                        props.onInserted?.()
+                        props.onClose()
+                    }
+                }}
+            >
+                Insert Git status
+            </button>
+        </section>
+    ),
+}))
+
 var mocks: {
     controller: null | {
         state: { status: 'idle' | 'connecting' | 'connected' | 'error'; error?: string }
@@ -42,7 +66,11 @@ var mocks: {
 
 
 vi.mock('@/lib/app-context', () => ({
-    useAppContext: () => ({ token: 'token-1', baseUrl: 'http://hub.local', api: null })
+    useAppContext: () => ({
+        token: 'token-1',
+        baseUrl: 'http://hub.local',
+        api: { cacheScope: 'session-test' },
+    })
 }))
 
 vi.mock('@/hooks/useTerminalSocket', () => ({
@@ -212,6 +240,45 @@ describe('SessionTerminalTabs', () => {
         fireEvent.click(screen.getByRole('button', { name: 't2' }))
 
         expect(screen.queryByRole('region', { name: 'More terminal keys' })).not.toBeInTheDocument()
+    })
+
+    it('routes a snippet exactly to the active session terminal without focusing xterm', () => {
+        const focus = vi.fn()
+        mocks.autoMountTerminal = () => ({
+            focus,
+            write: vi.fn(),
+            onData: vi.fn(() => ({ dispose: vi.fn() })),
+        })
+        mocks.controller = makeController([state('t1')])
+        renderTabs()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Snippets' }))
+        expect(screen.getByRole('region', { name: 'Snippet content' })).toHaveAttribute(
+            'data-api',
+            'true',
+        )
+        expect(mocks.terminalMounts.at(-1)?.dismissMobileInteraction).toBe(true)
+        fireEvent.click(screen.getByRole('button', { name: 'Insert Git status' }))
+
+        expect(mocks.controller.write).toHaveBeenCalledWith('t1', 'git status --short')
+        expect(mocks.controller.write.mock.calls[0][1]).not.toMatch(/[\r\n]/)
+        expect(focus).not.toHaveBeenCalled()
+        expect(screen.queryByRole('region', { name: 'Snippet content' })).not.toBeInTheDocument()
+        expect(screen.getByRole('status')).toHaveTextContent('terminal.snippets.inserted')
+    })
+
+    it('closes Snippets when session terminal content is tapped or its tab changes', () => {
+        mocks.controller = makeController([state('t1'), state('t2')])
+        renderTabs()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Snippets' }))
+        expect(screen.getByRole('region', { name: 'Snippet content' })).toBeVisible()
+        fireEvent.pointerDown(screen.getByTestId('terminal-surface'))
+        expect(screen.queryByRole('region', { name: 'Snippet content' })).not.toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Snippets' }))
+        fireEvent.click(screen.getByRole('button', { name: 't2' }))
+        expect(screen.queryByRole('region', { name: 'Snippet content' })).not.toBeInTheDocument()
     })
 
     it('coordinates mobile terminal interaction with terminal availability and dock tools', () => {

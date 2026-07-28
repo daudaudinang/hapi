@@ -3,6 +3,30 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EditorTab } from '@/hooks/useEditorState'
 import { EditorTerminal } from './EditorTerminal'
 
+vi.mock('@/components/Terminal/TerminalSnippetPanel', () => ({
+    TerminalSnippetPanel: (props: {
+        api: unknown
+        disabled: boolean
+        onInsert: (command: string) => boolean
+        onClose: () => void
+        onInserted?: () => void
+    }) => (
+        <section role="region" aria-label="Snippet content" data-api={String(Boolean(props.api))}>
+            <button
+                type="button"
+                onClick={() => {
+                    if (props.onInsert('git status --short')) {
+                        props.onInserted?.()
+                        props.onClose()
+                    }
+                }}
+            >
+                Insert Git status
+            </button>
+        </section>
+    ),
+}))
+
 var mocks = {
     useSession: vi.fn(),
     useTerminalSocket: vi.fn(),
@@ -371,6 +395,57 @@ describe('EditorTerminal', () => {
             'data-dismiss-mobile-interaction',
             'true',
         )
+    })
+
+    it('routes a snippet exactly through the active editor terminal without focusing xterm', () => {
+        const api = { cacheScope: 'test' } as React.ComponentProps<typeof EditorTerminal>['api']
+        setDockViewport(true)
+        renderMachineTerminal({ mobileMode: true, api })
+        const { focus } = mountLastTerminal()
+
+        fireEvent.click(screen.getAllByRole('button', { name: 'Snippets' })[0])
+        expect(screen.getByRole('region', { name: 'Snippet content' })).toHaveAttribute(
+            'data-api',
+            'true',
+        )
+        expect(screen.getByTestId('terminal-view')).toHaveAttribute(
+            'data-dismiss-mobile-interaction',
+            'true',
+        )
+        fireEvent.click(screen.getByRole('button', { name: 'Insert Git status' }))
+
+        expectTerminalWrite('term-machine', 'git status --short')
+        expect(focus).not.toHaveBeenCalled()
+        expect(screen.queryByRole('region', { name: 'Snippet content' })).not.toBeInTheDocument()
+        expect(screen.getByRole('status')).toHaveTextContent('terminal.snippets.inserted')
+    })
+
+    it('closes the active Snippets panel when switching editor terminal tabs', () => {
+        const machineTabs: EditorTab[] = [
+            { id: 'term-machine-1', type: 'terminal', label: 'Terminal: bash', shell: 'bash', machineId: 'machine-1', cwd: '/repo' },
+            { id: 'term-machine-2', type: 'terminal', label: 'Terminal: zsh', shell: 'zsh', machineId: 'machine-1', cwd: '/repo' },
+        ]
+        const commonProps = {
+            tabs: machineTabs,
+            isCollapsed: false,
+            api: null,
+            onSelectTab: vi.fn(),
+            onCloseTab: vi.fn(),
+            onOpenTerminal: vi.fn(),
+            onToggleCollapsed: vi.fn(),
+        }
+        const rendered = render(
+            <EditorTerminal {...commonProps} activeTabId="term-machine-1" />,
+        )
+
+        fireEvent.click(screen.getAllByRole('button', { name: 'Snippets' })[0])
+        expect(screen.getByRole('region', { name: 'Snippet content' })).toBeVisible()
+
+        rendered.rerender(
+            <EditorTerminal {...commonProps} activeTabId="term-machine-2" />,
+        )
+
+        expect(screen.queryByRole('region', { name: 'Snippet content' })).not.toBeInTheDocument()
     })
 
     it('disables terminal interaction while the editor terminal is disconnected', () => {

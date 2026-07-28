@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PointerEvent } from 'react'
+import type { ApiClient } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import {
     AppDialog,
@@ -14,11 +15,13 @@ import {
     QUICK_INPUT_ROWS,
     type QuickInput,
 } from './terminalControls'
+import { TerminalSnippetPanel } from './TerminalSnippetPanel'
 
 export type TerminalDockTool = 'snippets' | 'search' | 'history' | 'keys' | 'more'
 export type TerminalDockAction = 'paste' | TerminalDockTool
 
 export type TerminalControlDockProps = {
+    api: ApiClient | null
     disabled: boolean
     activeTool: TerminalDockTool | null
     onActiveToolChange: (tool: TerminalDockTool | null) => void
@@ -294,12 +297,17 @@ export function TerminalControlDock(props: TerminalControlDockProps) {
     const [pasteDialogOpen, setPasteDialogOpen] = useState(false)
     const [manualPasteText, setManualPasteText] = useState('')
     const [pasteFeedback, setPasteFeedback] = useState(false)
+    const [snippetFeedback, setSnippetFeedback] = useState(false)
     const [functionLayer, setFunctionLayer] = useState(false)
     const pasteFeedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const snippetFeedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     useEffect(() => () => {
         if (pasteFeedbackTimer.current) {
             clearTimeout(pasteFeedbackTimer.current)
+        }
+        if (snippetFeedbackTimer.current) {
+            clearTimeout(snippetFeedbackTimer.current)
         }
     }, [])
 
@@ -355,8 +363,35 @@ export function TerminalControlDock(props: TerminalControlDockProps) {
         }
     }, [])
 
+    const announceSnippetInsert = useCallback(() => {
+        if (snippetFeedbackTimer.current) {
+            clearTimeout(snippetFeedbackTimer.current)
+        }
+        setSnippetFeedback(true)
+        snippetFeedbackTimer.current = setTimeout(() => {
+            setSnippetFeedback(false)
+            snippetFeedbackTimer.current = null
+        }, 1200)
+    }, [])
+
     return (
         <div className="relative z-30 shrink-0 lg:hidden">
+            {props.activeTool === 'snippets' ? (
+                <section
+                    role="region"
+                    aria-label={`${t('terminal.controls.snippets')} · ${t('terminal.snippets.insertOnly')}`}
+                    className="absolute bottom-full left-2 right-2 mb-2"
+                >
+                    <TerminalSnippetPanel
+                        api={props.api}
+                        disabled={props.disabled}
+                        onInsert={props.onWritePlainInput}
+                        onInserted={announceSnippetInsert}
+                        onClose={() => props.onActiveToolChange(null)}
+                    />
+                </section>
+            ) : null}
+
             {props.activeTool === 'keys' ? (
                 <section
                     role="region"
@@ -399,7 +434,17 @@ export function TerminalControlDock(props: TerminalControlDockProps) {
                     disabled={props.disabled}
                     onClick={() => void handlePasteAction()}
                 />
-                <DockButton tool="snippets" label={t('terminal.controls.snippets')} disabled />
+                <DockButton
+                    tool="snippets"
+                    label={t('terminal.controls.snippets')}
+                    active={props.activeTool === 'snippets'}
+                    disabled={props.disabled}
+                    onClick={() => toggleTool(
+                        props.activeTool,
+                        'snippets',
+                        props.onActiveToolChange,
+                    )}
+                />
                 <DockButton tool="search" label={t('terminal.controls.search')} disabled />
                 <DockButton tool="history" label={t('terminal.controls.history')} disabled />
                 <DockButton
@@ -428,6 +473,11 @@ export function TerminalControlDock(props: TerminalControlDockProps) {
             {pasteFeedback ? (
                 <span role="status" className="sr-only">
                     {t('terminal.controls.pasted')}
+                </span>
+            ) : null}
+            {snippetFeedback ? (
+                <span role="status" className="sr-only">
+                    {t('terminal.snippets.inserted')}
                 </span>
             ) : null}
         </div>

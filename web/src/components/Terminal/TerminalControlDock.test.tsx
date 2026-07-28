@@ -1,4 +1,6 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { useState, type ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
     TerminalControlDock,
@@ -26,11 +28,43 @@ vi.mock('@/lib/use-translation', () => ({
             'terminal.controls.navigation': 'Navigation',
             'terminal.controls.functionKeys': 'Function keys',
             'terminal.controls.symbols': 'Symbols',
+            'terminal.snippets.title': 'Snippets',
+            'terminal.snippets.insertOnly': 'Insert only · does not run',
+            'terminal.snippets.new': 'New',
+            'terminal.snippets.close': 'Close snippets',
+            'terminal.snippets.search': 'Search snippets',
+            'terminal.snippets.tabs': 'Snippet sources',
+            'terminal.snippets.builtIn': 'Built-in',
+            'terminal.snippets.mySnippets': 'My snippets',
+            'terminal.snippets.insert': 'Insert',
+            'terminal.snippets.insertFailed': 'Could not insert the snippet.',
+            'terminal.snippets.inserted': 'Inserted · not executed',
+            'terminal.snippets.group.navigation': 'Navigation',
+            'terminal.snippets.group.git': 'Git',
+            'terminal.snippets.group.system': 'System',
+            'terminal.snippets.builtin.pwd.name': 'Working directory',
+            'terminal.snippets.builtin.pwd.description': 'Show the current directory.',
+            'terminal.snippets.builtin.list.name': 'List files',
+            'terminal.snippets.builtin.list.description': 'List all files with details.',
+            'terminal.snippets.builtin.clear.name': 'Clear terminal',
+            'terminal.snippets.builtin.clear.description': 'Clear the terminal screen.',
+            'terminal.snippets.builtin.gitStatus.name': 'Git status',
+            'terminal.snippets.builtin.gitStatus.description': 'Show a concise working tree status.',
+            'terminal.snippets.builtin.gitDiff.name': 'Git diff',
+            'terminal.snippets.builtin.gitDiff.description': 'Show unstaged changes.',
+            'terminal.snippets.builtin.gitLog.name': 'Recent commits',
+            'terminal.snippets.builtin.gitLog.description': 'Show the ten latest commits.',
+            'terminal.snippets.builtin.processes.name': 'Processes',
+            'terminal.snippets.builtin.processes.description': 'Show running processes.',
+            'terminal.snippets.builtin.disk.name': 'Disk usage',
+            'terminal.snippets.builtin.disk.description': 'Show filesystem disk usage.',
         }[key] ?? key),
+        locale: 'en',
     }),
 }))
 
 const defaultProps: TerminalControlDockProps = {
+    api: null,
     disabled: false,
     activeTool: null,
     onActiveToolChange: vi.fn(),
@@ -46,7 +80,30 @@ function makeDock(overrides: Partial<TerminalControlDockProps> = {}) {
 }
 
 function renderDock(overrides: Partial<TerminalControlDockProps> = {}) {
-    return render(makeDock(overrides))
+    const queryClient = new QueryClient({
+        defaultOptions: {
+            queries: { retry: false },
+            mutations: { retry: false },
+        },
+    })
+    const wrapper = ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    )
+    return render(makeDock(overrides), { wrapper })
+}
+
+function ControlledDock(props: {
+    onWritePlainInput: (text: string) => boolean
+}) {
+    const [activeTool, setActiveTool] = useState<TerminalControlDockProps['activeTool']>(null)
+    return (
+        <TerminalControlDock
+            {...defaultProps}
+            activeTool={activeTool}
+            onActiveToolChange={setActiveTool}
+            onWritePlainInput={props.onWritePlainInput}
+        />
+    )
 }
 
 afterEach(() => {
@@ -56,7 +113,7 @@ afterEach(() => {
 })
 
 describe('TerminalControlDock', () => {
-    it('renders a slim six-item dock and disables unfinished tools', () => {
+    it('renders a slim six-item dock with Snippets enabled and History disabled', () => {
         renderDock()
 
         expect(screen.getByRole('toolbar', { name: 'Terminal controls' })).toHaveClass(
@@ -72,9 +129,65 @@ describe('TerminalControlDock', () => {
             expect.objectContaining({ textContent: 'Keys' }),
             expect.objectContaining({ textContent: 'More' }),
         ]))
-        expect(screen.getByRole('button', { name: 'Snippets' })).toBeDisabled()
+        expect(screen.getByRole('button', { name: 'Snippets' })).toBeEnabled()
         expect(screen.getByRole('button', { name: 'Search' })).toBeDisabled()
         expect(screen.getByRole('button', { name: 'History' })).toBeDisabled()
+    })
+
+    it('opens Snippets in a floating region rather than a dialog', () => {
+        const onActiveToolChange = vi.fn()
+        const rendered = renderDock({ onActiveToolChange })
+
+        fireEvent.click(screen.getByRole('button', { name: 'Snippets' }))
+        expect(onActiveToolChange).toHaveBeenCalledWith('snippets')
+
+        rendered.rerender(makeDock({
+            activeTool: 'snippets',
+            onActiveToolChange,
+        }))
+
+        const panel = screen.getByRole('region', { name: 'Snippets' })
+        expect(panel.parentElement).toHaveAttribute('role', 'region')
+        expect(panel.parentElement).toHaveClass('absolute')
+        expect(screen.queryByRole('dialog', { name: 'Snippets' })).not.toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Snippets' }))
+        expect(onActiveToolChange).toHaveBeenLastCalledWith(null)
+    })
+
+    it('inserts an exact snippet without executing it and keeps feedback after closing', () => {
+        const onWritePlainInput = vi.fn<(text: string) => boolean>(() => true)
+        const queryClient = new QueryClient()
+        render(
+            <QueryClientProvider client={queryClient}>
+                <ControlledDock onWritePlainInput={onWritePlainInput} />
+            </QueryClientProvider>,
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: 'Snippets' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Insert Git status' }))
+
+        expect(onWritePlainInput).toHaveBeenCalledWith('git status --short')
+        expect(onWritePlainInput.mock.calls[0][0]).not.toMatch(/[\r\n]/)
+        expect(screen.queryByRole('region', { name: 'Snippets' })).not.toBeInTheDocument()
+        expect(screen.getByRole('status')).toHaveTextContent('Inserted · not executed')
+    })
+
+    it('keeps Snippets open when inserting into the terminal fails', () => {
+        const onWritePlainInput = vi.fn(() => false)
+        const queryClient = new QueryClient()
+        render(
+            <QueryClientProvider client={queryClient}>
+                <ControlledDock onWritePlainInput={onWritePlainInput} />
+            </QueryClientProvider>,
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: 'Snippets' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Insert Working directory' }))
+
+        expect(onWritePlainInput).toHaveBeenCalledWith('pwd')
+        expect(screen.getByRole('region', { name: 'Snippets' })).toBeVisible()
+        expect(screen.getByRole('status')).toHaveTextContent('Could not insert the snippet.')
     })
 
     it('opens an anchored panel instead of a dialog and toggles it closed', () => {
