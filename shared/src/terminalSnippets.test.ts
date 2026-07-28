@@ -51,6 +51,31 @@ describe.each([
         }).description).toBeNull()
     })
 
+    it('accepts fields at their exact maximum lengths', () => {
+        const input = {
+            name: 'n'.repeat(TERMINAL_SNIPPET_NAME_MAX_LENGTH),
+            command: 'c'.repeat(TERMINAL_SNIPPET_COMMAND_MAX_LENGTH),
+            description: 'd'.repeat(TERMINAL_SNIPPET_DESCRIPTION_MAX_LENGTH)
+        }
+
+        expect(schema.parse(input)).toEqual(input)
+    })
+
+    it('strips server-owned fields from client input', () => {
+        expect(schema.parse({
+            id: 'client-controlled-id',
+            name: 'Safe input',
+            command: 'pwd',
+            description: null,
+            createdAt: 100,
+            updatedAt: 200
+        })).toEqual({
+            name: 'Safe input',
+            command: 'pwd',
+            description: null
+        })
+    })
+
     it('rejects empty or oversized user input', () => {
         const base = { name: 'Valid', command: 'pwd' }
 
