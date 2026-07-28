@@ -129,6 +129,169 @@ describe('useTerminalSnippets', () => {
         expect(apiB.getTerminalSnippets).toHaveBeenCalledTimes(1)
     })
 
+    it('reconciles a deferred create with its invocation scope after switching APIs', async () => {
+        let resolveCreate!: (value: { snippet: TerminalSnippet }) => void
+        const createPromise = new Promise<{ snippet: TerminalSnippet }>((resolve) => {
+            resolveCreate = resolve
+        })
+        const existingA = snippet({
+            id: 'existing-a',
+            name: 'Existing A',
+            createdAt: 10,
+            updatedAt: 10
+        })
+        const createdA = snippet({
+            id: 'created-a',
+            name: 'Created A',
+            createdAt: 20,
+            updatedAt: 20
+        })
+        const existingB = snippet({ id: 'existing-b', name: 'Existing B' })
+        const apiA = apiMock({
+            cacheScope: 'hub::ns-a',
+            getTerminalSnippets: vi.fn(async () => ({ snippets: [existingA] })),
+            createTerminalSnippet: vi.fn(() => createPromise)
+        })
+        const apiB = apiMock({
+            cacheScope: 'hub::ns-b',
+            getTerminalSnippets: vi.fn(async () => ({ snippets: [existingB] }))
+        })
+        const harness = createHarness()
+        const { result, rerender } = renderHook(
+            ({ api }) => useTerminalSnippets(api, true),
+            {
+                initialProps: { api: apiA },
+                wrapper: harness.wrapper
+            }
+        )
+        await waitFor(() => expect(result.current.snippets).toEqual([existingA]))
+
+        let mutation!: Promise<TerminalSnippet>
+        act(() => {
+            mutation = result.current.createSnippet({
+                name: createdA.name,
+                command: createdA.command
+            })
+        })
+        rerender({ api: apiB })
+        await waitFor(() => expect(result.current.snippets).toEqual([existingB]))
+
+        await act(async () => {
+            resolveCreate({ snippet: createdA })
+            await mutation
+        })
+
+        expect(result.current.snippets).toEqual([existingB])
+        expect(harness.queryClient.getQueryData(
+            queryKeys.terminalSnippets(apiA.cacheScope)
+        )).toEqual({ snippets: [createdA, existingA] })
+        expect(harness.queryClient.getQueryData(
+            queryKeys.terminalSnippets(apiB.cacheScope)
+        )).toEqual({ snippets: [existingB] })
+    })
+
+    it('reconciles a deferred update with its invocation scope after switching APIs', async () => {
+        let resolveUpdate!: (value: { snippet: TerminalSnippet }) => void
+        const updatePromise = new Promise<{ snippet: TerminalSnippet }>((resolve) => {
+            resolveUpdate = resolve
+        })
+        const existingA = snippet({ id: 'shared', name: 'Namespace A' })
+        const updatedA = snippet({
+            id: 'shared',
+            name: 'Updated namespace A',
+            updatedAt: 20
+        })
+        const existingB = snippet({ id: 'shared', name: 'Namespace B' })
+        const apiA = apiMock({
+            cacheScope: 'hub::ns-a',
+            getTerminalSnippets: vi.fn(async () => ({ snippets: [existingA] })),
+            updateTerminalSnippet: vi.fn(() => updatePromise)
+        })
+        const apiB = apiMock({
+            cacheScope: 'hub::ns-b',
+            getTerminalSnippets: vi.fn(async () => ({ snippets: [existingB] }))
+        })
+        const harness = createHarness()
+        const { result, rerender } = renderHook(
+            ({ api }) => useTerminalSnippets(api, true),
+            {
+                initialProps: { api: apiA },
+                wrapper: harness.wrapper
+            }
+        )
+        await waitFor(() => expect(result.current.snippets).toEqual([existingA]))
+
+        let mutation!: Promise<TerminalSnippet>
+        act(() => {
+            mutation = result.current.updateSnippet(existingA.id, {
+                name: updatedA.name,
+                command: updatedA.command
+            })
+        })
+        rerender({ api: apiB })
+        await waitFor(() => expect(result.current.snippets).toEqual([existingB]))
+
+        await act(async () => {
+            resolveUpdate({ snippet: updatedA })
+            await mutation
+        })
+
+        expect(result.current.snippets).toEqual([existingB])
+        expect(harness.queryClient.getQueryData(
+            queryKeys.terminalSnippets(apiA.cacheScope)
+        )).toEqual({ snippets: [updatedA] })
+        expect(harness.queryClient.getQueryData(
+            queryKeys.terminalSnippets(apiB.cacheScope)
+        )).toEqual({ snippets: [existingB] })
+    })
+
+    it('reconciles a deferred delete with its invocation scope after switching APIs', async () => {
+        let resolveDelete!: () => void
+        const deletePromise = new Promise<void>((resolve) => {
+            resolveDelete = resolve
+        })
+        const existingA = snippet({ id: 'shared', name: 'Namespace A' })
+        const existingB = snippet({ id: 'shared', name: 'Namespace B' })
+        const apiA = apiMock({
+            cacheScope: 'hub::ns-a',
+            getTerminalSnippets: vi.fn(async () => ({ snippets: [existingA] })),
+            deleteTerminalSnippet: vi.fn(() => deletePromise)
+        })
+        const apiB = apiMock({
+            cacheScope: 'hub::ns-b',
+            getTerminalSnippets: vi.fn(async () => ({ snippets: [existingB] }))
+        })
+        const harness = createHarness()
+        const { result, rerender } = renderHook(
+            ({ api }) => useTerminalSnippets(api, true),
+            {
+                initialProps: { api: apiA },
+                wrapper: harness.wrapper
+            }
+        )
+        await waitFor(() => expect(result.current.snippets).toEqual([existingA]))
+
+        let mutation!: Promise<void>
+        act(() => {
+            mutation = result.current.deleteSnippet(existingA.id)
+        })
+        rerender({ api: apiB })
+        await waitFor(() => expect(result.current.snippets).toEqual([existingB]))
+
+        await act(async () => {
+            resolveDelete()
+            await mutation
+        })
+
+        expect(result.current.snippets).toEqual([existingB])
+        expect(harness.queryClient.getQueryData(
+            queryKeys.terminalSnippets(apiA.cacheScope)
+        )).toEqual({ snippets: [] })
+        expect(harness.queryClient.getQueryData(
+            queryKeys.terminalSnippets(apiB.cacheScope)
+        )).toEqual({ snippets: [existingB] })
+    })
+
     it('prepends a created snippet to the current cache after server success', async () => {
         const existing = snippet({ id: 'existing' })
         const created = snippet({

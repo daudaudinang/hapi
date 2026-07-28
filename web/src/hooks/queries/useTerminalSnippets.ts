@@ -21,6 +21,15 @@ function sortTerminalSnippets(
     return left.id < right.id ? 1 : -1
 }
 
+type TerminalSnippetsQueryKey = ReturnType<
+    typeof queryKeys.terminalSnippets
+>
+
+type MutationScope = {
+    api: ApiClient
+    queryKey: TerminalSnippetsQueryKey
+}
+
 export function useTerminalSnippets(
     api: ApiClient | null,
     enabled: boolean
@@ -50,15 +59,14 @@ export function useTerminalSnippets(
     })
 
     const createMutation = useMutation({
-        mutationFn: async (input: CreateTerminalSnippetInput) => {
-            if (!api) {
-                throw new Error('API unavailable')
-            }
-            return (await api.createTerminalSnippet(input)).snippet
+        mutationFn: async (args: MutationScope & {
+            input: CreateTerminalSnippetInput
+        }) => {
+            return (await args.api.createTerminalSnippet(args.input)).snippet
         },
-        onSuccess: (snippet) => {
+        onSuccess: (snippet, args) => {
             queryClient.setQueryData<TerminalSnippetsResponse>(
-                queryKey,
+                args.queryKey,
                 (previous) => {
                     if (!previous) {
                         return previous
@@ -77,18 +85,17 @@ export function useTerminalSnippets(
     })
 
     const updateMutation = useMutation({
-        mutationFn: async (args: {
+        mutationFn: async (args: MutationScope & {
             id: string
             input: UpdateTerminalSnippetInput
         }) => {
-            if (!api) {
-                throw new Error('API unavailable')
-            }
-            return (await api.updateTerminalSnippet(args.id, args.input)).snippet
+            return (
+                await args.api.updateTerminalSnippet(args.id, args.input)
+            ).snippet
         },
-        onSuccess: (snippet) => {
+        onSuccess: (snippet, args) => {
             queryClient.setQueryData<TerminalSnippetsResponse>(
-                queryKey,
+                args.queryKey,
                 (previous) => {
                     if (!previous) {
                         return previous
@@ -104,16 +111,13 @@ export function useTerminalSnippets(
     })
 
     const deleteMutation = useMutation({
-        mutationFn: async (id: string) => {
-            if (!api) {
-                throw new Error('API unavailable')
-            }
-            await api.deleteTerminalSnippet(id)
-            return id
+        mutationFn: async (args: MutationScope & { id: string }) => {
+            await args.api.deleteTerminalSnippet(args.id)
+            return args.id
         },
-        onSuccess: (id) => {
+        onSuccess: (id, args) => {
             queryClient.setQueryData<TerminalSnippetsResponse>(
-                queryKey,
+                args.queryKey,
                 (previous) => {
                     if (!previous) {
                         return previous
@@ -135,10 +139,36 @@ export function useTerminalSnippets(
                 ? 'Failed to load terminal snippets'
                 : null,
         refetch: query.refetch,
-        createSnippet: createMutation.mutateAsync,
-        updateSnippet: async (id, input) => await updateMutation.mutateAsync({ id, input }),
+        createSnippet: async (input) => {
+            if (!api) {
+                throw new Error('API unavailable')
+            }
+            return await createMutation.mutateAsync({
+                api,
+                queryKey,
+                input
+            })
+        },
+        updateSnippet: async (id, input) => {
+            if (!api) {
+                throw new Error('API unavailable')
+            }
+            return await updateMutation.mutateAsync({
+                api,
+                queryKey,
+                id,
+                input
+            })
+        },
         deleteSnippet: async (id) => {
-            await deleteMutation.mutateAsync(id)
+            if (!api) {
+                throw new Error('API unavailable')
+            }
+            await deleteMutation.mutateAsync({
+                api,
+                queryKey,
+                id
+            })
         },
         isPending: createMutation.isPending
             || updateMutation.isPending
