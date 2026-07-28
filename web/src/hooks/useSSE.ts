@@ -10,6 +10,7 @@ import type {
     SessionSummary,
     SyncEvent
 } from '@/types/api'
+import { deriveApiCacheScope } from '@/api/client'
 import { queryKeys } from '@/lib/query-keys'
 import { clearMessageWindow, getMessageWindowState, ingestIncomingMessages, markMessagesConsumed, updateMessageStatus } from '@/lib/message-window-store'
 
@@ -193,6 +194,10 @@ export function useSSE(options: {
     onToast?: (event: ToastEvent) => void
 }): { subscriptionId: string | null } {
     const queryClient = useQueryClient()
+    const terminalSnippetCacheScope = deriveApiCacheScope(
+        options.baseUrl,
+        options.token
+    )
     const onEventRef = useRef(options.onEvent)
     const onConnectRef = useRef(options.onConnect)
     const onDisconnectRef = useRef(options.onDisconnect)
@@ -557,7 +562,10 @@ export function useSSE(options: {
 
             if (event.type === 'terminal-snippets-updated') {
                 void queryClient.invalidateQueries({
-                    queryKey: queryKeys.terminalSnippets
+                    queryKey: queryKeys.terminalSnippets(
+                        terminalSnippetCacheScope
+                    ),
+                    exact: true
                 }).catch(() => {})
             }
 

@@ -37,12 +37,14 @@ function createHarness() {
 }
 
 function apiMock(overrides: {
+    cacheScope?: string
     getTerminalSnippets?: () => Promise<{ snippets: TerminalSnippet[] }>
     createTerminalSnippet?: (input: CreateTerminalSnippetInput) => Promise<{ snippet: TerminalSnippet }>
     updateTerminalSnippet?: (id: string, input: UpdateTerminalSnippetInput) => Promise<{ snippet: TerminalSnippet }>
     deleteTerminalSnippet?: (id: string) => Promise<void>
 } = {}): ApiClient {
     return {
+        cacheScope: 'hub-a::ns-a',
         getTerminalSnippets: vi.fn(async () => ({ snippets: [] })),
         createTerminalSnippet: vi.fn(),
         updateTerminalSnippet: vi.fn(),
@@ -93,12 +95,48 @@ describe('useTerminalSnippets', () => {
             expect(result.current.snippets).toEqual(snippets)
         })
         expect(api.getTerminalSnippets).toHaveBeenCalledTimes(1)
-        expect(harness.queryClient.getQueryData(queryKeys.terminalSnippets)).toEqual({ snippets })
+        expect(harness.queryClient.getQueryData(
+            queryKeys.terminalSnippets(api.cacheScope)
+        )).toEqual({ snippets })
+    })
+
+    it('does not render or reuse snippets when the authenticated cache scope changes', async () => {
+        const namespaceA = snippet({ id: 'ns-a', name: 'Namespace A' })
+        const namespaceB = snippet({ id: 'ns-b', name: 'Namespace B' })
+        const apiA = apiMock({
+            cacheScope: 'hub::ns-a',
+            getTerminalSnippets: vi.fn(async () => ({ snippets: [namespaceA] }))
+        })
+        const apiB = apiMock({
+            cacheScope: 'hub::ns-b',
+            getTerminalSnippets: vi.fn(async () => ({ snippets: [namespaceB] }))
+        })
+        const harness = createHarness()
+        const { result, rerender } = renderHook(
+            ({ api }) => useTerminalSnippets(api, true),
+            {
+                initialProps: { api: apiA },
+                wrapper: harness.wrapper
+            }
+        )
+        await waitFor(() => expect(result.current.snippets).toEqual([namespaceA]))
+
+        rerender({ api: apiB })
+
+        expect(result.current.snippets).not.toEqual([namespaceA])
+        await waitFor(() => expect(result.current.snippets).toEqual([namespaceB]))
+        expect(apiA.getTerminalSnippets).toHaveBeenCalledTimes(1)
+        expect(apiB.getTerminalSnippets).toHaveBeenCalledTimes(1)
     })
 
     it('prepends a created snippet to the current cache after server success', async () => {
         const existing = snippet({ id: 'existing' })
-        const created = snippet({ id: 'created', name: 'Created' })
+        const created = snippet({
+            id: 'created',
+            name: 'Created',
+            createdAt: 20,
+            updatedAt: 20
+        })
         const api = apiMock({
             getTerminalSnippets: vi.fn(async () => ({ snippets: [existing] })),
             createTerminalSnippet: vi.fn(async () => ({ snippet: created }))
@@ -120,8 +158,143 @@ describe('useTerminalSnippets', () => {
         await waitFor(() => {
             expect(result.current.snippets).toEqual([created, existing])
         })
-        expect(harness.queryClient.getQueryData(queryKeys.terminalSnippets)).toEqual({
+        expect(harness.queryClient.getQueryData(
+            queryKeys.terminalSnippets(api.cacheScope)
+        )).toEqual({
             snippets: [created, existing]
+        })
+    })
+
+    it('upserts a created snippet when an SSE refetch cached it before the mutation response', async () => {
+        const created = snippet({ id: 'created', name: 'Created' })
+        const api = apiMock({
+            getTerminalSnippets: vi.fn(async () => ({ snippets: [created] })),
+            createTerminalSnippet: vi.fn(async () => ({ snippet: created }))
+        })
+        const harness = createHarness()
+        const { result } = renderHook(
+            () => useTerminalSnippets(api, true),
+            { wrapper: harness.wrapper }
+        )
+        await waitFor(() => expect(result.current.snippets).toEqual([created]))
+
+        await act(async () => {
+            await result.current.createSnippet({
+                name: created.name,
+                command: created.command
+            })
+        })
+
+        await waitFor(() => expect(result.current.snippets).toEqual([created]))
+        expect(result.current.snippets.filter((item) => item.id === created.id)).toHaveLength(1)
+    })
+
+    it('does not create a partial list cache before the lazy query is enabled', async () => {
+        const created = snippet({ id: 'created', name: 'Created' })
+        const existing = snippet({ id: 'existing', name: 'Existing', createdAt: 5, updatedAt: 5 })
+        const api = apiMock({
+            getTerminalSnippets: vi.fn(async () => ({ snippets: [created, existing] })),
+            createTerminalSnippet: vi.fn(async () => ({ snippet: created }))
+        })
+        const harness = createHarness()
+        const { result, rerender } = renderHook(
+            ({ enabled }) => useTerminalSnippets(api, enabled),
+            {
+                initialProps: { enabled: false },
+                wrapper: harness.wrapper
+            }
+        )
+
+        await act(async () => {
+            await result.current.createSnippet({
+                name: created.name,
+                command: created.command
+            })
+        })
+        expect(api.getTerminalSnippets).not.toHaveBeenCalled()
+        expect(
+            harness.queryClient
+                .getQueriesData({ queryKey: ['terminal-snippets'] })
+                .every(([, data]) => data === undefined)
+        ).toBe(true)
+
+        rerender({ enabled: true })
+
+        await waitFor(() => {
+            expect(result.current.snippets).toEqual([created, existing])
+        })
+        expect(api.getTerminalSnippets).toHaveBeenCalledTimes(1)
+    })
+
+    it('sorts concurrent create responses by server timestamp and deterministic ID order', async () => {
+        let resolveA!: (value: { snippet: TerminalSnippet }) => void
+        let resolveB!: (value: { snippet: TerminalSnippet }) => void
+        const promiseA = new Promise<{ snippet: TerminalSnippet }>((resolve) => {
+            resolveA = resolve
+        })
+        const promiseB = new Promise<{ snippet: TerminalSnippet }>((resolve) => {
+            resolveB = resolve
+        })
+        const sameTimestampExisting = snippet({
+            id: 'c',
+            name: 'Existing C',
+            createdAt: 30,
+            updatedAt: 30
+        })
+        const createdA = snippet({
+            id: 'a',
+            name: 'Created A',
+            createdAt: 30,
+            updatedAt: 30
+        })
+        const createdB = snippet({
+            id: 'b',
+            name: 'Created B',
+            createdAt: 40,
+            updatedAt: 40
+        })
+        const api = apiMock({
+            getTerminalSnippets: vi.fn(async () => ({ snippets: [sameTimestampExisting] })),
+            createTerminalSnippet: vi.fn()
+                .mockReturnValueOnce(promiseA)
+                .mockReturnValueOnce(promiseB)
+        })
+        const harness = createHarness()
+        const { result } = renderHook(
+            () => useTerminalSnippets(api, true),
+            { wrapper: harness.wrapper }
+        )
+        await waitFor(() => {
+            expect(result.current.snippets).toEqual([sameTimestampExisting])
+        })
+
+        let createA!: Promise<TerminalSnippet>
+        let createB!: Promise<TerminalSnippet>
+        act(() => {
+            createA = result.current.createSnippet({
+                name: createdA.name,
+                command: createdA.command
+            })
+            createB = result.current.createSnippet({
+                name: createdB.name,
+                command: createdB.command
+            })
+        })
+        await act(async () => {
+            resolveB({ snippet: createdB })
+            await createB
+        })
+        await act(async () => {
+            resolveA({ snippet: createdA })
+            await createA
+        })
+
+        await waitFor(() => {
+            expect(result.current.snippets).toEqual([
+                createdB,
+                sameTimestampExisting,
+                createdA
+            ])
         })
     })
 
@@ -197,7 +370,9 @@ describe('useTerminalSnippets', () => {
         })).rejects.toBe(failure)
 
         expect(result.current.snippets).toEqual([existing])
-        expect(harness.queryClient.getQueryData(queryKeys.terminalSnippets)).toEqual({
+        expect(harness.queryClient.getQueryData(
+            queryKeys.terminalSnippets(api.cacheScope)
+        )).toEqual({
             snippets: [existing]
         })
     })

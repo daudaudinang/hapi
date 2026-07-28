@@ -1,6 +1,6 @@
 export const queryKeys = {
     sessions: ['sessions'] as const,
-    terminalSnippets: ['terminal-snippets'] as const,
+    terminalSnippets: (scope: string) => ['terminal-snippets', scope] as const,
     session: (sessionId: string) => ['session', sessionId] as const,
     messages: (sessionId: string) => ['messages', sessionId] as const,
     teamChats: ['team-chats'] as const,

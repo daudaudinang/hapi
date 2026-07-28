@@ -1,6 +1,6 @@
 import type { TerminalSnippet } from '@hapi/protocol'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApiClient } from './client'
+import { ApiClient, deriveApiCacheScope } from './client'
 
 function snippet(overrides: Partial<TerminalSnippet> = {}): TerminalSnippet {
     return {
@@ -21,6 +21,14 @@ function jsonResponse(body: unknown): Response {
         statusText: 'OK',
         json: async () => body
     } as Response
+}
+
+function jwtWithNamespace(namespace: string): string {
+    const encode = (value: unknown) => globalThis.btoa(JSON.stringify(value))
+        .replace(/=/g, '')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+    return `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({ ns: namespace })}.signature`
 }
 
 describe('ApiClient terminal snippet methods', () => {
@@ -82,5 +90,30 @@ describe('ApiClient terminal snippet methods', () => {
         vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(body))
 
         await expect(call(new ApiClient('token'))).rejects.toBeDefined()
+    })
+
+    it('derives a stable non-secret cache scope from normalized Hub URL and JWT namespace', () => {
+        const token = jwtWithNamespace('ns-a')
+        const scope = deriveApiCacheScope('https://hub.example.com/', token)
+
+        expect(scope).toBe(deriveApiCacheScope('https://hub.example.com', token))
+        expect(scope).toBe(deriveApiCacheScope(
+            'https://hub.example.com',
+            token.replace('signature', 'refreshed-signature')
+        ))
+        expect(scope).toBe(new ApiClient(token, {
+            baseUrl: 'https://hub.example.com/'
+        }).cacheScope)
+        expect(scope).not.toContain(token)
+        expect(scope).not.toBe(deriveApiCacheScope(
+            'https://hub.example.com',
+            jwtWithNamespace('ns-b')
+        ))
+        expect(scope).not.toBe(deriveApiCacheScope(
+            'https://other.example.com',
+            token
+        ))
+        expect(deriveApiCacheScope('https://hub.example.com', 'not-a-jwt'))
+            .toContain('unknown')
     })
 })

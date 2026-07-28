@@ -69,6 +69,53 @@ function parseErrorCode(bodyText: string): string | undefined {
     }
 }
 
+function normalizeCacheBaseUrl(baseUrl: string | null | undefined): string {
+    const fallbackOrigin = typeof globalThis.location?.origin === 'string'
+        ? globalThis.location.origin
+        : 'same-origin'
+    const candidate = baseUrl?.trim() || fallbackOrigin
+
+    try {
+        return new URL(candidate).origin
+    } catch {
+        return candidate.replace(/\/+$/, '') || 'same-origin'
+    }
+}
+
+function readJwtNamespace(token: string): string {
+    const parts = token.split('.')
+    if (parts.length !== 3) {
+        return 'unknown'
+    }
+
+    const payloadBase64Url = parts[1] ?? ''
+    const payloadBase64 = payloadBase64Url
+        .replace(/-/g, '+')
+        .replace(/_/g, '/')
+        .padEnd(Math.ceil(payloadBase64Url.length / 4) * 4, '=')
+
+    try {
+        const payload = JSON.parse(globalThis.atob(payloadBase64)) as {
+            ns?: unknown
+        }
+        return typeof payload.ns === 'string' && payload.ns.length > 0
+            ? payload.ns
+            : 'unknown'
+    } catch {
+        return 'unknown'
+    }
+}
+
+export function deriveApiCacheScope(
+    baseUrl: string | null | undefined,
+    token: string
+): string {
+    return JSON.stringify([
+        normalizeCacheBaseUrl(baseUrl),
+        readJwtNamespace(token)
+    ])
+}
+
 export class ApiError extends Error {
     status: number
     code?: string
@@ -84,12 +131,14 @@ export class ApiError extends Error {
 }
 
 export class ApiClient {
+    readonly cacheScope: string
     private token: string
     private readonly baseUrl: string | null
     private readonly getToken: (() => string | null) | null
     private readonly onUnauthorized: (() => Promise<string | null>) | null
 
     constructor(token: string, options?: ApiClientOptions) {
+        this.cacheScope = deriveApiCacheScope(options?.baseUrl, token)
         this.token = token
         this.baseUrl = options?.baseUrl ?? null
         this.getToken = options?.getToken ?? null

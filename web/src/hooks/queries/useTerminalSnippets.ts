@@ -8,6 +8,19 @@ import type {
 import type { ApiClient } from '@/api/client'
 import { queryKeys } from '@/lib/query-keys'
 
+function sortTerminalSnippets(
+    left: TerminalSnippet,
+    right: TerminalSnippet
+): number {
+    if (left.createdAt !== right.createdAt) {
+        return right.createdAt - left.createdAt
+    }
+    if (left.id === right.id) {
+        return 0
+    }
+    return left.id < right.id ? 1 : -1
+}
+
 export function useTerminalSnippets(
     api: ApiClient | null,
     enabled: boolean
@@ -22,8 +35,11 @@ export function useTerminalSnippets(
     isPending: boolean
 } {
     const queryClient = useQueryClient()
+    const queryKey = queryKeys.terminalSnippets(
+        api?.cacheScope ?? 'api-unavailable'
+    )
     const query = useQuery({
-        queryKey: queryKeys.terminalSnippets,
+        queryKey,
         queryFn: async () => {
             if (!api) {
                 throw new Error('API unavailable')
@@ -42,10 +58,20 @@ export function useTerminalSnippets(
         },
         onSuccess: (snippet) => {
             queryClient.setQueryData<TerminalSnippetsResponse>(
-                queryKeys.terminalSnippets,
-                (previous) => ({
-                    snippets: [snippet, ...(previous?.snippets ?? [])]
-                })
+                queryKey,
+                (previous) => {
+                    if (!previous) {
+                        return previous
+                    }
+                    return {
+                        snippets: [
+                            ...previous.snippets.filter((item) => (
+                                item.id !== snippet.id
+                            )),
+                            snippet
+                        ].sort(sortTerminalSnippets)
+                    }
+                }
             )
         }
     })
@@ -62,7 +88,7 @@ export function useTerminalSnippets(
         },
         onSuccess: (snippet) => {
             queryClient.setQueryData<TerminalSnippetsResponse>(
-                queryKeys.terminalSnippets,
+                queryKey,
                 (previous) => {
                     if (!previous) {
                         return previous
@@ -87,7 +113,7 @@ export function useTerminalSnippets(
         },
         onSuccess: (id) => {
             queryClient.setQueryData<TerminalSnippetsResponse>(
-                queryKeys.terminalSnippets,
+                queryKey,
                 (previous) => {
                     if (!previous) {
                         return previous

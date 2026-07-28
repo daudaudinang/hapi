@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { createElement, type ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { queryKeys } from '@/lib/query-keys'
+import { deriveApiCacheScope } from '@/api/client'
 import { shouldReconnectOnVisibilityRestore } from './useSSE'
 import { useSSE } from './useSSE'
 
@@ -26,6 +26,14 @@ class MockEventSource {
     emit(event: unknown): void {
         this.onmessage?.({ data: JSON.stringify(event) } as MessageEvent<string>)
     }
+}
+
+function jwtWithNamespace(namespace: string): string {
+    const encode = (value: unknown) => globalThis.btoa(JSON.stringify(value))
+        .replace(/=/g, '')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+    return `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({ ns: namespace })}.signature`
 }
 
 function createWrapper(queryClient: QueryClient) {
@@ -77,11 +85,13 @@ describe('SSE terminal snippet invalidation', () => {
         })
         const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
         const onEvent = vi.fn()
+        const token = jwtWithNamespace('ns-a')
+        const baseUrl = 'http://localhost'
         renderHook(
             () => useSSE({
                 enabled: true,
-                token: 'token',
-                baseUrl: 'http://localhost',
+                token,
+                baseUrl,
                 onEvent
             }),
             { wrapper: createWrapper(queryClient) }
@@ -97,8 +107,17 @@ describe('SSE terminal snippet invalidation', () => {
 
         await waitFor(() => {
             expect(invalidate).toHaveBeenCalledWith({
-                queryKey: queryKeys.terminalSnippets
+                queryKey: ['terminal-snippets', deriveApiCacheScope(baseUrl, token)],
+                exact: true
             })
+        })
+        expect(invalidate).toHaveBeenCalledTimes(1)
+        expect(invalidate).not.toHaveBeenCalledWith({
+            queryKey: ['terminal-snippets', deriveApiCacheScope(
+                baseUrl,
+                jwtWithNamespace('ns-b')
+            )],
+            exact: true
         })
         expect(onEvent).toHaveBeenCalledWith(event)
     })
@@ -128,9 +147,7 @@ describe('SSE terminal snippet invalidation', () => {
             MockEventSource.instances[0]?.emit(event)
         })
 
-        expect(invalidate).not.toHaveBeenCalledWith({
-            queryKey: queryKeys.terminalSnippets
-        })
+        expect(invalidate).not.toHaveBeenCalled()
         expect(onEvent).toHaveBeenCalledWith(event)
     })
 })
