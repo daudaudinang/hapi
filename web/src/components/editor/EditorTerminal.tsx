@@ -9,6 +9,10 @@ import { TerminalView } from '@/components/Terminal/TerminalView'
 import { SessionTerminalTabs } from '@/components/Terminal/SessionTerminalTabs'
 import { useTerminalQuickInput } from '@/components/Terminal/terminalControls'
 import {
+    EMPTY_TERMINAL_SEARCH_STATE,
+    type TerminalSearchState,
+} from '@/components/Terminal/terminalSearch'
+import {
     AppDialog,
     AppDialogContent,
     AppDialogFooter,
@@ -88,6 +92,9 @@ function EditorTerminalBody(props: {
     const [terminalSelection, setTerminalSelection] = useState<string | null>(null)
     const [terminalMousePos, setTerminalMousePos] = useState<{ x: number; y: number } | null>(null)
     const [activeDockTool, setActiveDockTool] = useState<TerminalDockTool | null>(null)
+    const [searchState, setSearchState] = useState<TerminalSearchState>(
+        EMPTY_TERMINAL_SEARCH_STATE,
+    )
     const terminalContainerRef = useRef<HTMLDivElement | null>(null)
 
     const {
@@ -113,12 +120,59 @@ function EditorTerminalBody(props: {
         disabled: quickInputDisabled,
         write,
     })
+    const searchStateRef = useRef<TerminalSearchState>(EMPTY_TERMINAL_SEARCH_STATE)
+    const searchGenerationRef = useRef(0)
+    const searchIdentity = props.isActive && !quickInputDisabled
+        ? props.tab.id
+        : null
+    const activeSearchIdentityRef = useRef(searchIdentity)
+    activeSearchIdentityRef.current = searchIdentity
 
-    useEffect(() => {
-        if (!props.isActive || quickInputDisabled) {
+    const clearSearch = useCallback((closeTool = true) => {
+        searchGenerationRef.current += 1
+        searchStateRef.current.controller?.clear()
+        searchStateRef.current = EMPTY_TERMINAL_SEARCH_STATE
+        setSearchState(EMPTY_TERMINAL_SEARCH_STATE)
+        if (closeTool) {
             setActiveDockTool(null)
         }
-    }, [props.isActive, quickInputDisabled])
+    }, [])
+
+    useEffect(() => {
+        clearSearch()
+    }, [clearSearch, searchIdentity])
+
+    const handleActiveDockToolChange = useCallback((tool: TerminalDockTool | null) => {
+        clearSearch(false)
+        setActiveDockTool(tool)
+    }, [clearSearch])
+
+    const searchEnabled = activeDockTool === 'search' && searchIdentity !== null
+    const searchCallbackIdentity = searchIdentity
+    const searchCallbackGeneration = searchGenerationRef.current
+    const handleSearchStateChange = useCallback((nextState: TerminalSearchState) => {
+        if (
+            !searchEnabled
+            || !searchCallbackIdentity
+            || activeSearchIdentityRef.current !== searchCallbackIdentity
+            || searchGenerationRef.current !== searchCallbackGeneration
+        ) {
+            nextState.controller?.clear()
+            return
+        }
+        const previousController = searchStateRef.current.controller
+        if (previousController && previousController !== nextState.controller) {
+            previousController.clear()
+        }
+        searchStateRef.current = nextState
+        setSearchState(nextState)
+    }, [searchCallbackGeneration, searchCallbackIdentity, searchEnabled])
+
+    useEffect(() => () => {
+        searchGenerationRef.current += 1
+        searchStateRef.current.controller?.clear()
+        searchStateRef.current = EMPTY_TERMINAL_SEARCH_STATE
+    }, [])
 
     useEffect(() => {
         props.onRegisterClose?.(props.tab.id, close)
@@ -279,7 +333,7 @@ function EditorTerminalBody(props: {
             <div
                 ref={terminalContainerRef}
                 data-testid="terminal-surface"
-                onPointerDownCapture={() => setActiveDockTool(null)}
+                onPointerDownCapture={() => clearSearch()}
                 className="relative min-h-0 flex-1 overflow-hidden p-2"
             >
                 {canUseTerminal ? (
@@ -294,6 +348,8 @@ function EditorTerminalBody(props: {
                         dismissMobileInteraction={
                             activeDockTool !== null || !props.isActive
                         }
+                        searchActive={searchEnabled}
+                        onSearchStateChange={handleSearchStateChange}
                     />
                 ) : (
                     <div className="flex h-full items-center justify-center rounded border border-[var(--app-border)] text-xs text-[var(--app-hint)]">
@@ -328,7 +384,8 @@ function EditorTerminalBody(props: {
                 }
                 disabled={quickInputDisabled}
                 activeTool={activeDockTool}
-                onActiveToolChange={setActiveDockTool}
+                onActiveToolChange={handleActiveDockToolChange}
+                searchState={searchState}
                 ctrlActive={quickInput.ctrlActive}
                 altActive={quickInput.altActive}
                 onQuickInput={quickInput.sendQuickInput}
@@ -491,7 +548,10 @@ export function EditorTerminal(props: {
                                 <EditorTerminalBody
                                     api={props.api}
                                     tab={tab}
-                                    isActive={isActive}
+                                    isActive={
+                                        isActive
+                                        && (Boolean(props.mobileMode) || !props.isCollapsed)
+                                    }
                                     onAddToChat={props.onAddToChat}
                                     onRegisterClose={handleRegisterClose}
                                     compactFontSize={props.mobileMode}

@@ -8,6 +8,10 @@ import {
 import { TerminalView } from '@/components/Terminal/TerminalView'
 import { useTerminalQuickInput } from '@/components/Terminal/terminalControls'
 import {
+    EMPTY_TERMINAL_SEARCH_STATE,
+    type TerminalSearchState,
+} from '@/components/Terminal/terminalSearch'
+import {
     AppDialog,
     AppDialogContent,
     AppDialogFooter,
@@ -95,6 +99,9 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
     const controller = useSessionTerminalSocket({ token, baseUrl, sessionId: props.sessionId })
     const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null)
     const [activeDockTool, setActiveDockTool] = useState<TerminalDockTool | null>(null)
+    const [searchState, setSearchState] = useState<TerminalSearchState>(
+        EMPTY_TERMINAL_SEARCH_STATE,
+    )
     const [pendingCloseTerminalId, setPendingCloseTerminalId] = useState<string | null>(null)
     const [createError, setCreateError] = useState<string | null>(null)
     const [createPending, setCreatePending] = useState(false)
@@ -132,21 +139,64 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
             }
         }
     })
+    const searchStateRef = useRef<TerminalSearchState>(EMPTY_TERMINAL_SEARCH_STATE)
+    const searchGenerationRef = useRef(0)
+    const searchIdentity = quickInputDisabled
+        ? null
+        : (activeLiveTerminal?.terminalId ?? null)
+    const activeSearchIdentityRef = useRef(searchIdentity)
+    activeSearchIdentityRef.current = searchIdentity
     const terminalDataHandlerRef = useRef(quickInput.writeTerminalData)
     terminalDataHandlerRef.current = quickInput.writeTerminalData
 
-    useEffect(() => {
-        if (quickInputDisabled) {
+    const clearSearch = useCallback((closeTool = true) => {
+        searchGenerationRef.current += 1
+        searchStateRef.current.controller?.clear()
+        searchStateRef.current = EMPTY_TERMINAL_SEARCH_STATE
+        setSearchState(EMPTY_TERMINAL_SEARCH_STATE)
+        if (closeTool) {
             setActiveDockTool(null)
         }
-    }, [quickInputDisabled])
+    }, [])
 
     useEffect(() => {
-        setActiveDockTool(null)
-    }, [displayTerminal?.terminalId])
+        clearSearch()
+    }, [clearSearch, searchIdentity])
 
     const dismissDockTool = useCallback(() => {
-        setActiveDockTool(null)
+        clearSearch()
+    }, [clearSearch])
+
+    const handleActiveDockToolChange = useCallback((tool: TerminalDockTool | null) => {
+        clearSearch(false)
+        setActiveDockTool(tool)
+    }, [clearSearch])
+
+    const searchEnabled = activeDockTool === 'search' && searchIdentity !== null
+    const searchCallbackIdentity = searchIdentity
+    const searchCallbackGeneration = searchGenerationRef.current
+    const handleSearchStateChange = useCallback((nextState: TerminalSearchState) => {
+        if (
+            !searchEnabled
+            || !searchCallbackIdentity
+            || activeSearchIdentityRef.current !== searchCallbackIdentity
+            || searchGenerationRef.current !== searchCallbackGeneration
+        ) {
+            nextState.controller?.clear()
+            return
+        }
+        const previousController = searchStateRef.current.controller
+        if (previousController && previousController !== nextState.controller) {
+            previousController.clear()
+        }
+        searchStateRef.current = nextState
+        setSearchState(nextState)
+    }, [searchCallbackGeneration, searchCallbackIdentity, searchEnabled])
+
+    useEffect(() => () => {
+        searchGenerationRef.current += 1
+        searchStateRef.current.controller?.clear()
+        searchStateRef.current = EMPTY_TERMINAL_SEARCH_STATE
     }, [])
 
     useEffect(() => {
@@ -386,7 +436,14 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
                         const warning = warningReason(terminal)
                         return (
                             <div key={terminal.terminalId} className={`flex items-center gap-1 border-l border-[var(--app-border)] px-2 py-1 text-xs ${isSelected ? 'bg-[var(--app-bg)] text-[#818cf8]' : 'text-[var(--app-hint)]'}`}>
-                                <button type="button" onClick={() => setActiveTerminalId(terminal.terminalId)} className="max-w-[140px] truncate hover:text-[var(--app-fg)]">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        clearSearch()
+                                        setActiveTerminalId(terminal.terminalId)
+                                    }}
+                                    className="max-w-[140px] truncate hover:text-[var(--app-fg)]"
+                                >
                                     {terminal.label}
                                 </button>
                                 {warning ? (
@@ -486,6 +543,8 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
                         compactFontSize={props.compactFontSize}
                         mobileInteractionEnabled={!quickInputDisabled}
                         dismissMobileInteraction={activeDockTool !== null}
+                        searchActive={searchEnabled}
+                        onSearchStateChange={handleSearchStateChange}
                         className={controller.terminals.length === 0 ? 'opacity-0' : 'h-full w-full'}
                     />
                 ) : (
@@ -502,7 +561,8 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
                 }
                 disabled={quickInputDisabled}
                 activeTool={activeDockTool}
-                onActiveToolChange={setActiveDockTool}
+                onActiveToolChange={handleActiveDockToolChange}
+                searchState={searchState}
                 ctrlActive={quickInput.ctrlActive}
                 altActive={quickInput.altActive}
                 onQuickInput={quickInput.sendQuickInput}

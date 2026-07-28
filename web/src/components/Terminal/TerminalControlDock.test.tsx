@@ -6,6 +6,11 @@ import {
     TerminalControlDock,
     type TerminalControlDockProps,
 } from './TerminalControlDock'
+import {
+    EMPTY_TERMINAL_SEARCH_STATE,
+    type TerminalSearchController,
+    type TerminalSearchState,
+} from './terminalSearch'
 
 vi.mock('@/lib/use-translation', () => ({
     useTranslation: () => ({
@@ -28,6 +33,16 @@ vi.mock('@/lib/use-translation', () => ({
             'terminal.controls.navigation': 'Navigation',
             'terminal.controls.functionKeys': 'Function keys',
             'terminal.controls.symbols': 'Symbols',
+            'terminal.search.title': 'Search terminal output',
+            'terminal.search.input': 'Search terminal output',
+            'terminal.search.caseSensitive': 'Match case',
+            'terminal.search.previous': 'Previous match',
+            'terminal.search.next': 'Next match',
+            'terminal.search.close': 'Close search',
+            'terminal.search.loading': 'Loading search…',
+            'terminal.search.unavailable': 'Search unavailable',
+            'terminal.search.error': 'Search failed',
+            'terminal.search.retry': 'Retry search',
             'terminal.snippets.title': 'Snippets',
             'terminal.snippets.insertOnly': 'Insert only · does not run',
             'terminal.snippets.new': 'New',
@@ -69,6 +84,7 @@ const defaultProps: TerminalControlDockProps = {
     disabled: false,
     activeTool: null,
     onActiveToolChange: vi.fn(),
+    searchState: EMPTY_TERMINAL_SEARCH_STATE,
     ctrlActive: false,
     altActive: false,
     onQuickInput: vi.fn(),
@@ -118,7 +134,7 @@ afterEach(() => {
 })
 
 describe('TerminalControlDock', () => {
-    it('renders a slim six-item dock with Snippets enabled and History disabled', () => {
+    it('renders a slim six-item dock with Search and Snippets enabled while History remains disabled', () => {
         renderDock()
 
         expect(screen.getByRole('toolbar', { name: 'Terminal controls' })).toHaveClass(
@@ -135,7 +151,90 @@ describe('TerminalControlDock', () => {
             expect.objectContaining({ textContent: 'More' }),
         ]))
         expect(screen.getByRole('button', { name: 'Snippets' })).toBeEnabled()
-        expect(screen.getByRole('button', { name: 'Search' })).toBeDisabled()
+        expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled()
+        expect(screen.getByRole('button', { name: 'History' })).toBeDisabled()
+    })
+
+    it('opens Search in a floating region without a dialog or automatic focus', () => {
+        const onActiveToolChange = vi.fn()
+        const controller: TerminalSearchController = {
+            findNext: vi.fn(() => true),
+            findPrevious: vi.fn(() => true),
+            clear: vi.fn(),
+            subscribe: vi.fn(() => () => undefined),
+        }
+        const readyState: TerminalSearchState = {
+            status: 'ready',
+            controller,
+            error: null,
+            retry: null,
+        }
+        const rendered = renderDock({ onActiveToolChange, searchState: readyState })
+
+        fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+        expect(onActiveToolChange).toHaveBeenCalledWith('search')
+
+        rendered.rerender(makeDock({
+            activeTool: 'search',
+            onActiveToolChange,
+            searchState: readyState,
+        }))
+
+        const panel = screen.getByRole('region', { name: 'Search terminal output' })
+        expect(panel.parentElement).toHaveAttribute('role', 'region')
+        expect(panel.parentElement).toHaveClass('absolute')
+        expect(screen.queryByRole('dialog', { name: 'Search terminal output' }))
+            .not.toBeInTheDocument()
+        expect(screen.getByRole('searchbox', { name: 'Search terminal output' }))
+            .not.toHaveFocus()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Close search' }))
+        expect(onActiveToolChange).toHaveBeenLastCalledWith(null)
+    })
+
+    it('bridges Search loading, error, and ready states without changing dock behavior', () => {
+        const retry = vi.fn()
+        const controller: TerminalSearchController = {
+            findNext: vi.fn(() => true),
+            findPrevious: vi.fn(() => true),
+            clear: vi.fn(),
+            subscribe: vi.fn(() => () => undefined),
+        }
+        const rendered = renderDock({
+            activeTool: 'search',
+            searchState: {
+                status: 'loading',
+                controller: null,
+                error: null,
+                retry: null,
+            },
+        })
+
+        expect(screen.getByRole('status')).toHaveTextContent('Loading search…')
+
+        rendered.rerender(makeDock({
+            activeTool: 'search',
+            searchState: {
+                status: 'error',
+                controller: null,
+                error: 'Addon failed',
+                retry,
+            },
+        }))
+        expect(screen.getByRole('alert')).toHaveTextContent('Addon failed')
+        fireEvent.click(screen.getByRole('button', { name: 'Retry search' }))
+        expect(retry).toHaveBeenCalledTimes(1)
+
+        rendered.rerender(makeDock({
+            activeTool: 'search',
+            searchState: {
+                status: 'ready',
+                controller,
+                error: null,
+                retry: null,
+            },
+        }))
+        expect(screen.getByRole('searchbox', { name: 'Search terminal output' })).toBeVisible()
         expect(screen.getByRole('button', { name: 'History' })).toBeDisabled()
     })
 

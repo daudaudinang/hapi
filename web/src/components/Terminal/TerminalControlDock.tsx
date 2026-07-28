@@ -15,7 +15,9 @@ import {
     QUICK_INPUT_ROWS,
     type QuickInput,
 } from './terminalControls'
+import { TerminalSearchPanel } from './TerminalSearchPanel'
 import { TerminalSnippetPanel } from './TerminalSnippetPanel'
+import type { TerminalSearchState } from './terminalSearch'
 
 export type TerminalDockTool = 'snippets' | 'search' | 'history' | 'keys' | 'more'
 export type TerminalDockAction = 'paste' | TerminalDockTool
@@ -26,6 +28,7 @@ export type TerminalControlDockProps = {
     disabled: boolean
     activeTool: TerminalDockTool | null
     onActiveToolChange: (tool: TerminalDockTool | null) => void
+    searchState: TerminalSearchState
     ctrlActive: boolean
     altActive: boolean
     onQuickInput: (sequence: string) => void
@@ -404,6 +407,19 @@ export function TerminalControlDock(props: TerminalControlDockProps) {
                 </section>
             ) : null}
 
+            {props.activeTool === 'search' ? (
+                <section
+                    role="region"
+                    aria-label={t('terminal.controls.search')}
+                    className="absolute bottom-full left-2 right-2 mb-2"
+                >
+                    <TerminalSearchPanel
+                        state={props.searchState}
+                        onClose={() => props.onActiveToolChange(null)}
+                    />
+                </section>
+            ) : null}
+
             {props.activeTool === 'keys' ? (
                 <section
                     role="region"
@@ -457,7 +473,17 @@ export function TerminalControlDock(props: TerminalControlDockProps) {
                         props.onActiveToolChange,
                     )}
                 />
-                <DockButton tool="search" label={t('terminal.controls.search')} disabled />
+                <DockButton
+                    tool="search"
+                    label={t('terminal.controls.search')}
+                    active={props.activeTool === 'search'}
+                    disabled={props.disabled}
+                    onClick={() => toggleTool(
+                        props.activeTool,
+                        'search',
+                        props.onActiveToolChange,
+                    )}
+                />
                 <DockButton tool="history" label={t('terminal.controls.history')} disabled />
                 <DockButton
                     tool="keys"

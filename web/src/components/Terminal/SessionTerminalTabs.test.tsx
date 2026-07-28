@@ -4,6 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TerminalState } from '@hapi/protocol'
 import { en, viVN, zhCN } from '@/lib/locales'
 import { SessionTerminalTabs } from './SessionTerminalTabs'
+import {
+    EMPTY_TERMINAL_SEARCH_STATE,
+    type TerminalSearchController,
+    type TerminalSearchState,
+} from './terminalSearch'
 
 vi.mock('@/components/Terminal/TerminalSnippetPanel', () => ({
     TerminalSnippetPanel: (props: {
@@ -40,6 +45,21 @@ vi.mock('@/components/Terminal/TerminalSnippetPanel', () => ({
     },
 }))
 
+vi.mock('@/components/Terminal/TerminalSearchPanel', () => ({
+    TerminalSearchPanel: (props: {
+        state: TerminalSearchState
+        onClose: () => void
+    }) => (
+        <section
+            role="region"
+            aria-label="Search terminal output"
+            data-search-status={props.state.status}
+        >
+            <button type="button" onClick={props.onClose}>Close search</button>
+        </section>
+    ),
+}))
+
 var mocks: {
     controller: null | {
         state: { status: 'idle' | 'connecting' | 'connected' | 'error'; error?: string }
@@ -65,6 +85,8 @@ var mocks: {
         onResize?: (cols: number, rows: number) => void
         mobileInteractionEnabled?: boolean
         dismissMobileInteraction?: boolean
+        searchActive?: boolean
+        onSearchStateChange?: (state: TerminalSearchState) => void
     }>
     autoMountTerminal: null | (() => unknown)
     emittedEvents: string[]
@@ -94,6 +116,8 @@ vi.mock('@/components/Terminal/TerminalView', () => ({
         onResize?: (cols: number, rows: number) => void
         mobileInteractionEnabled?: boolean
         dismissMobileInteraction?: boolean
+        searchActive?: boolean
+        onSearchStateChange?: (state: TerminalSearchState) => void
     }) => {
         mocks.terminalMounts.push(props)
         useEffect(() => {
@@ -199,6 +223,24 @@ function makeController(terminals: TerminalState[] = []) {
         onExit: vi.fn(),
         onWarning: vi.fn(),
         clearLastError: vi.fn()
+    }
+}
+
+function searchController(): TerminalSearchController {
+    return {
+        findNext: vi.fn(() => true),
+        findPrevious: vi.fn(() => true),
+        clear: vi.fn(),
+        subscribe: vi.fn(() => () => undefined),
+    }
+}
+
+function readySearchState(controller = searchController()): TerminalSearchState {
+    return {
+        status: 'ready',
+        controller,
+        error: null,
+        retry: null,
     }
 }
 
@@ -370,6 +412,140 @@ describe('SessionTerminalTabs', () => {
             />,
         )
         expect(mocks.terminalMounts.at(-1)?.mobileInteractionEnabled).toBe(false)
+    })
+
+    it('bridges active session Search state and clears it on toggle without focusing xterm', () => {
+        const focus = vi.fn()
+        mocks.autoMountTerminal = () => ({
+            focus,
+            write: vi.fn(),
+            onData: vi.fn(() => ({ dispose: vi.fn() })),
+        })
+        mocks.controller = makeController([state('t1')])
+        renderTabs()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+        expect(mocks.terminalMounts.at(-1)).toMatchObject({
+            searchActive: true,
+            dismissMobileInteraction: true,
+        })
+
+        act(() => mocks.terminalMounts.at(-1)?.onSearchStateChange?.({
+            status: 'loading',
+            controller: null,
+            error: null,
+            retry: null,
+        }))
+        expect(screen.getByRole('region', { name: 'Search terminal output' }))
+            .toHaveAttribute('data-search-status', 'loading')
+
+        act(() => mocks.terminalMounts.at(-1)?.onSearchStateChange?.({
+            status: 'error',
+            controller: null,
+            error: 'failed',
+            retry: vi.fn(),
+        }))
+        expect(screen.getByRole('region', { name: 'Search terminal output' }))
+            .toHaveAttribute('data-search-status', 'error')
+
+        const controller = searchController()
+        act(() => mocks.terminalMounts.at(-1)?.onSearchStateChange?.(
+            readySearchState(controller),
+        ))
+        expect(screen.getByRole('region', { name: 'Search terminal output' }))
+            .toHaveAttribute('data-search-status', 'ready')
+
+        fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+        expect(controller.clear).toHaveBeenCalledTimes(1)
+        expect(screen.queryByRole('region', { name: 'Search terminal output' }))
+            .not.toBeInTheDocument()
+        expect(mocks.terminalMounts.at(-1)).toMatchObject({
+            searchActive: false,
+            dismissMobileInteraction: false,
+        })
+        const closedController = searchController()
+        act(() => mocks.terminalMounts.at(-1)?.onSearchStateChange?.(
+            readySearchState(closedController),
+        ))
+        expect(closedController.clear).toHaveBeenCalledTimes(1)
+        expect(focus).not.toHaveBeenCalled()
+    })
+
+    it('clears session Search on body tap, tab change, disconnect, and unmount', () => {
+        mocks.controller = makeController([state('t1'), state('t2')])
+        const rendered = renderTabs()
+        const openReadySearch = () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+            const controller = searchController()
+            act(() => mocks.terminalMounts.at(-1)?.onSearchStateChange?.(
+                readySearchState(controller),
+            ))
+            return controller
+        }
+
+        const bodyController = openReadySearch()
+        fireEvent.pointerDown(screen.getByTestId('terminal-surface'))
+        expect(bodyController.clear).toHaveBeenCalledTimes(1)
+
+        const tabController = openReadySearch()
+        fireEvent.click(screen.getByRole('button', { name: 't2' }))
+        expect(tabController.clear).toHaveBeenCalledTimes(1)
+        expect(screen.queryByRole('region', { name: 'Search terminal output' }))
+            .not.toBeInTheDocument()
+
+        const disconnectController = openReadySearch()
+        mocks.controller = {
+            ...mocks.controller,
+            state: { status: 'idle' as const },
+        }
+        rendered.rerender(
+            <SessionTerminalTabs
+                sessionId="session-1"
+                active={true}
+                terminalSupported={true}
+            />,
+        )
+        expect(disconnectController.clear).toHaveBeenCalledTimes(1)
+
+        mocks.controller = {
+            ...mocks.controller,
+            state: { status: 'connected' as const },
+        }
+        rendered.rerender(
+            <SessionTerminalTabs
+                sessionId="session-1"
+                active={true}
+                terminalSupported={true}
+            />,
+        )
+        const unmountController = openReadySearch()
+        rendered.unmount()
+        expect(unmountController.clear).toHaveBeenCalledTimes(1)
+    })
+
+    it('ignores stale Search state published by the previous session terminal tab', () => {
+        mocks.controller = makeController([state('t1'), state('t2')])
+        renderTabs()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+        const oldCallback = mocks.terminalMounts.at(-1)?.onSearchStateChange
+        const oldController = searchController()
+        act(() => oldCallback?.(readySearchState(oldController)))
+
+        const mountsBeforeSwitch = mocks.terminalMounts.length
+        fireEvent.click(screen.getByRole('button', { name: 't2' }))
+        expect(oldController.clear).toHaveBeenCalledTimes(1)
+        expect(mocks.terminalMounts.slice(mountsBeforeSwitch)[0]?.searchActive).toBe(false)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+        expect(screen.getByRole('region', { name: 'Search terminal output' }))
+            .toHaveAttribute('data-search-status', EMPTY_TERMINAL_SEARCH_STATE.status)
+
+        const staleController = searchController()
+        act(() => oldCallback?.(readySearchState(staleController)))
+        expect(screen.getByRole('region', { name: 'Search terminal output' }))
+            .toHaveAttribute('data-search-status', EMPTY_TERMINAL_SEARCH_STATE.status)
+        expect(staleController.clear).toHaveBeenCalledTimes(1)
     })
 
     it('renders count n/3 from CLI list', () => {

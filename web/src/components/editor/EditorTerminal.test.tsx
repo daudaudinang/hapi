@@ -1,8 +1,13 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EditorTab } from '@/hooks/useEditorState'
 import { EditorTerminal } from './EditorTerminal'
+import {
+    EMPTY_TERMINAL_SEARCH_STATE,
+    type TerminalSearchController,
+    type TerminalSearchState,
+} from '@/components/Terminal/terminalSearch'
 
 vi.mock('@/components/Terminal/TerminalSnippetPanel', () => ({
     TerminalSnippetPanel: (props: {
@@ -39,6 +44,21 @@ vi.mock('@/components/Terminal/TerminalSnippetPanel', () => ({
     },
 }))
 
+vi.mock('@/components/Terminal/TerminalSearchPanel', () => ({
+    TerminalSearchPanel: (props: {
+        state: TerminalSearchState
+        onClose: () => void
+    }) => (
+        <section
+            role="region"
+            aria-label="Search terminal output"
+            data-search-status={props.state.status}
+        >
+            <button type="button" onClick={props.onClose}>Close search</button>
+        </section>
+    ),
+}))
+
 var mocks = {
     useSession: vi.fn(),
     useTerminalSocket: vi.fn(),
@@ -49,6 +69,8 @@ var mocks = {
         compactFontSize?: boolean
         mobileInteractionEnabled?: boolean
         dismissMobileInteraction?: boolean
+        searchActive?: boolean
+        onSearchStateChange?: (state: TerminalSearchState) => void
     }>,
     sessionTabsProps: [] as unknown[],
     disconnectsByTerminalId: new Map<string, ReturnType<typeof vi.fn>>(),
@@ -112,11 +134,15 @@ vi.mock('@/components/Terminal/TerminalView', () => ({
         compactFontSize?: boolean
         mobileInteractionEnabled?: boolean
         dismissMobileInteraction?: boolean
+        searchActive?: boolean
+        onSearchStateChange?: (state: TerminalSearchState) => void
     }) => {
         mocks.terminalViewProps.push({
             compactFontSize: props.compactFontSize,
             mobileInteractionEnabled: props.mobileInteractionEnabled,
             dismissMobileInteraction: props.dismissMobileInteraction,
+            searchActive: props.searchActive,
+            onSearchStateChange: props.onSearchStateChange,
         })
         mocks.onMountTerminal(props.onMount)
         mocks.onResizeTerminal(props.onResize)
@@ -163,6 +189,24 @@ function expectTerminalWrite(terminalId: string, text: string): void {
     expect(matchingWrites.some((write) => (
         write.mock.calls.some(([data]) => data === text)
     ))).toBe(true)
+}
+
+function searchController(): TerminalSearchController {
+    return {
+        findNext: vi.fn(() => true),
+        findPrevious: vi.fn(() => true),
+        clear: vi.fn(),
+        subscribe: vi.fn(() => () => undefined),
+    }
+}
+
+function readySearchState(controller = searchController()): TerminalSearchState {
+    return {
+        status: 'ready',
+        controller,
+        error: null,
+        retry: null,
+    }
 }
 
 function renderMachineTerminal(overrides: Partial<React.ComponentProps<typeof EditorTerminal>> = {}) {
@@ -407,6 +451,171 @@ describe('EditorTerminal', () => {
             'data-dismiss-mobile-interaction',
             'true',
         )
+    })
+
+    it('bridges machine terminal Search state and clears it without focusing xterm', () => {
+        setDockViewport(true)
+        renderMachineTerminal({ mobileMode: true })
+        const { focus } = mountLastTerminal()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+        expect(mocks.terminalViewProps.at(-1)).toMatchObject({
+            searchActive: true,
+            dismissMobileInteraction: true,
+        })
+
+        act(() => mocks.terminalViewProps.at(-1)?.onSearchStateChange?.({
+            status: 'loading',
+            controller: null,
+            error: null,
+            retry: null,
+        }))
+        expect(screen.getByRole('region', { name: 'Search terminal output' }))
+            .toHaveAttribute('data-search-status', 'loading')
+
+        const controller = searchController()
+        act(() => mocks.terminalViewProps.at(-1)?.onSearchStateChange?.(
+            readySearchState(controller),
+        ))
+        expect(screen.getByRole('region', { name: 'Search terminal output' }))
+            .toHaveAttribute('data-search-status', 'ready')
+
+        fireEvent.click(screen.getByRole('button', { name: 'Close search' }))
+        expect(controller.clear).toHaveBeenCalledTimes(1)
+        expect(mocks.terminalViewProps.at(-1)).toMatchObject({
+            searchActive: false,
+            dismissMobileInteraction: false,
+        })
+        const closedController = searchController()
+        act(() => mocks.terminalViewProps.at(-1)?.onSearchStateChange?.(
+            readySearchState(closedController),
+        ))
+        expect(closedController.clear).toHaveBeenCalledTimes(1)
+        expect(focus).not.toHaveBeenCalled()
+    })
+
+    it('clears machine Search on body tap, tab switch, collapse, disconnect, and unmount', () => {
+        const machineTabs: EditorTab[] = [
+            { id: 'term-machine-1', type: 'terminal', label: 'Terminal: bash', shell: 'bash', machineId: 'machine-1', cwd: '/repo' },
+            { id: 'term-machine-2', type: 'terminal', label: 'Terminal: zsh', shell: 'zsh', machineId: 'machine-1', cwd: '/repo' },
+        ]
+        const commonProps = {
+            tabs: machineTabs,
+            isCollapsed: false,
+            api: null,
+            onSelectTab: vi.fn(),
+            onCloseTab: vi.fn(),
+            onOpenTerminal: vi.fn(),
+            onToggleCollapsed: vi.fn(),
+        }
+        const rendered = render(
+            <EditorTerminal {...commonProps} activeTabId="term-machine-1" />,
+        )
+        const openReadySearch = () => {
+            fireEvent.click(screen.getAllByRole('button', { name: 'Search' })[0])
+            const controller = searchController()
+            act(() => mocks.terminalViewProps.at(-2)?.onSearchStateChange?.(
+                readySearchState(controller),
+            ))
+            return controller
+        }
+
+        const bodyController = openReadySearch()
+        fireEvent.pointerDown(screen.getAllByTestId('terminal-surface')[0])
+        expect(bodyController.clear).toHaveBeenCalledTimes(1)
+
+        const tabController = openReadySearch()
+        rendered.rerender(
+            <EditorTerminal {...commonProps} activeTabId="term-machine-2" />,
+        )
+        expect(tabController.clear).toHaveBeenCalledTimes(1)
+
+        rendered.rerender(
+            <EditorTerminal
+                {...commonProps}
+                activeTabId="term-machine-1"
+                isCollapsed={false}
+            />,
+        )
+        const collapseController = openReadySearch()
+        rendered.rerender(
+            <EditorTerminal
+                {...commonProps}
+                activeTabId="term-machine-1"
+                isCollapsed={true}
+            />,
+        )
+        expect(collapseController.clear).toHaveBeenCalledTimes(1)
+
+        rendered.rerender(
+            <EditorTerminal
+                {...commonProps}
+                activeTabId="term-machine-1"
+                isCollapsed={false}
+            />,
+        )
+        const disconnectController = openReadySearch()
+        mocks.terminalStatusesById.set('term-machine-1', 'disconnected')
+        rendered.rerender(
+            <EditorTerminal
+                {...commonProps}
+                activeTabId="term-machine-1"
+                isCollapsed={false}
+            />,
+        )
+        expect(disconnectController.clear).toHaveBeenCalledTimes(1)
+
+        mocks.terminalStatusesById.set('term-machine-1', 'connected')
+        rendered.rerender(
+            <EditorTerminal
+                {...commonProps}
+                activeTabId="term-machine-1"
+                isCollapsed={false}
+            />,
+        )
+        const unmountController = openReadySearch()
+        rendered.unmount()
+        expect(unmountController.clear).toHaveBeenCalledTimes(1)
+    })
+
+    it('ignores stale Search state from an inactive editor terminal view', () => {
+        const machineTabs: EditorTab[] = [
+            { id: 'term-machine-1', type: 'terminal', label: 'Terminal: bash', shell: 'bash', machineId: 'machine-1', cwd: '/repo' },
+            { id: 'term-machine-2', type: 'terminal', label: 'Terminal: zsh', shell: 'zsh', machineId: 'machine-1', cwd: '/repo' },
+        ]
+        const commonProps = {
+            tabs: machineTabs,
+            isCollapsed: false,
+            api: null,
+            onSelectTab: vi.fn(),
+            onCloseTab: vi.fn(),
+            onOpenTerminal: vi.fn(),
+            onToggleCollapsed: vi.fn(),
+        }
+        const rendered = render(
+            <EditorTerminal {...commonProps} activeTabId="term-machine-1" />,
+        )
+
+        fireEvent.click(screen.getAllByRole('button', { name: 'Search' })[0])
+        const oldCallback = mocks.terminalViewProps.at(-2)?.onSearchStateChange
+        const oldController = searchController()
+        act(() => oldCallback?.(readySearchState(oldController)))
+
+        const viewsBeforeSwitch = mocks.terminalViewProps.length
+        rendered.rerender(
+            <EditorTerminal {...commonProps} activeTabId="term-machine-2" />,
+        )
+        expect(oldController.clear).toHaveBeenCalledTimes(1)
+        expect(mocks.terminalViewProps.slice(viewsBeforeSwitch)[0]?.searchActive).toBe(false)
+        fireEvent.click(screen.getAllByRole('button', { name: 'Search' })[1])
+        expect(screen.getByRole('region', { name: 'Search terminal output' }))
+            .toHaveAttribute('data-search-status', EMPTY_TERMINAL_SEARCH_STATE.status)
+
+        const staleController = searchController()
+        act(() => oldCallback?.(readySearchState(staleController)))
+        expect(screen.getByRole('region', { name: 'Search terminal output' }))
+            .toHaveAttribute('data-search-status', EMPTY_TERMINAL_SEARCH_STATE.status)
+        expect(staleController.clear).toHaveBeenCalledTimes(1)
     })
 
     it('routes a snippet exactly through the active editor terminal without focusing xterm', () => {
