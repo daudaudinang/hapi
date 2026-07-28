@@ -1,7 +1,7 @@
 # Terminal Search and Snippets — Design
 
 **Date:** 2026-07-28  
-**Status:** Awaiting user review
+**Status:** Approved for implementation
 
 ## 1. Goal
 
