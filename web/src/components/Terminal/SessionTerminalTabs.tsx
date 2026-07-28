@@ -3,6 +3,7 @@ import type { Terminal } from '@xterm/xterm'
 import type { TerminalState } from '@hapi/protocol'
 import {
     TerminalControlDock,
+    TerminalToolIcon,
     type TerminalDockTool,
 } from '@/components/Terminal/TerminalControlDock'
 import { TerminalView } from '@/components/Terminal/TerminalView'
@@ -175,6 +176,43 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
         clearSearch(false)
         setActiveDockTool(tool)
     }, [clearSearch])
+
+    useEffect(() => {
+        if (!canUseTerminal || !interactionActive) return
+        const handleKeyDown = (event: KeyboardEvent) => {
+            const editable = event.target instanceof HTMLElement
+                && (
+                    event.target.isContentEditable
+                    || event.target.matches('input, textarea, select')
+                )
+            const desktop = typeof window.matchMedia !== 'function'
+                || window.matchMedia('(min-width: 1024px)').matches
+            if (
+                desktop
+                && !editable
+                && (event.ctrlKey || event.metaKey)
+                && event.key.toLowerCase() === 'f'
+            ) {
+                event.preventDefault()
+                if (activeDockTool !== 'search') {
+                    handleActiveDockToolChange('search')
+                }
+                return
+            }
+            if (event.key === 'Escape' && activeDockTool !== null) {
+                event.preventDefault()
+                clearSearch()
+            }
+        }
+        document.addEventListener('keydown', handleKeyDown)
+        return () => document.removeEventListener('keydown', handleKeyDown)
+    }, [
+        activeDockTool,
+        canUseTerminal,
+        clearSearch,
+        handleActiveDockToolChange,
+        interactionActive,
+    ])
 
     const searchEnabled = activeDockTool === 'search' && searchIdentity !== null
     const searchCallbackIdentity = searchIdentity
@@ -425,7 +463,7 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
     )
 
     return (
-        <div className={`flex h-full min-h-0 flex-col bg-[var(--app-bg)] ${props.className ?? ''}`}>
+        <div className={`relative flex h-full min-h-0 flex-col bg-[var(--app-bg)] ${props.className ?? ''}`}>
             <div
                 data-testid="terminal-tabs-status-row"
                 className="flex shrink-0 items-stretch overflow-hidden border-b border-[var(--app-border)]"
@@ -477,6 +515,32 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
                         +
                     </button>
                 </div>
+                <button
+                    type="button"
+                    aria-label={t('terminal.search.title')}
+                    aria-pressed={activeDockTool === 'search'}
+                    disabled={dockDisabled}
+                    onClick={() => handleActiveDockToolChange(
+                        activeDockTool === 'search' ? null : 'search',
+                    )}
+                    title={t('terminal.controls.search')}
+                    className="hidden min-h-8 min-w-8 place-items-center border-l border-[var(--app-border)] text-[var(--app-hint)] transition-colors hover:bg-[var(--app-subtle-bg)] hover:text-[var(--app-fg)] disabled:cursor-not-allowed disabled:opacity-40 lg:grid"
+                >
+                    <TerminalToolIcon tool="search" />
+                </button>
+                <button
+                    type="button"
+                    aria-label={t('terminal.snippets.title')}
+                    aria-pressed={activeDockTool === 'snippets'}
+                    disabled={dockDisabled}
+                    onClick={() => handleActiveDockToolChange(
+                        activeDockTool === 'snippets' ? null : 'snippets',
+                    )}
+                    title={t('terminal.controls.snippets')}
+                    className="hidden min-h-8 min-w-8 place-items-center border-l border-[var(--app-border)] text-[var(--app-hint)] transition-colors hover:bg-[var(--app-subtle-bg)] hover:text-[var(--app-fg)] disabled:cursor-not-allowed disabled:opacity-40 lg:grid"
+                >
+                    <TerminalToolIcon tool="snippets" />
+                </button>
                 {statusSummary}
             </div>
 

@@ -414,6 +414,87 @@ describe('SessionTerminalTabs', () => {
         expect(mocks.terminalMounts.at(-1)?.mobileInteractionEnabled).toBe(false)
     })
 
+    it('opens Search and Snippets from desktop header controls', () => {
+        mocks.controller = makeController([state('t1')])
+        renderTabs()
+
+        const search = screen.getByRole('button', {
+            name: 'terminal.search.title',
+        })
+        const snippets = screen.getByRole('button', {
+            name: 'terminal.snippets.title',
+        })
+        expect(search).toHaveClass('hidden', 'lg:grid')
+        expect(snippets).toHaveClass('hidden', 'lg:grid')
+
+        fireEvent.click(search)
+        expect(search).toHaveAttribute('aria-pressed', 'true')
+        expect(mocks.terminalMounts.at(-1)?.searchActive).toBe(true)
+
+        fireEvent.click(snippets)
+        expect(snippets).toHaveAttribute('aria-pressed', 'true')
+        expect(mocks.terminalMounts.at(-1)?.searchActive).toBe(false)
+        expect(screen.getByRole('region', { name: 'Snippet content' }))
+            .toBeInTheDocument()
+    })
+
+    it('scopes desktop Search shortcut and closes the tool with Escape', () => {
+        mocks.controller = makeController([state('t1')])
+        const rendered = renderTabs()
+
+        const openEvent = new KeyboardEvent('keydown', {
+            key: 'f',
+            ctrlKey: true,
+            bubbles: true,
+            cancelable: true,
+        })
+        act(() => document.dispatchEvent(openEvent))
+        expect(openEvent.defaultPrevented).toBe(true)
+        expect(mocks.terminalMounts.at(-1)?.searchActive).toBe(true)
+
+        const controller = searchController()
+        act(() => mocks.terminalMounts.at(-1)?.onSearchStateChange?.(
+            readySearchState(controller),
+        ))
+        const repeatedOpenEvent = new KeyboardEvent('keydown', {
+            key: 'f',
+            ctrlKey: true,
+            bubbles: true,
+            cancelable: true,
+        })
+        act(() => document.dispatchEvent(repeatedOpenEvent))
+        expect(controller.clear).not.toHaveBeenCalled()
+        expect(screen.getByRole('region', { name: 'Search terminal output' }))
+            .toHaveAttribute('data-search-status', 'ready')
+
+        const closeEvent = new KeyboardEvent('keydown', {
+            key: 'Escape',
+            bubbles: true,
+            cancelable: true,
+        })
+        act(() => document.dispatchEvent(closeEvent))
+        expect(closeEvent.defaultPrevented).toBe(true)
+        expect(mocks.terminalMounts.at(-1)?.searchActive).toBe(false)
+
+        rendered.rerender(
+            <SessionTerminalTabs
+                sessionId="session-1"
+                active={true}
+                terminalSupported={true}
+                interactionActive={false}
+            />,
+        )
+        const inactiveEvent = new KeyboardEvent('keydown', {
+            key: 'f',
+            metaKey: true,
+            bubbles: true,
+            cancelable: true,
+        })
+        act(() => document.dispatchEvent(inactiveEvent))
+        expect(inactiveEvent.defaultPrevented).toBe(false)
+        expect(mocks.terminalMounts.at(-1)?.searchActive).toBe(false)
+    })
+
     it('bridges active session Search state and clears it on toggle without focusing xterm', () => {
         const focus = vi.fn()
         mocks.autoMountTerminal = () => ({

@@ -142,6 +142,9 @@ describe('TerminalControlDock', () => {
             'pb-[env(safe-area-inset-bottom)]',
             'lg:hidden',
         )
+        expect(
+            screen.getByRole('toolbar', { name: 'Terminal controls' }).parentElement,
+        ).not.toHaveClass('lg:hidden')
         expect(screen.getAllByRole('button')).toEqual(expect.arrayContaining([
             expect.objectContaining({ textContent: 'Paste' }),
             expect.objectContaining({ textContent: 'Snippets' }),
@@ -182,7 +185,14 @@ describe('TerminalControlDock', () => {
 
         const panel = screen.getByRole('region', { name: 'Search terminal output' })
         expect(panel.parentElement).toHaveAttribute('role', 'region')
-        expect(panel.parentElement).toHaveClass('absolute')
+        expect(panel.parentElement).toHaveClass(
+            'absolute',
+            'lg:top-10',
+            'lg:w-[520px]',
+        )
+        expect(
+            screen.getAllByRole('region', { name: 'Search terminal output' }),
+        ).toHaveLength(1)
         expect(screen.queryByRole('dialog', { name: 'Search terminal output' }))
             .not.toBeInTheDocument()
         expect(screen.getByRole('searchbox', { name: 'Search terminal output' }))
@@ -252,7 +262,11 @@ describe('TerminalControlDock', () => {
 
         const panel = screen.getByRole('region', { name: 'Snippets' })
         expect(panel.parentElement).toHaveAttribute('role', 'region')
-        expect(panel.parentElement).toHaveClass('absolute')
+        expect(panel.parentElement).toHaveClass(
+            'absolute',
+            'lg:top-10',
+            'lg:w-[480px]',
+        )
         expect(screen.queryByRole('dialog', { name: 'Snippets' })).not.toBeInTheDocument()
 
         fireEvent.click(screen.getByRole('button', { name: 'Snippets' }))

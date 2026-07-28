@@ -51,7 +51,7 @@ function toggleTool(
     onChange(current === next ? null : next)
 }
 
-function DockIcon({ tool }: { tool: TerminalDockAction }) {
+export function TerminalToolIcon({ tool }: { tool: TerminalDockAction }) {
     const paths: Record<TerminalDockAction, React.ReactNode> = {
         paste: (
             <>
@@ -129,7 +129,7 @@ function DockButton(props: {
                     : 'text-[var(--app-hint)] hover:bg-[var(--app-subtle-bg)] hover:text-[var(--app-fg)]'
             }`}
         >
-            <DockIcon tool={props.tool} />
+            <TerminalToolIcon tool={props.tool} />
             <span>{props.label}</span>
         </button>
     )
@@ -390,12 +390,12 @@ export function TerminalControlDock(props: TerminalControlDockProps) {
     }, [])
 
     return (
-        <div className="relative z-30 shrink-0 lg:hidden">
+        <div className="relative z-30 shrink-0 lg:pointer-events-none lg:absolute lg:inset-0">
             {props.activeTool === 'snippets' ? (
                 <section
                     role="region"
                     aria-label={`${t('terminal.controls.snippets')} · ${t('terminal.snippets.insertOnly')}`}
-                    className="absolute bottom-full left-2 right-2 mb-2"
+                    className="pointer-events-auto absolute bottom-full left-2 right-2 mb-2 lg:bottom-auto lg:left-auto lg:right-2 lg:top-10 lg:mb-0 lg:w-[480px] lg:max-w-[calc(100%-1rem)]"
                 >
                     <TerminalSnippetPanel
                         api={props.api}
@@ -411,7 +411,7 @@ export function TerminalControlDock(props: TerminalControlDockProps) {
                 <section
                     role="region"
                     aria-label={t('terminal.controls.search')}
-                    className="absolute bottom-full left-2 right-2 mb-2"
+                    className="pointer-events-auto absolute bottom-full left-2 right-2 mb-2 lg:bottom-auto lg:left-auto lg:right-2 lg:top-10 lg:mb-0 lg:w-[520px] lg:max-w-[calc(100%-1rem)]"
                 >
                     <TerminalSearchPanel
                         state={props.searchState}
@@ -424,7 +424,7 @@ export function TerminalControlDock(props: TerminalControlDockProps) {
                 <section
                     role="region"
                     aria-label={t('terminal.controls.keysPanel')}
-                    className="absolute bottom-full left-2 right-2 mb-2 rounded-2xl border border-[var(--app-border)] bg-[var(--app-bg)]/95 p-2 shadow-xl backdrop-blur transition-[opacity,transform] duration-150 motion-reduce:transition-none"
+                    className="absolute bottom-full left-2 right-2 mb-2 rounded-2xl border border-[var(--app-border)] bg-[var(--app-bg)]/95 p-2 shadow-xl backdrop-blur transition-[opacity,transform] duration-150 motion-reduce:transition-none lg:hidden"
                 >
                     <HelperKeyGrid
                         functionLayer={functionLayer}
@@ -442,7 +442,7 @@ export function TerminalControlDock(props: TerminalControlDockProps) {
                 <section
                     role="region"
                     aria-label={t('terminal.controls.morePanel')}
-                    className="absolute bottom-full left-2 right-2 mb-2 max-h-[48vh] overflow-y-auto rounded-2xl border border-[var(--app-border)] bg-[var(--app-bg)]/95 p-3 shadow-xl backdrop-blur transition-[opacity,transform] duration-150 motion-reduce:transition-none"
+                    className="absolute bottom-full left-2 right-2 mb-2 max-h-[48vh] overflow-y-auto rounded-2xl border border-[var(--app-border)] bg-[var(--app-bg)]/95 p-3 shadow-xl backdrop-blur transition-[opacity,transform] duration-150 motion-reduce:transition-none lg:hidden"
                 >
                     <AdvancedKeyGroups
                         disabled={props.disabled}
