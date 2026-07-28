@@ -173,6 +173,17 @@ describe('TerminalSnippetPanel built-in catalog', () => {
         expect(api.getTerminalSnippets).not.toHaveBeenCalled()
     })
 
+    it('gives every built-in insert action a distinct accessible name', () => {
+        renderPanel()
+
+        expect(screen.queryByRole('button', { name: 'Insert' })).not.toBeInTheDocument()
+        for (const item of TERMINAL_SNIPPET_CATALOG) {
+            expect(screen.getByRole('button', {
+                name: `Insert ${translations[item.nameKey]}`,
+            })).toBeVisible()
+        }
+    })
+
     it('inserts the exact command without a newline, announces through callback, then closes', () => {
         const onInsert = vi.fn<(command: string) => boolean>(() => true)
         const onInserted = vi.fn()
@@ -180,7 +191,9 @@ describe('TerminalSnippetPanel built-in catalog', () => {
         renderPanel({ onInsert, onInserted, onClose })
 
         const row = screen.getByText('git status --short').closest('[data-snippet-row]')
-        fireEvent.click(within(row as HTMLElement).getByRole('button', { name: 'Insert' }))
+        fireEvent.click(within(row as HTMLElement).getByRole('button', {
+            name: 'Insert Git status',
+        }))
 
         expect(onInsert).toHaveBeenCalledWith('git status --short')
         expect(onInsert.mock.calls[0][0]).not.toMatch(/[\r\n]/)
@@ -193,7 +206,9 @@ describe('TerminalSnippetPanel built-in catalog', () => {
         renderPanel({ onInsert: vi.fn(() => false), onClose })
 
         const row = screen.getByText('pwd').closest('[data-snippet-row]')
-        fireEvent.click(within(row as HTMLElement).getByRole('button', { name: 'Insert' }))
+        fireEvent.click(within(row as HTMLElement).getByRole('button', {
+            name: 'Insert Working directory',
+        }))
 
         expect(onClose).not.toHaveBeenCalled()
         expect(screen.getByRole('status')).toHaveTextContent('Could not insert the snippet.')
@@ -298,6 +313,7 @@ describe('TerminalSnippetPanel custom loading', () => {
 
         openCustomTab()
         expect(await screen.findByRole('alert')).toHaveTextContent('Hub offline')
+        expect(screen.queryByText('No saved snippets yet.')).not.toBeInTheDocument()
 
         fireEvent.click(screen.getByRole('tab', { name: 'Built-in' }))
         expect(screen.getByText('pwd')).toBeVisible()
@@ -589,6 +605,63 @@ describe('TerminalSnippetPanel deletion and accessibility', () => {
         expect(screen.getByRole('dialog', { name: 'Delete snippet' })).toBeVisible()
     })
 
+    it('locks the delete target and every dismissal path while deletion is pending', async () => {
+        let resolveDelete!: () => void
+        const deletePromise = new Promise<void>((resolve) => {
+            resolveDelete = resolve
+        })
+        const first = snippet({ id: 'first', name: 'First snippet' })
+        const second = snippet({ id: 'second', name: 'Second snippet' })
+        const deleteTerminalSnippet = vi.fn(() => deletePromise)
+        renderPanel({
+            api: apiMock({
+                getTerminalSnippets: vi.fn(async () => ({
+                    snippets: [first, second],
+                })),
+                deleteTerminalSnippet,
+            }),
+        })
+        openCustomTab()
+        const firstRow = (await screen.findByText(first.name)).closest('[data-snippet-row]')
+        fireEvent.click(within(firstRow as HTMLElement).getByRole('button', {
+            name: `Delete ${first.name}`,
+        }))
+        fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', {
+            name: 'Delete',
+        }))
+
+        await waitFor(() => expect(deleteTerminalSnippet).toHaveBeenCalledWith(first.id))
+        const close = within(screen.getByRole('dialog')).getByRole('button', {
+            name: 'Close',
+        })
+        expect(close).toBeDisabled()
+        fireEvent.click(close)
+        fireEvent.keyDown(document, { key: 'Escape' })
+        fireEvent.pointerDown(document.body)
+
+        const pendingDialog = screen.getByRole('dialog', { name: 'Delete snippet' })
+        expect(within(pendingDialog).getByText(
+            `Delete “${first.name}”? This cannot be undone.`,
+        )).toBeVisible()
+        expect(screen.queryByText(
+            `Delete “${second.name}”? This cannot be undone.`,
+        )).not.toBeInTheDocument()
+
+        resolveDelete()
+        await waitFor(() => {
+            expect(screen.queryByRole('dialog', { name: 'Delete snippet' }))
+                .not.toBeInTheDocument()
+        })
+
+        const secondRow = screen.getByText(second.name).closest('[data-snippet-row]')
+        fireEvent.click(within(secondRow as HTMLElement).getByRole('button', {
+            name: `Delete ${second.name}`,
+        }))
+        expect(within(screen.getByRole('dialog')).getByText(
+            `Delete “${second.name}”? This cannot be undone.`,
+        )).toBeVisible()
+    })
+
     it('uses tab semantics, a polite live region, reachable 44px actions, and disables insertion', () => {
         const onInsert = vi.fn(() => true)
         renderPanel({ disabled: true, onInsert })
@@ -596,7 +669,7 @@ describe('TerminalSnippetPanel deletion and accessibility', () => {
         expect(screen.getByRole('tablist', { name: 'Snippet sources' })).toBeVisible()
         expect(screen.getByRole('tab', { name: 'Built-in' })).toHaveAttribute('aria-selected', 'true')
         expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite')
-        const insertButtons = screen.getAllByRole('button', { name: 'Insert' })
+        const insertButtons = screen.getAllByRole('button', { name: /^Insert / })
         expect(insertButtons[0]).toHaveClass('min-h-11', 'min-w-11')
         expect(insertButtons[0]).toBeDisabled()
         fireEvent.click(insertButtons[0])

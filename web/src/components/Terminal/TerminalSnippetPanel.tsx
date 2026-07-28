@@ -483,7 +483,7 @@ function BuiltInList(props: {
                                         </p>
                                     </div>
                                     <SnippetActionButton
-                                        label={t('terminal.snippets.insert')}
+                                        label={`${t('terminal.snippets.insert')} ${t(item.nameKey)}`}
                                         disabled={props.disabled}
                                         onClick={() => props.onInsert(item.command)}
                                     >
@@ -534,7 +534,7 @@ function CustomList(props: {
                     </SnippetActionButton>
                 </div>
             ) : null}
-            {props.snippets.length === 0 ? (
+            {!props.error && props.snippets.length === 0 ? (
                 <EmptyState>
                     {props.hasAnySnippets
                         ? t('terminal.snippets.noResults')
