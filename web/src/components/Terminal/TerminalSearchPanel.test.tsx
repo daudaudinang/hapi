@@ -237,7 +237,8 @@ describe('TerminalSearchPanel controls', () => {
                 limitExceeded: true,
             })
         })
-        expect(screen.getByText('1000/1000+')).toBeVisible()
+        expect(screen.getByText('1000+')).toBeVisible()
+        expect(screen.queryByText('1000/1000+')).not.toBeInTheDocument()
     })
 
     it('clears decorations and result count immediately for an empty query', () => {

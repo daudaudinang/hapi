@@ -49,11 +49,11 @@ function SearchButton(props: SearchButtonProps) {
 }
 
 function displayResults(results: TerminalSearchResults): string {
+    if (results.limitExceeded) return '1000+'
     const index = results.resultIndex >= 0 && results.resultCount > 0
         ? Math.min(results.resultIndex + 1, results.resultCount)
         : 0
-    const count = results.limitExceeded ? '1000+' : String(results.resultCount)
-    return `${index}/${count}`
+    return `${index}/${results.resultCount}`
 }
 
 export function TerminalSearchPanel(props: TerminalSearchPanelProps) {
