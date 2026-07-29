@@ -1,7 +1,7 @@
 # Terminal Key Chord Composer — Thiết kế
 
 **Ngày:** 2026-07-29  
-**Trạng thái:** Thiết kế đã duyệt; chờ duyệt đặc tả trước khi lập kế hoạch triển khai
+**Trạng thái:** Đã triển khai; kiểm chứng tự động hoàn tất; chờ nghiệm thu giao diện mobile
 
 ## 1. Mục tiêu
 
@@ -321,3 +321,13 @@ Tính năng hoàn thành khi:
 - mở picker hoặc quản lý không gây thay đổi bố cục terminal;
 - session modal và Editor terminal có cùng hành vi;
 - test, typecheck và Web build liên quan đều đạt.
+
+## 14. Bằng chứng kiểm chứng
+
+Ngày 2026-07-29:
+
+- `bun run --cwd web test`: 145 file test, 1249 test đạt;
+- `bun typecheck`: shared, CLI, Web và Hub đều đạt;
+- `bun run build:web`: Web production build và PWA service worker build thành công;
+- rà diff xác nhận không thay đổi Hub, CLI, shared schema, database hoặc API;
+- nghiệm thu trực quan trên thiết bị mobile thật vẫn do người dùng thực hiện sau khi tích hợp.
