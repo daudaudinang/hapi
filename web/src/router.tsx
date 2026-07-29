@@ -350,6 +350,7 @@ export type RootSearch = {
     modalReplaceSessionId?: string
     modalNewSessionId?: string
     modalReturnTo?: 'editor'
+    modalParent?: 'new-session'
 }
 
 const rootRoute = createRootRoute({
@@ -376,6 +377,9 @@ const rootRoute = createRootRoute({
         }
         if (search.modalReturnTo === 'editor') {
             result.modalReturnTo = 'editor'
+        }
+        if (search.modalParent === 'new-session') {
+            result.modalParent = 'new-session'
         }
         return result
     }

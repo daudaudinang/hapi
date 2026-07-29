@@ -25,13 +25,17 @@ export function BrowserModal(props: { machineId?: string; initialPath?: string; 
         }
 
         void navigate({
-            search: (prev: any) => ({
-                ...prev,
-                modal: 'new-session',
-                modalPath: directory,
-                modalMachineId: machineId,
-                modalReturnTo: search.modalReturnTo
-            })
+            search: (prev: any) => {
+                const next = {
+                    ...prev,
+                    modal: 'new-session',
+                    modalPath: directory,
+                    modalMachineId: machineId,
+                    modalReturnTo: search.modalReturnTo
+                }
+                delete next.modalParent
+                return next
+            }
         } as any)
     }, [navigate, search.modalReturnTo])
 

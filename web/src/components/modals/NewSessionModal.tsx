@@ -7,9 +7,14 @@ import { useMachines } from '@/hooks/queries/useMachines'
 import { queryKeys } from '@/lib/query-keys'
 import { AppDialogBody, AppDialogContent, AppDialogHeader } from '@/components/ui/app-dialog'
 import { NewSession } from '@/components/NewSession'
+import type { NewSessionDraft } from '@/components/NewSession/types'
 import type { RootSearch } from '@/router'
 
-export function NewSessionModal(props: { onClose: () => void }) {
+export function NewSessionModal(props: {
+    onClose: () => void
+    draft?: NewSessionDraft | null
+    onDraftChange?: (draft: NewSessionDraft) => void
+}) {
     const { api } = useAppContext()
     const navigate = useNavigate()
     const queryClient = useQueryClient()
@@ -18,6 +23,13 @@ export function NewSessionModal(props: { onClose: () => void }) {
     const search = useSearch({ strict: false }) as RootSearch
     const initialDirectory = search.modalPath
     const initialMachineId = search.modalMachineId
+    const initialDraft = props.draft
+        ? {
+            ...props.draft,
+            machineId: initialMachineId ?? props.draft.machineId,
+            directory: initialDirectory ?? props.draft.directory,
+        }
+        : null
 
     const handleSuccess = useCallback((sessionId: string) => {
         void queryClient.invalidateQueries({ queryKey: queryKeys.sessions })
@@ -131,6 +143,8 @@ export function NewSessionModal(props: { onClose: () => void }) {
                 ...prev,
                 modal: 'browser',
                 modalMachineId: args.machineId,
+                modalPath: args.directory || undefined,
+                modalParent: 'new-session',
                 modalReturnTo: search.modalReturnTo
             })
         } as any)
@@ -158,6 +172,8 @@ export function NewSessionModal(props: { onClose: () => void }) {
                     onChooseFolder={handleChooseFolder}
                     initialDirectory={initialDirectory}
                     initialMachineId={initialMachineId}
+                    initialDraft={initialDraft}
+                    onDraftChange={props.onDraftChange}
                 />
             </AppDialogBody>
         </AppDialogContent>
