@@ -168,7 +168,7 @@ export function TerminalHistoryPanel(props: TerminalHistoryPanelProps) {
                             }}
                             className="min-h-11 w-full appearance-none rounded-xl border border-[var(--app-border)] bg-[var(--app-secondary-bg)] px-3 pr-11 text-sm text-[var(--app-fg)] outline-none placeholder:text-[var(--app-hint)] focus-visible:ring-2 focus-visible:ring-violet-500 [&::-webkit-search-cancel-button]:hidden"
                         />
-                        {draftQuery ? (
+                        {draftQuery || appliedQuery ? (
                             <button
                                 type="button"
                                 aria-label={t('terminal.history.clearSearch')}

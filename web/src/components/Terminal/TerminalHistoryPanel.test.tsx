@@ -81,6 +81,9 @@ describe('TerminalHistoryPanel', () => {
         expect(screen.getByRole('button', { name: 'Insert pwd' })).toBeVisible()
         expect(screen.queryByRole('button', { name: 'Insert git status' })).not.toBeInTheDocument()
 
+        fireEvent.change(search, { target: { value: '' } })
+        expect(screen.queryByRole('button', { name: 'Insert git status' })).not.toBeInTheDocument()
+
         fireEvent.click(screen.getByRole('button', { name: 'Clear search' }))
 
         expect(search).toHaveValue('')

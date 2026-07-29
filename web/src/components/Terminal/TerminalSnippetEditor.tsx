@@ -43,7 +43,7 @@ export function TerminalSnippetEditor(props: {
                     {t(props.editor.mode === 'create'
                         ? 'terminal.snippets.editor.newTitle'
                         : 'terminal.snippets.editor.editTitle')}
-                    </h3>
+                </h3>
             </div>
 
             <div className="grid grid-cols-5 gap-2 sm:grid-cols-1 sm:gap-3">
