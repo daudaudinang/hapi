@@ -1,24 +1,24 @@
-# Desktop Terminal Search Lifecycle
+# Terminal Search Lifecycle
 
 ## Mục tiêu
 
-Trên desktop, việc tạm ẩn thanh Search không được làm mất từ khoá, kết quả
-hoặc vùng tô sáng. Chỉ thao tác đóng rõ ràng hoặc đổi ngữ cảnh terminal mới
-xoá phiên tìm kiếm.
-
-Mobile giữ nguyên hành vi hiện tại.
+Trên cả mobile và desktop, việc tạm ẩn thanh Search không được làm mất từ
+khoá, kết quả hoặc vùng tô sáng. Chỉ thao tác đóng rõ ràng hoặc đổi ngữ cảnh
+terminal mới xoá phiên tìm kiếm.
 
 ## Hành vi
 
-| Tương tác desktop | Kết quả |
+| Tương tác | Kết quả |
 |---|---|
-| Nhấn icon Search hoặc `Ctrl/Cmd+F` | Mở Search; nếu đã có phiên tìm kiếm thì khôi phục nguyên trạng |
-| Nhấn lại icon Search | Thu gọn giao diện; giữ từ khoá, kết quả và vùng tô sáng |
-| Nhấn vào terminal body | Không đóng và không xoá Search |
+| Nhấn Search hoặc `Ctrl/Cmd+F` trên desktop | Mở Search; nếu đã có phiên tìm kiếm thì khôi phục nguyên trạng |
+| Nhấn lại Search | Thu gọn giao diện; giữ từ khoá, kết quả và vùng tô sáng |
+| Nhấn vào terminal body trên mobile hoặc desktop | Không đóng, không thu gọn và không xoá Search |
 | Mở Snippets | Ẩn Search; giữ phiên tìm kiếm |
 | Nhấn `×` trong Search | Đóng và xoá phiên tìm kiếm |
 | Đổi terminal tab | Xoá phiên tìm kiếm |
+| Nhấn lại terminal tab đang active | Không xoá phiên tìm kiếm |
 | Đóng terminal | Xoá phiên tìm kiếm |
+| Terminal mất kết nối | Xoá phiên tìm kiếm vì buffer/controller không còn hợp lệ |
 | Nhấn `Esc` | HAPI không can thiệp |
 
 ## Thiết kế trạng thái
@@ -47,6 +47,5 @@ Không thay đổi Hub, CLI, API snippets hoặc giao thức terminal.
    - Panel ẩn phải không hiển thị, không nhận pointer và không chiếm diện tích.
 2. Phiên Search cũ rò sang terminal khác.
    - Đổi tab/terminal phải clear controller, decorations và state.
-3. Desktop fix làm đổi mobile.
-   - Test riêng breakpoint desktop; test mobile dismissal hiện có vẫn phải đạt.
-
+3. Lifecycle khác nhau giữa mobile và desktop.
+   - Test cả hai breakpoint; terminal body phải không tác động Search ở cả hai.
