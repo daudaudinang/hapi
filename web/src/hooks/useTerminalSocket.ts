@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Manager, type Socket } from 'socket.io-client'
-import type { TerminalListPayload, TerminalState, TerminalWarningPayload } from '@hapi/protocol'
+import type {
+    TerminalHistoryResult,
+    TerminalListPayload,
+    TerminalState,
+    TerminalWarningPayload
+} from '@hapi/protocol'
 
 export type TerminalConnectionState =
     | { status: 'idle' }
@@ -46,11 +51,14 @@ export function useTerminalSocket(options: UseTerminalSocketOptions): {
     close: () => void
     onOutput: (handler: (data: string) => void) => void
     onExit: (handler: (code: number | null, signal: string | null) => void) => void
+    requestHistory: (requestId: string, limit?: number) => boolean
+    onHistory: (handler: (result: TerminalHistoryResult) => void) => void
 } {
     const [state, setState] = useState<TerminalConnectionState>({ status: 'idle' })
     const socketRef = useRef<Socket | null>(null)
     const outputHandlerRef = useRef<(data: string) => void>(() => {})
     const exitHandlerRef = useRef<(code: number | null, signal: string | null) => void>(() => {})
+    const historyHandlerRef = useRef<(result: TerminalHistoryResult) => void>(() => {})
     const sessionIdRef = useRef(options.sessionId)
     const machineIdRef = useRef(options.machineId)
     const cwdRef = useRef(options.cwd)
@@ -180,6 +188,19 @@ export function useTerminalSocket(options: UseTerminalSocketOptions): {
             setErrorState(payload.message)
         })
 
+        socket.on('terminal:history-result', (payload: TerminalHistoryResult) => {
+            if (!isCurrentTerminal(payload.terminalId)) {
+                return
+            }
+            if ('sessionId' in payload && payload.sessionId !== sessionIdRef.current) {
+                return
+            }
+            if ('machineId' in payload && payload.machineId !== machineIdRef.current) {
+                return
+            }
+            historyHandlerRef.current(payload)
+        })
+
         socket.on('connect_error', (error) => {
             const message = error instanceof Error ? error.message : 'Connection error'
             setErrorState(message)
@@ -241,6 +262,23 @@ export function useTerminalSocket(options: UseTerminalSocketOptions): {
         exitHandlerRef.current = handler
     }, [])
 
+    const requestHistory = useCallback((requestId: string, limit?: number) => {
+        const socket = socketRef.current
+        if (!socket?.connected) {
+            return false
+        }
+        socket.emit('terminal:history', {
+            terminalId: terminalIdRef.current,
+            requestId,
+            ...(limit === undefined ? {} : { limit })
+        })
+        return true
+    }, [])
+
+    const onHistory = useCallback((handler: (result: TerminalHistoryResult) => void) => {
+        historyHandlerRef.current = handler
+    }, [])
+
     return {
         state,
         connect,
@@ -249,7 +287,9 @@ export function useTerminalSocket(options: UseTerminalSocketOptions): {
         disconnect,
         close,
         onOutput,
-        onExit
+        onExit,
+        requestHistory,
+        onHistory
     }
 }
 
@@ -281,6 +321,8 @@ export type SessionTerminalController = {
     onOutput: (handler: (terminalId: string, data: string) => void) => void
     onExit: (handler: (terminalId: string, code: number | null, signal: string | null) => void) => void
     onWarning: (handler: (payload: TerminalWarningPayload) => void) => void
+    requestHistory: (terminalId: string, requestId: string, limit?: number) => boolean
+    onHistory: (handler: (result: TerminalHistoryResult) => void) => void
     clearLastError: () => void
 }
 
@@ -301,6 +343,7 @@ export function useSessionTerminalSocket(options: {
     const outputHandlerRef = useRef<(terminalId: string, data: string) => void>(() => {})
     const exitHandlerRef = useRef<(terminalId: string, code: number | null, signal: string | null) => void>(() => {})
     const warningHandlerRef = useRef<(payload: TerminalWarningPayload) => void>(() => {})
+    const historyHandlerRef = useRef<(result: TerminalHistoryResult) => void>(() => {})
 
     useEffect(() => {
         tokenRef.current = options.token
@@ -421,6 +464,13 @@ export function useSessionTerminalSocket(options: {
             warningHandlerRef.current(payload)
         })
 
+        socket.on('terminal:history-result', (payload: TerminalHistoryResult) => {
+            if (!('sessionId' in payload) || payload.sessionId !== sessionIdRef.current) {
+                return
+            }
+            historyHandlerRef.current(payload)
+        })
+
         socket.on('connect_error', (error) => {
             const message = error instanceof Error ? error.message : 'Connection error'
             setState({ status: 'error', error: message })
@@ -529,6 +579,23 @@ export function useSessionTerminalSocket(options: {
         warningHandlerRef.current = handler
     }, [])
 
+    const requestHistory = useCallback((terminalId: string, requestId: string, limit?: number) => {
+        const socket = socketRef.current
+        if (!socket?.connected) {
+            return false
+        }
+        socket.emit('terminal:history', {
+            terminalId,
+            requestId,
+            ...(limit === undefined ? {} : { limit })
+        })
+        return true
+    }, [])
+
+    const onHistory = useCallback((handler: (result: TerminalHistoryResult) => void) => {
+        historyHandlerRef.current = handler
+    }, [])
+
     const clearLastError = useCallback(() => {
         setLastError(null)
     }, [])
@@ -550,6 +617,8 @@ export function useSessionTerminalSocket(options: {
         onOutput,
         onExit,
         onWarning,
+        requestHistory,
+        onHistory,
         clearLastError
     }), [
         state,
@@ -568,6 +637,8 @@ export function useSessionTerminalSocket(options: {
         onOutput,
         onExit,
         onWarning,
+        requestHistory,
+        onHistory,
         clearLastError
     ])
 }

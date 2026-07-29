@@ -259,6 +259,46 @@ describe('useSessionTerminalSocket warning merge', () => {
         })
     })
 
+    it('requests session terminal history and delivers only matching session results', () => {
+        const { result, socket } = renderSessionHook()
+        const received: unknown[] = []
+        act(() => result.current.onHistory((payload) => received.push(payload)))
+
+        let accepted: boolean | undefined
+        act(() => {
+            accepted = result.current.requestHistory('t1', 'request-1', 100)
+        })
+
+        expect(accepted).toBe(true)
+        expect(socket.emits).toContainEqual({
+            event: 'terminal:history',
+            payload: { terminalId: 't1', requestId: 'request-1', limit: 100 }
+        })
+
+        act(() => socket.trigger('terminal:history-result', {
+            sessionId: 'other-session',
+            terminalId: 't1',
+            requestId: 'request-1',
+            status: 'ok',
+            entries: []
+        }))
+        act(() => socket.trigger('terminal:history-result', {
+            sessionId: 'session-1',
+            terminalId: 't1',
+            requestId: 'request-1',
+            status: 'ok',
+            entries: [{ index: 1, command: 'pwd' }]
+        }))
+
+        expect(received).toEqual([{
+            sessionId: 'session-1',
+            terminalId: 't1',
+            requestId: 'request-1',
+            status: 'ok',
+            entries: [{ index: 1, command: 'pwd' }]
+        }])
+    })
+
     it('stores recovery reason from terminal list payload', () => {
         const { result, socket } = renderSessionHook()
 
@@ -392,5 +432,29 @@ describe('useTerminalSocket writes', () => {
             event: 'terminal:write',
             payload: { terminalId: 'terminal-1', data: 'pwd' }
         })
+    })
+
+    it('requests machine terminal history and rejects requests after disconnect', () => {
+        const { result, socket } = renderMachineHook()
+        const received: unknown[] = []
+        act(() => result.current.onHistory((payload) => received.push(payload)))
+
+        expect(result.current.requestHistory('request-1', 50)).toBe(true)
+        expect(socket.emits).toContainEqual({
+            event: 'terminal:history',
+            payload: { terminalId: 'terminal-1', requestId: 'request-1', limit: 50 }
+        })
+
+        act(() => socket.trigger('terminal:history-result', {
+            machineId: 'machine-1',
+            terminalId: 'terminal-1',
+            requestId: 'request-1',
+            status: 'ok',
+            entries: [{ index: 2, command: 'ls' }]
+        }))
+        expect(received).toHaveLength(1)
+
+        socket.connected = false
+        expect(result.current.requestHistory('request-2')).toBe(false)
     })
 })
