@@ -172,6 +172,7 @@ export function createTerminalKeyChordStore(dependencies: TerminalKeyChordStoreD
                 item.id === deleted.item.id
                 || terminalKeyChordIdentity(item.chord) === identity
             ))
+            || loaded.items.length >= TERMINAL_KEY_CHORD_LIMIT
         ) {
             return false
         }

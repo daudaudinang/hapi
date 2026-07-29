@@ -89,6 +89,7 @@ export function TerminalKeyComposer(props: {
     const previousContextRef = useRef(props.terminalContextKey)
     const sendingRef = useRef(false)
     const badgeScrollRef = useRef<HTMLDivElement | null>(null)
+    const savedKeyRefs = useRef(new Map<string, HTMLButtonElement>())
 
     const refreshItems = useCallback(() => {
         const store = getBrowserTerminalKeyChordStore()
@@ -181,6 +182,11 @@ export function TerminalKeyComposer(props: {
                 break
             case 'duplicate':
                 setFeedback('terminal.keys.duplicate')
+                savedKeyRefs.current.get(result.item.id)?.scrollIntoView?.({
+                    behavior: 'smooth',
+                    block: 'nearest',
+                    inline: 'center',
+                })
                 break
             case 'limit':
                 setFeedback('terminal.keys.limit')
@@ -234,6 +240,13 @@ export function TerminalKeyComposer(props: {
                     return (
                         <button
                             key={item.id}
+                            ref={(node) => {
+                                if (node) {
+                                    savedKeyRefs.current.set(item.id, node)
+                                } else {
+                                    savedKeyRefs.current.delete(item.id)
+                                }
+                            }}
                             type="button"
                             aria-label={`${t('terminal.keys.load')} ${label}`}
                             disabled={props.disabled}

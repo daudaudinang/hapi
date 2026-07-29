@@ -227,6 +227,40 @@ describe('TerminalKeyComposer', () => {
         expect(screen.getByRole('dialog', { name: 'Saved combinations' })).toBeInTheDocument()
     })
 
+    it('brings an existing saved chord into view when saving a duplicate', async () => {
+        localStorage.setItem(TERMINAL_KEY_CHORD_STORAGE_KEY, JSON.stringify({
+            version: 1,
+            items: [{
+                id: 'saved-one',
+                chord: chord('letter-c', ['ctrl']),
+                createdAt: 1,
+            }],
+        }))
+        render(
+            <TerminalKeyComposer
+                terminalContextKey="terminal-1"
+                disabled={false}
+                visible
+                onSend={() => true}
+            />,
+        )
+
+        const savedButton = await screen.findByRole('button', {
+            name: 'Load Ctrl + C',
+        })
+        const scrollIntoView = vi.fn()
+        savedButton.scrollIntoView = scrollIntoView
+        fireEvent.click(savedButton)
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+        expect(screen.getByRole('status')).toHaveTextContent('already saved')
+        expect(scrollIntoView).toHaveBeenCalledWith({
+            behavior: 'smooth',
+            block: 'nearest',
+            inline: 'center',
+        })
+    })
+
     it('removes badges through labelled trailing controls', () => {
         render(
             <TerminalKeyComposer

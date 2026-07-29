@@ -142,6 +142,27 @@ describe('terminalKeyChordStore', () => {
         expect(store.load().items.map((item) => item.id)).toEqual(['saved-3', 'saved-2', 'saved-1'])
     })
 
+    it('does not restore past the saved-item limit', () => {
+        const { store } = makeStore()
+        const keyIds = [
+            ...Array.from({ length: 26 }, (_, index) => `letter-${String.fromCharCode(97 + index)}`),
+            ...Array.from({ length: 10 }, (_, index) => `digit-${index}`),
+            ...Array.from({ length: 12 }, (_, index) => `f${index + 1}`),
+            'escape',
+            'tab',
+        ]
+        for (const keyId of keyIds) {
+            store.save(chord(keyId))
+        }
+
+        const deleted = store.remove('saved-1')
+        expect(deleted).not.toBeNull()
+        expect(store.save(chord('enter')).status).toBe('saved')
+
+        expect(store.restore(deleted!)).toBe(false)
+        expect(store.load().items).toHaveLength(TERMINAL_KEY_CHORD_LIMIT)
+    })
+
     it('reports unavailable when storage access throws', () => {
         const storage = new MemoryStorage()
         storage.getItem = () => {
