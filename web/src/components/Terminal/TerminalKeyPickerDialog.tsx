@@ -31,7 +31,7 @@ const GROUPS: Array<{ id: TerminalKeyGroup; labelKey: string }> = [
     { id: 'symbol', labelKey: 'terminal.keys.symbol' },
 ]
 
-function initialDraft(chord: TerminalKeyChord | null): TerminalKeyChordDraft {
+function initialDraft(chord: TerminalKeyChordDraft | null): TerminalKeyChordDraft {
     return chord
         ? { modifiers: [...chord.modifiers], key: chord.key }
         : { modifiers: [], key: null }
@@ -86,20 +86,20 @@ export function TerminalKeyTokenList(props: {
 
 export function TerminalKeyPickerDialog(props: {
     open: boolean
-    chord: TerminalKeyChord | null
+    chord: TerminalKeyChordDraft | null
     onOpenChange: (open: boolean) => void
     onApply: (chord: TerminalKeyChord) => void
 }) {
     const { t } = useTranslation()
     const [draft, setDraft] = useState<TerminalKeyChordDraft>(() => initialDraft(props.chord))
-    const [group, setGroup] = useState<TerminalKeyGroup>(props.chord?.key.group ?? 'basic')
+    const [group, setGroup] = useState<TerminalKeyGroup>(props.chord?.key?.group ?? 'basic')
 
     useEffect(() => {
         if (!props.open) {
             return
         }
         setDraft(initialDraft(props.chord))
-        setGroup(props.chord?.key.group ?? 'basic')
+        setGroup(props.chord?.key?.group ?? 'basic')
     }, [props.chord, props.open])
 
     const supported = useMemo(() => isDraftSupported(draft), [draft])
