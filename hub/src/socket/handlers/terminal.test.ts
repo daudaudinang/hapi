@@ -4,6 +4,7 @@ import { TerminalRegistry } from '../terminalRegistry'
 import { TerminalSessionStateStore } from '../terminalSessionState'
 import { handleTerminalRegistryIdle, resolveTerminalLimitConfig } from '../server'
 import type { SocketServer, SocketWithData } from '../socketTypes'
+import { TerminalHistoryRequestRegistry } from '../terminalHistoryRequests'
 
 type EmittedEvent = {
     event: string
@@ -81,6 +82,7 @@ type Harness = {
     terminalSocket: FakeSocket
     cliNamespace: FakeNamespace
     terminalRegistry: TerminalRegistry
+    terminalHistoryRequests: TerminalHistoryRequestRegistry
 }
 
 function createHarness(options?: {
@@ -97,6 +99,7 @@ function createHarness(options?: {
     const terminalSocket = new FakeSocket('terminal-socket')
     terminalSocket.data.namespace = options?.socketNamespace ?? 'default'
     const terminalRegistry = new TerminalRegistry({ idleTimeoutMs: 0 })
+    const terminalHistoryRequests = new TerminalHistoryRequestRegistry()
     const cliNamespace = io.of('/cli')
 
     registerTerminalHandlers(terminalSocket as unknown as SocketWithData, {
@@ -104,12 +107,13 @@ function createHarness(options?: {
         getSession: () => ({ active: options?.sessionActive ?? true, namespace: options?.sessionNamespace ?? 'default' }),
         getMachine: () => ({ active: options?.machineActive ?? true, namespace: options?.machineNamespace ?? 'default' }),
         terminalRegistry,
+        terminalHistoryRequests,
         terminalSessionState: options?.terminalSessionState,
         maxTerminalsPerSocket: options?.maxTerminalsPerSocket ?? 4,
         maxTerminalsPerSession: options?.maxTerminalsPerSession ?? 3
     })
 
-    return { io, terminalSocket, cliNamespace, terminalRegistry }
+    return { io, terminalSocket, cliNamespace, terminalRegistry, terminalHistoryRequests }
 }
 
 function connectCliSocket(cliNamespace: FakeNamespace, cliSocket: FakeSocket, sessionId: string, namespace = 'default'): void {
@@ -135,6 +139,59 @@ function lastEmit(socket: FakeSocket, event: string): EmittedEvent | undefined {
 }
 
 describe('terminal socket handlers', () => {
+    it('privately forwards a clamped history request with an opaque correlation id', () => {
+        const { terminalSocket, cliNamespace, terminalRegistry, terminalHistoryRequests } = createHarness()
+        const cliSocket = new FakeSocket('cli-socket')
+        connectCliSocket(cliNamespace, cliSocket, 'session-1')
+        terminalRegistry.register({
+            terminalId: 'terminal-1',
+            sessionId: 'session-1',
+            namespace: 'default',
+            socketId: terminalSocket.id,
+            cliSocketId: cliSocket.id
+        })
+
+        terminalSocket.trigger('terminal:history', {
+            terminalId: 'terminal-1',
+            requestId: 'web-request-1',
+            limit: 500
+        })
+
+        const forwarded = lastEmit(cliSocket, 'terminal:history')
+        expect(forwarded?.data).toEqual({
+            sessionId: 'session-1',
+            terminalId: 'terminal-1',
+            requestId: expect.any(String),
+            limit: 100
+        })
+        const correlationId = (forwarded?.data as { requestId: string }).requestId
+        expect(correlationId).not.toBe('web-request-1')
+        expect(terminalHistoryRequests.has(correlationId)).toBe(true)
+
+        terminalSocket.trigger('disconnect')
+        expect(terminalHistoryRequests.has(correlationId)).toBe(false)
+    })
+
+    it('does not forward history for an unowned terminal', () => {
+        const { terminalSocket, cliNamespace, terminalRegistry } = createHarness()
+        const cliSocket = new FakeSocket('cli-socket')
+        connectMachineCliSocket(cliNamespace, cliSocket, 'machine-1')
+        terminalRegistry.register({
+            terminalId: 'terminal-1',
+            machineId: 'machine-1',
+            namespace: 'default',
+            socketId: 'another-web-socket',
+            cliSocketId: cliSocket.id
+        })
+
+        terminalSocket.trigger('terminal:history', {
+            terminalId: 'terminal-1',
+            requestId: 'web-request-1'
+        })
+
+        expect(lastEmit(cliSocket, 'terminal:history')).toBeUndefined()
+    })
+
     it('defaults session preflight max to 3 while legacy socket and machine max stay 4', () => {
         const previousMax = process.env.HAPI_TERMINAL_MAX_TERMINALS
         delete process.env.HAPI_TERMINAL_MAX_TERMINALS

@@ -3,6 +3,7 @@ import type { Store, StoredMachine, StoredSession } from '../../../store'
 import type { RpcRegistry } from '../../rpcRegistry'
 import type { SyncEvent } from '../../../sync/syncEngine'
 import type { TerminalRegistry } from '../../terminalRegistry'
+import type { TerminalHistoryRequestRegistry } from '../../terminalHistoryRequests'
 import type { LostSessionTerminalList, TerminalSessionStateStore } from '../../terminalSessionState'
 import type { CliSocketWithData, SocketServer } from '../../socketTypes'
 import type { AccessErrorReason, AccessResult } from './types'
@@ -39,6 +40,7 @@ export type CliHandlersDeps = {
     store: Store
     rpcRegistry: RpcRegistry
     terminalRegistry: TerminalRegistry
+    terminalHistoryRequests?: TerminalHistoryRequestRegistry
     terminalSessionState?: TerminalSessionStateStore
     onSessionAlive?: (payload: SessionAlivePayload) => void
     onSessionEnd?: (payload: SessionEndPayload) => void
@@ -64,7 +66,7 @@ export function broadcastLostTerminalLists(
 }
 
 export function registerCliHandlers(socket: CliSocketWithData, deps: CliHandlersDeps): void {
-    const { io, store, rpcRegistry, terminalRegistry, terminalSessionState, onSessionAlive, onSessionEnd, onMachineAlive, onWebappEvent, onBackgroundTaskDelta, onSessionActivity, onSessionCrashed, onAgentTextMessage } = deps
+    const { io, store, rpcRegistry, terminalRegistry, terminalHistoryRequests, terminalSessionState, onSessionAlive, onSessionEnd, onMachineAlive, onWebappEvent, onBackgroundTaskDelta, onSessionActivity, onSessionCrashed, onAgentTextMessage } = deps
     const terminalNamespace = io.of('/terminal')
     const namespace = typeof socket.data.namespace === 'string' ? socket.data.namespace : null
 
@@ -138,6 +140,7 @@ export function registerCliHandlers(socket: CliSocketWithData, deps: CliHandlers
     })
     registerTerminalHandlers(socket, {
         terminalRegistry,
+        terminalHistoryRequests,
         terminalSessionState,
         terminalNamespace,
         resolveSessionAccess,
@@ -157,6 +160,6 @@ export function registerCliHandlers(socket: CliSocketWithData, deps: CliHandlers
             namespace && sessionId ? { namespace, sessionId } : null
         ) ?? []
         broadcastLostTerminalLists(terminalNamespace, lostLists)
-        cleanupTerminalHandlers(socket, { terminalRegistry, terminalNamespace })
+        cleanupTerminalHandlers(socket, { terminalRegistry, terminalHistoryRequests, terminalNamespace })
     })
 }
