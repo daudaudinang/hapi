@@ -40,7 +40,7 @@ export function SessionTaskListControl({ todos, compact = false }: {
                     <span>{completed}/{total}</span>
                 </button>
             </AppDialogTrigger>
-            <AppDialogContent className="session-task-dialog">
+            <AppDialogContent presentation="sheet" className="session-task-dialog">
                 <AppDialogHeader
                     title={t('session.tasks.title')}
                     subtitle={t('session.tasks.progress', { completed, total })}

@@ -881,7 +881,8 @@ describe('SessionTerminalTabs', () => {
         renderTabs()
         fireEvent.click(screen.getByRole('button', { name: 'Close terminal t2' }))
 
-        expect(screen.getByRole('dialog', { name: 'Stop terminal process?' })).toBeInTheDocument()
+        expect(screen.getByRole('dialog', { name: 'Stop terminal process?' }))
+            .toHaveAttribute('data-app-dialog-presentation', 'alert')
         fireEvent.click(screen.getByRole('button', { name: 'Stop process and close' }))
 
         expect(mocks.controller.closeOne).toHaveBeenCalledTimes(1)

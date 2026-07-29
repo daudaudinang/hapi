@@ -593,12 +593,19 @@ export function EditorTerminal(props: {
                     }
                 }}
             >
-                <AppDialogContent className="bottom-0 left-0 top-auto w-full max-w-none translate-x-0 translate-y-0 rounded-b-none rounded-t-xl sm:left-1/2 sm:bottom-auto sm:top-1/2 sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl">
+                <AppDialogContent presentation="alert" className="max-w-md">
                     <AppDialogHeader
                         title="Close terminal?"
                         subtitle="This will stop the running process and close the terminal tab."
                     />
-                    <AppDialogFooter className="mx-auto w-full max-w-md flex-col">
+                    <AppDialogFooter className="mx-auto grid w-full max-w-md grid-cols-2">
+                            <button
+                                type="button"
+                                className="w-full rounded border border-[var(--app-border)] px-3 py-2 text-sm text-[var(--app-fg)] hover:bg-[var(--app-secondary-bg)]"
+                                onClick={() => setPendingCloseTerminalId(null)}
+                            >
+                                Cancel
+                            </button>
                             <button
                                 type="button"
                                 className="w-full rounded bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-500"
@@ -611,13 +618,6 @@ export function EditorTerminal(props: {
                                 }}
                             >
                                 Stop process and close
-                            </button>
-                            <button
-                                type="button"
-                                className="w-full rounded border border-[var(--app-border)] px-3 py-2 text-sm text-[var(--app-fg)] hover:bg-[var(--app-secondary-bg)]"
-                                onClick={() => setPendingCloseTerminalId(null)}
-                            >
-                                Cancel
                             </button>
                     </AppDialogFooter>
                 </AppDialogContent>

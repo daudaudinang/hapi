@@ -986,10 +986,15 @@ describe('EditorTerminal', () => {
 
         const dialog = screen.getByRole('dialog', { name: 'Close terminal?' })
         expect(dialog).toBeInTheDocument()
-        expect(dialog).toHaveClass('bottom-0', 'left-0', 'translate-x-0', 'rounded-t-xl')
-        expect(dialog).toHaveClass('sm:left-1/2', 'sm:-translate-x-1/2')
+        expect(dialog).toHaveAttribute('data-app-dialog-presentation', 'alert')
+        expect(dialog).not.toHaveClass('bottom-0', 'rounded-t-xl')
         expect(screen.getByRole('button', { name: 'Stop process and close' })).toHaveClass('w-full', 'py-2')
-        expect(screen.getByRole('button', { name: 'Cancel' }).parentElement).toHaveClass('flex-col')
+        const footer = screen.getByRole('button', { name: 'Cancel' }).parentElement
+        expect(within(footer!).getAllByRole('button').map((button) => button.textContent)).toEqual([
+            'Cancel',
+            'Stop process and close',
+        ])
+        expect(footer).toHaveClass('grid', 'grid-cols-2')
         expect(onCloseTab).not.toHaveBeenCalled()
         expect(mocks.closesByTerminalId.get('term-machine')).not.toHaveBeenCalled()
 

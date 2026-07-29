@@ -657,7 +657,7 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
             />
 
             <AppDialog open={pendingCloseTerminalId !== null} onOpenChange={(open) => !open && setPendingCloseTerminalId(null)}>
-                <AppDialogContent className="max-w-md">
+                <AppDialogContent presentation="alert" className="max-w-md">
                     <AppDialogHeader
                         title={t('terminal.close.confirmTitle')}
                         subtitle={t('terminal.close.confirmDescription')}

@@ -20,10 +20,16 @@ export function TerminalModal(props: { sessionId: string; onClose: () => void })
     }
 
     return (
-        <AppDialogContent className="h-[85vh] max-h-[800px] w-[95vw] max-w-3xl">
+        <AppDialogContent
+            presentation="workspace"
+            className="h-[85vh] max-h-[800px] w-[95vw] max-w-3xl"
+        >
             <AppDialogHeader
                 title="Terminal"
                 subtitle={session.metadata?.name ?? session.metadata?.path}
+                mobileNavigation="back"
+                mobileBackLabel="Back to session"
+                onMobileBack={props.onClose}
             />
             <AppDialogBody className="overflow-hidden p-0">
                 <SessionTerminalTabs

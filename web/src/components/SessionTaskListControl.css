@@ -103,13 +103,18 @@
     --session-task-active: #6552c7;
     --session-task-pending: #94600d;
     --session-task-completed: #147557;
-    width: calc(100vw - 24px);
-    max-width: 440px;
     border-color: var(--session-task-border);
-    border-radius: 14px;
     background: var(--session-task-surface);
     color: var(--session-task-text);
     box-shadow: 0 24px 64px var(--session-task-shadow), 0 0 0 1px var(--session-task-outline);
+}
+
+@media (min-width: 640px) {
+    .session-task-dialog {
+        width: calc(100vw - 24px);
+        max-width: 440px;
+        border-radius: 14px;
+    }
 }
 
 [data-theme="dark"] .session-task-dialog {
