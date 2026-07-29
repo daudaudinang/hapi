@@ -13,14 +13,25 @@ import {
 export const AppDialog = Dialog
 export const AppDialogTrigger = DialogTrigger
 
+export type AppDialogPresentation = 'alert' | 'sheet' | 'workspace'
+
 type AppDialogContentProps = ComponentProps<typeof DialogContent> & {
     dismissible?: boolean
+    presentation?: AppDialogPresentation
+}
+
+const presentationClasses: Record<AppDialogPresentation, string> = {
+    alert: '',
+    sheet: 'max-sm:bottom-0 max-sm:left-0 max-sm:right-0 max-sm:top-auto max-sm:w-full max-sm:max-w-none max-sm:max-h-[82dvh] max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-b-none max-sm:rounded-t-[20px] max-sm:pb-[env(safe-area-inset-bottom)]',
+    workspace: 'max-sm:inset-0 max-sm:h-[100dvh] max-sm:max-h-none max-sm:w-full max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none max-sm:border-0 max-sm:pt-[env(safe-area-inset-top)] max-sm:pb-[env(safe-area-inset-bottom)]',
 }
 
 export function AppDialogContent(props: AppDialogContentProps) {
     const {
+        children,
         className,
         dismissible = true,
+        presentation = 'alert',
         onEscapeKeyDown,
         onInteractOutside,
         onPointerDownOutside,
@@ -31,6 +42,7 @@ export function AppDialogContent(props: AppDialogContentProps) {
         <DialogContent
             showClose={false}
             data-app-dialog-content=""
+            data-app-dialog-presentation={presentation}
             onEscapeKeyDown={(event) => {
                 onEscapeKeyDown?.(event)
                 if (!dismissible) event.preventDefault()
@@ -44,11 +56,23 @@ export function AppDialogContent(props: AppDialogContentProps) {
                 if (!dismissible) event.preventDefault()
             }}
             className={cn(
-                'flex max-h-[calc(100vh-24px)] flex-col gap-0 overflow-hidden border-[var(--app-border)] bg-[var(--app-bg)] p-0',
+                'flex max-h-[calc(100dvh-24px)] flex-col gap-0 overflow-hidden border-[var(--app-border)] bg-[var(--app-bg)] p-0',
+                presentationClasses[presentation],
                 className
             )}
             {...rest}
-        />
+        >
+            {presentation === 'sheet' ? (
+                <div
+                    data-app-dialog-sheet-handle=""
+                    aria-hidden="true"
+                    className="grid h-5 shrink-0 place-items-center sm:hidden"
+                >
+                    <span className="h-1 w-9 rounded-full bg-[var(--app-border)]" />
+                </div>
+            ) : null}
+            {children}
+        </DialogContent>
     )
 }
 

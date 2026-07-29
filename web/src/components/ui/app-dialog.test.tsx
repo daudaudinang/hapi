@@ -39,6 +39,51 @@ describe('AppDialog', () => {
         expect(document.querySelector('[data-app-dialog-footer]')).toHaveTextContent('Footer')
     })
 
+    it.each([
+        ['sheet', ['max-sm:bottom-0', 'max-sm:top-auto', 'max-sm:max-h-[82dvh]', 'max-sm:rounded-b-none']],
+        ['workspace', ['max-sm:inset-0', 'max-sm:h-[100dvh]', 'max-sm:max-h-none', 'max-sm:rounded-none']]
+    ] as const)('applies the %s mobile presentation', (presentation, classes) => {
+        render(
+            <AppDialog open>
+                <AppDialogContent
+                    presentation={presentation}
+                    data-testid={`${presentation}-content`}
+                >
+                    <AppDialogHeader title="Example" />
+                </AppDialogContent>
+            </AppDialog>
+        )
+
+        expect(screen.getByTestId(`${presentation}-content`)).toHaveClass(...classes)
+        expect(screen.getByTestId(`${presentation}-content`))
+            .toHaveAttribute('data-app-dialog-presentation', presentation)
+    })
+
+    it('keeps alert as the default presentation', () => {
+        render(
+            <AppDialog open>
+                <AppDialogContent data-testid="alert-content">
+                    <AppDialogHeader title="Alert" />
+                </AppDialogContent>
+            </AppDialog>
+        )
+
+        expect(screen.getByTestId('alert-content'))
+            .toHaveAttribute('data-app-dialog-presentation', 'alert')
+    })
+
+    it('renders a mobile-only handle for sheets', () => {
+        render(
+            <AppDialog open>
+                <AppDialogContent presentation="sheet">
+                    <AppDialogHeader title="Tasks" />
+                </AppDialogContent>
+            </AppDialog>
+        )
+
+        expect(document.querySelector('[data-app-dialog-sheet-handle]')).toHaveClass('sm:hidden')
+    })
+
     it('uses a slim outline visual inside a larger close hit area', () => {
         render(
             <AppDialog open>
