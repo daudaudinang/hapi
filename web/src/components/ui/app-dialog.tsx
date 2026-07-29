@@ -84,15 +84,43 @@ export function AppDialogHeader(props: {
     actions?: ReactNode
     closeLabel?: string
     closeDisabled?: boolean
+    mobileNavigation?: 'close' | 'back'
+    mobileBackLabel?: string
+    onMobileBack?: () => void
     className?: string
 }) {
+    const mobileNavigation = props.mobileNavigation ?? 'close'
+
     return (
         <header
+            data-app-dialog-header=""
             className={cn(
                 'flex min-h-[50px] shrink-0 items-center gap-3 border-b border-[var(--app-border)] bg-[var(--app-subtle-bg)] pl-3 pr-1.5',
                 props.className
             )}
         >
+            {mobileNavigation === 'back' ? (
+                <button
+                    type="button"
+                    aria-label={props.mobileBackLabel ?? 'Back'}
+                    disabled={props.closeDisabled}
+                    onClick={props.onMobileBack}
+                    className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-button)] disabled:cursor-not-allowed disabled:opacity-50 sm:hidden"
+                >
+                    <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="h-[18px] w-[18px]"
+                        aria-hidden="true"
+                    >
+                        <path d="m15 18-6-6 6-6" />
+                    </svg>
+                </button>
+            ) : null}
             <div className="flex min-w-0 flex-1 items-center gap-2.5">
                 {props.icon ? <div className="shrink-0">{props.icon}</div> : null}
                 <div className="min-w-0">
@@ -112,7 +140,11 @@ export function AppDialogHeader(props: {
             </div>
             {props.meta ? <div className="flex shrink-0 items-center gap-2">{props.meta}</div> : null}
             {props.actions ? <div className="flex shrink-0 items-center gap-1">{props.actions}</div> : null}
-            <AppDialogClose label={props.closeLabel} disabled={props.closeDisabled} />
+            <AppDialogClose
+                label={props.closeLabel}
+                disabled={props.closeDisabled}
+                className={mobileNavigation === 'back' ? 'max-sm:hidden' : undefined}
+            />
         </header>
     )
 }
@@ -120,9 +152,11 @@ export function AppDialogHeader(props: {
 export function AppDialogClose({
     label = 'Close',
     disabled = false,
+    className,
 }: {
     label?: string
     disabled?: boolean
+    className?: string
 }) {
     return (
         <DialogClose asChild>
@@ -130,7 +164,10 @@ export function AppDialogClose({
                 type="button"
                 aria-label={label}
                 disabled={disabled}
-                className="grid h-[36px] w-[36px] shrink-0 place-items-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-button)] disabled:cursor-not-allowed disabled:opacity-50"
+                className={cn(
+                    'grid h-11 w-11 shrink-0 place-items-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-button)] disabled:cursor-not-allowed disabled:opacity-50',
+                    className
+                )}
             >
                 <span className="grid h-[28px] w-[28px] place-items-center rounded-lg border border-[var(--app-border)] bg-transparent text-[var(--app-hint)] transition-colors hover:bg-[var(--app-secondary-bg)] hover:text-[var(--app-fg)]">
                     <CloseIcon className="h-[13px] w-[13px]" />

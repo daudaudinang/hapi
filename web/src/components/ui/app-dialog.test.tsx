@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
     AppDialog,
     AppDialogBody,
@@ -95,10 +95,34 @@ describe('AppDialog', () => {
         )
 
         const close = screen.getByRole('button', { name: 'Close' })
-        expect(close).toHaveClass('h-[36px]', 'w-[36px]')
+        expect(close).toHaveClass('h-11', 'w-11')
         expect(close.firstElementChild).toHaveClass('h-[28px]', 'w-[28px]', 'border')
         expect(screen.getByText('Settings dialog')).toHaveClass('sr-only')
         expect(document.querySelector('[data-app-dialog-footer]')).not.toBeInTheDocument()
+    })
+
+    it('uses Back on mobile and Close on desktop for workspace navigation', () => {
+        const onMobileBack = vi.fn()
+        render(
+            <AppDialog open>
+                <AppDialogContent presentation="workspace">
+                    <AppDialogHeader
+                        title="Terminal"
+                        mobileNavigation="back"
+                        mobileBackLabel="Back to session"
+                        onMobileBack={onMobileBack}
+                    />
+                </AppDialogContent>
+            </AppDialog>
+        )
+
+        const back = screen.getByRole('button', { name: 'Back to session' })
+        fireEvent.click(back)
+
+        expect(onMobileBack).toHaveBeenCalledOnce()
+        expect(back).toHaveClass('sm:hidden', 'h-11', 'w-11')
+        expect(screen.getByRole('button', { name: 'Close' }))
+            .toHaveClass('max-sm:hidden', 'h-11', 'w-11')
     })
 
     it('suppresses the native outline when focus falls back to the dialog frame', () => {
