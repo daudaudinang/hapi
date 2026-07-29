@@ -87,7 +87,7 @@ describe('terminalKeyChord', () => {
 Run:
 
 ```bash
-bun --cwd web run test -- terminalKeyChord.test.ts
+bun run --cwd web test -- terminalKeyChord.test.ts
 ```
 
 Expected: FAIL because `terminalKeyChord.ts` does not exist.
@@ -150,7 +150,7 @@ Normalization must rebuild the main key from the catalog and order unique modifi
 Run:
 
 ```bash
-bun --cwd web run test -- terminalKeyChord.test.ts
+bun run --cwd web test -- terminalKeyChord.test.ts
 ```
 
 Expected: all `terminalKeyChord` tests pass.
@@ -210,7 +210,7 @@ describe('encodeTerminalKeyChord', () => {
 - [ ] **Step 2: Run the encoder test and verify RED**
 
 ```bash
-bun --cwd web run test -- terminalKeyEncoder.test.ts
+bun run --cwd web test -- terminalKeyEncoder.test.ts
 ```
 
 Expected: FAIL because the encoder is missing.
@@ -259,7 +259,7 @@ const CONTROL_CHARACTERS: Record<string, string> = {
 - [ ] **Step 4: Run encoder and catalog tests**
 
 ```bash
-bun --cwd web run test -- terminalKeyEncoder.test.ts terminalKeyChord.test.ts
+bun run --cwd web test -- terminalKeyEncoder.test.ts terminalKeyChord.test.ts
 ```
 
 Expected: both files pass.
@@ -295,7 +295,7 @@ Use a small in-memory `Storage` implementation in the test and deterministic `id
 - [ ] **Step 2: Run the store test and verify RED**
 
 ```bash
-bun --cwd web run test -- terminalKeyChordStore.test.ts
+bun run --cwd web test -- terminalKeyChordStore.test.ts
 ```
 
 Expected: FAIL because the store module is missing.
@@ -334,7 +334,7 @@ The browser singleton must dispatch `hapi:terminal-key-chords-changed` after suc
 - [ ] **Step 4: Run store tests**
 
 ```bash
-bun --cwd web run test -- terminalKeyChordStore.test.ts
+bun run --cwd web test -- terminalKeyChordStore.test.ts
 ```
 
 Expected: all store tests pass.
@@ -375,7 +375,7 @@ Query `data-app-dialog-presentation="sheet"` to prove the common HAPI foundation
 - [ ] **Step 2: Run dialog tests and verify RED**
 
 ```bash
-bun --cwd web run test -- TerminalKeyDialogs.test.tsx
+bun run --cwd web test -- TerminalKeyDialogs.test.tsx
 ```
 
 Expected: FAIL because dialog components do not exist.
@@ -466,7 +466,7 @@ terminal.keys.sendFailed
 - [ ] **Step 6: Run dialog tests**
 
 ```bash
-bun --cwd web run test -- TerminalKeyDialogs.test.tsx
+bun run --cwd web test -- TerminalKeyDialogs.test.tsx
 ```
 
 Expected: all dialog tests pass.
@@ -508,7 +508,7 @@ The lifecycle test must rerender with the same `terminalContextKey`, then with a
 - [ ] **Step 2: Run composer tests and verify RED**
 
 ```bash
-bun --cwd web run test -- TerminalKeyComposer.test.tsx
+bun run --cwd web test -- TerminalKeyComposer.test.tsx
 ```
 
 Expected: FAIL because the composer does not exist.
@@ -574,7 +574,7 @@ The heading row contains `Đã lưu · N` + `Quản lý`. The composer heading c
 - [ ] **Step 5: Run composer tests**
 
 ```bash
-bun --cwd web run test -- TerminalKeyComposer.test.tsx
+bun run --cwd web test -- TerminalKeyComposer.test.tsx
 ```
 
 Expected: all composer tests pass.
@@ -611,7 +611,7 @@ Update the test translation map with all `terminal.keys.*` labels used by role q
 - [ ] **Step 2: Run dock tests and verify RED**
 
 ```bash
-bun --cwd web run test -- TerminalControlDock.test.tsx
+bun run --cwd web test -- TerminalControlDock.test.tsx
 ```
 
 Expected: new composer expectations fail against the legacy helper grid.
@@ -652,7 +652,7 @@ In Session and Editor terminal call sites, remove only the obsolete modifier pro
 - [ ] **Step 5: Run focused integration tests**
 
 ```bash
-bun --cwd web run test -- \
+bun run --cwd web test -- \
     TerminalControlDock.test.tsx \
     SessionTerminalTabs.test.tsx \
     EditorTerminal.test.tsx
@@ -680,7 +680,7 @@ git commit -m "feat(web): integrate terminal key composer"
 - [ ] **Step 1: Run all terminal-focused tests**
 
 ```bash
-bun --cwd web run test -- \
+bun run --cwd web test -- \
     terminalKeyChord.test.ts \
     terminalKeyEncoder.test.ts \
     terminalKeyChordStore.test.ts \
@@ -696,7 +696,7 @@ Expected: all focused tests pass.
 - [ ] **Step 2: Run complete Web tests**
 
 ```bash
-bun --cwd web run test
+bun run --cwd web test
 ```
 
 Expected: complete Web Vitest suite passes.
