@@ -86,6 +86,8 @@ var mocks: {
         onOutput: ReturnType<typeof vi.fn>
         onExit: ReturnType<typeof vi.fn>
         onWarning: ReturnType<typeof vi.fn>
+        requestHistory: ReturnType<typeof vi.fn>
+        onHistory: ReturnType<typeof vi.fn>
         clearLastError: ReturnType<typeof vi.fn>
     }
     terminalMounts: Array<{
@@ -183,6 +185,22 @@ vi.mock('@/lib/use-translation', () => ({
             'terminal.createNew': 'Create new terminal',
             'terminal.unsupported': 'Remote terminal is not supported on this host.',
             'terminal.inactive': 'Session is inactive. Terminal is unavailable.',
+            'terminal.history.title': 'History',
+            'terminal.history.insertOnly': 'Insert only · does not run',
+            'terminal.history.count': '1 command',
+            'terminal.history.searchPlaceholder': 'Search history',
+            'terminal.history.refresh': 'Refresh history',
+            'terminal.history.close': 'Close history',
+            'terminal.history.loading': 'Loading history…',
+            'terminal.history.empty': 'No commands yet.',
+            'terminal.history.noMatches': 'No matching commands.',
+            'terminal.history.unsupported': 'Unsupported shell.',
+            'terminal.history.notReady': 'History not ready.',
+            'terminal.history.error': 'History failed.',
+            'terminal.history.retry': 'Retry history',
+            'terminal.history.insert': 'Insert history command',
+            'terminal.history.inserted': 'Inserted · not executed',
+            'terminal.history.insertFailed': 'Could not insert command.',
         }[key] ?? key)
     })
 }))
@@ -230,6 +248,8 @@ function makeController(terminals: TerminalState[] = []) {
         onOutput: vi.fn(),
         onExit: vi.fn(),
         onWarning: vi.fn(),
+        requestHistory: vi.fn(() => true),
+        onHistory: vi.fn(),
         clearLastError: vi.fn()
     }
 }
@@ -473,6 +493,35 @@ describe('SessionTerminalTabs', () => {
         expect(screen.getByRole('textbox', {
             name: 'Search terminal output',
         })).toHaveValue('needle')
+    })
+
+    it('loads desktop History and inserts the selected command without Enter', () => {
+        setDesktopViewport(true)
+        mocks.controller = makeController([state('t1')])
+        renderTabs()
+
+        fireEvent.click(screen.getAllByRole('button', { name: 'History' })[0]!)
+
+        expect(mocks.controller.requestHistory).toHaveBeenCalledWith(
+            't1',
+            expect.any(String),
+            100,
+        )
+        const historyListener = mocks.controller.onHistory.mock.calls.at(-1)?.[0]
+        act(() => historyListener?.({
+            sessionId: 'session-1',
+            terminalId: 't1',
+            requestId: mocks.controller?.requestHistory.mock.calls.at(-1)?.[1],
+            status: 'ok',
+            shell: 'bash',
+            entries: [{ index: 4, command: 'git status' }],
+        }))
+
+        fireEvent.click(screen.getByRole('button', {
+            name: 'Insert history command',
+        }))
+        expect(mocks.controller.write).toHaveBeenCalledWith('t1', 'git status')
+        expect(mocks.controller.write).not.toHaveBeenCalledWith('t1', 'git status\r')
     })
 
     it('scopes desktop Search shortcut without handling Escape', () => {

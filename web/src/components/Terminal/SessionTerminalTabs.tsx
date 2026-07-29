@@ -12,6 +12,7 @@ import {
     EMPTY_TERMINAL_SEARCH_STATE,
     type TerminalSearchState,
 } from '@/components/Terminal/terminalSearch'
+import { useTerminalHistory } from '@/components/Terminal/useTerminalHistory'
 import {
     AppDialog,
     AppDialogContent,
@@ -140,6 +141,23 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
     const terminalSocketConnected = controller.state.status === 'connected'
     const quickInputDisabled = !canUseTerminal || !selectedIsLive || controller.state.status !== 'connected'
     const dockDisabled = quickInputDisabled || !interactionActive
+    const historyTerminalId = dockDisabled
+        ? null
+        : (activeLiveTerminal?.terminalId ?? null)
+    const requestHistory = useCallback((requestId: string, limit: number) => {
+        if (!historyTerminalId) {
+            return false
+        }
+        return controller.requestHistory(historyTerminalId, requestId, limit)
+    }, [controller.requestHistory, historyTerminalId])
+    const history = useTerminalHistory({
+        terminalContextKey: historyTerminalId
+            ? `${props.sessionId}:${historyTerminalId}`
+            : null,
+        terminalId: historyTerminalId,
+        request: requestHistory,
+        subscribe: controller.onHistory,
+    })
     const quickInput = useTerminalQuickInput({
         disabled: quickInputDisabled,
         write: (data) => {
@@ -555,6 +573,23 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
                 >
                     <TerminalToolIcon tool="snippets" />
                 </button>
+                <button
+                    type="button"
+                    aria-label={t('terminal.controls.history')}
+                    aria-pressed={activeDockTool === 'history'}
+                    disabled={dockDisabled}
+                    onClick={() => handleActiveDockToolChange(
+                        activeDockTool === 'history' ? null : 'history',
+                    )}
+                    title={t('terminal.controls.history')}
+                    className={`hidden min-h-8 min-w-8 place-items-center border-l border-[var(--app-border)] transition-colors disabled:cursor-not-allowed disabled:opacity-40 lg:grid ${
+                        activeDockTool === 'history'
+                            ? 'bg-violet-500/10 text-violet-600 dark:text-violet-300'
+                            : 'text-[var(--app-hint)] hover:bg-[var(--app-subtle-bg)] hover:text-[var(--app-fg)]'
+                    }`}
+                >
+                    <TerminalToolIcon tool="history" />
+                </button>
                 {statusSummary}
             </div>
 
@@ -649,6 +684,10 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
                 searchMounted={searchMounted}
                 onSearchClose={() => clearSearch()}
                 searchState={searchState}
+                historyState={history.state}
+                onHistoryOpen={history.open}
+                onHistoryRefresh={history.refresh}
+                onHistoryClose={history.close}
                 ctrlActive={quickInput.ctrlActive}
                 altActive={quickInput.altActive}
                 onQuickInput={quickInput.sendQuickInput}

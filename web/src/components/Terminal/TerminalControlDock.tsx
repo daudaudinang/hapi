@@ -16,8 +16,10 @@ import {
     type QuickInput,
 } from './terminalControls'
 import { TerminalSearchPanel } from './TerminalSearchPanel'
+import { TerminalHistoryPanel } from './TerminalHistoryPanel'
 import { TerminalSnippetPanel } from './TerminalSnippetPanel'
 import type { TerminalSearchState } from './terminalSearch'
+import type { TerminalHistoryState } from './useTerminalHistory'
 
 export type TerminalDockTool = 'snippets' | 'search' | 'history' | 'keys' | 'more'
 export type TerminalDockAction = 'paste' | TerminalDockTool
@@ -31,6 +33,10 @@ export type TerminalControlDockProps = {
     searchMounted: boolean
     onSearchClose: () => void
     searchState: TerminalSearchState
+    historyState: TerminalHistoryState
+    onHistoryOpen: () => void
+    onHistoryRefresh: () => void
+    onHistoryClose: () => void
     ctrlActive: boolean
     altActive: boolean
     onQuickInput: (sequence: string) => void
@@ -304,9 +310,15 @@ export function TerminalControlDock(props: TerminalControlDockProps) {
     const [manualPasteText, setManualPasteText] = useState('')
     const [pasteFeedback, setPasteFeedback] = useState(false)
     const [snippetAnnouncement, setSnippetAnnouncement] = useState(0)
+    const [historyAnnouncement, setHistoryAnnouncement] = useState(0)
     const [functionLayer, setFunctionLayer] = useState(false)
     const pasteFeedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
     const snippetFeedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const historyFeedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const historyLifecycleRef = useRef<{ active: boolean; terminalContextKey: string | null }>({
+        active: false,
+        terminalContextKey: props.terminalContextKey,
+    })
 
     useEffect(() => () => {
         if (pasteFeedbackTimer.current) {
@@ -316,6 +328,7 @@ export function TerminalControlDock(props: TerminalControlDockProps) {
 
     useEffect(() => {
         setSnippetAnnouncement(0)
+        setHistoryAnnouncement(0)
         if (snippetFeedbackTimer.current) {
             clearTimeout(snippetFeedbackTimer.current)
             snippetFeedbackTimer.current = null
@@ -325,8 +338,32 @@ export function TerminalControlDock(props: TerminalControlDockProps) {
                 clearTimeout(snippetFeedbackTimer.current)
                 snippetFeedbackTimer.current = null
             }
+            if (historyFeedbackTimer.current) {
+                clearTimeout(historyFeedbackTimer.current)
+                historyFeedbackTimer.current = null
+            }
         }
     }, [props.terminalContextKey])
+
+    useEffect(() => {
+        const previous = historyLifecycleRef.current
+        const active = props.activeTool === 'history'
+        const terminalChanged = previous.terminalContextKey !== props.terminalContextKey
+        if (active && (!previous.active || terminalChanged)) {
+            props.onHistoryOpen()
+        } else if (!active && previous.active) {
+            props.onHistoryClose()
+        }
+        historyLifecycleRef.current = {
+            active,
+            terminalContextKey: props.terminalContextKey,
+        }
+    }, [
+        props.activeTool,
+        props.onHistoryClose,
+        props.onHistoryOpen,
+        props.terminalContextKey,
+    ])
 
     const announcePaste = useCallback(() => {
         if (pasteFeedbackTimer.current) {
@@ -391,6 +428,17 @@ export function TerminalControlDock(props: TerminalControlDockProps) {
         }, 1200)
     }, [])
 
+    const announceHistoryInsert = useCallback(() => {
+        if (historyFeedbackTimer.current) {
+            clearTimeout(historyFeedbackTimer.current)
+        }
+        setHistoryAnnouncement((current) => current + 1)
+        historyFeedbackTimer.current = setTimeout(() => {
+            setHistoryAnnouncement(0)
+            historyFeedbackTimer.current = null
+        }, 1200)
+    }, [])
+
     return (
         <div className="relative z-30 shrink-0 lg:pointer-events-none lg:absolute lg:inset-0">
             {props.activeTool === 'snippets' ? (
@@ -419,6 +467,23 @@ export function TerminalControlDock(props: TerminalControlDockProps) {
                     <TerminalSearchPanel
                         state={props.searchState}
                         onClose={props.onSearchClose}
+                    />
+                </section>
+            ) : null}
+
+            {props.activeTool === 'history' ? (
+                <section
+                    role="region"
+                    aria-label={`${t('terminal.controls.history')} · ${t('terminal.history.insertOnly')}`}
+                    className="pointer-events-auto absolute bottom-full left-2 right-2 mb-2 lg:bottom-auto lg:left-auto lg:right-2 lg:top-10 lg:mb-0 lg:w-[480px] lg:max-w-[calc(100%-1rem)]"
+                >
+                    <TerminalHistoryPanel
+                        state={props.historyState}
+                        disabled={props.disabled}
+                        onRefresh={props.onHistoryRefresh}
+                        onInsert={props.onWritePlainInput}
+                        onInserted={announceHistoryInsert}
+                        onClose={() => props.onActiveToolChange(null)}
                     />
                 </section>
             ) : null}
@@ -487,7 +552,17 @@ export function TerminalControlDock(props: TerminalControlDockProps) {
                         props.onActiveToolChange,
                     )}
                 />
-                <DockButton tool="history" label={t('terminal.controls.history')} disabled />
+                <DockButton
+                    tool="history"
+                    label={t('terminal.controls.history')}
+                    active={props.activeTool === 'history'}
+                    disabled={props.disabled}
+                    onClick={() => toggleTool(
+                        props.activeTool,
+                        'history',
+                        props.onActiveToolChange,
+                    )}
+                />
                 <DockButton
                     tool="keys"
                     label={t('terminal.controls.keys')}
@@ -519,6 +594,11 @@ export function TerminalControlDock(props: TerminalControlDockProps) {
             {snippetAnnouncement > 0 ? (
                 <span key={snippetAnnouncement} role="status" className="sr-only">
                     {t('terminal.snippets.inserted')}
+                </span>
+            ) : null}
+            {historyAnnouncement > 0 ? (
+                <span key={historyAnnouncement} role="status" className="sr-only">
+                    {t('terminal.history.inserted')}
                 </span>
             ) : null}
         </div>

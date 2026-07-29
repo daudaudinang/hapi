@@ -73,6 +73,22 @@ vi.mock('@/lib/use-translation', () => ({
             'terminal.snippets.builtin.processes.description': 'Show running processes.',
             'terminal.snippets.builtin.disk.name': 'Disk usage',
             'terminal.snippets.builtin.disk.description': 'Show filesystem disk usage.',
+            'terminal.history.title': 'History',
+            'terminal.history.insertOnly': 'Insert only · does not run',
+            'terminal.history.count': '1 command',
+            'terminal.history.searchPlaceholder': 'Search history',
+            'terminal.history.refresh': 'Refresh history',
+            'terminal.history.close': 'Close history',
+            'terminal.history.loading': 'Loading history…',
+            'terminal.history.empty': 'No commands yet.',
+            'terminal.history.noMatches': 'No matching commands.',
+            'terminal.history.unsupported': 'Unsupported shell.',
+            'terminal.history.notReady': 'History not ready.',
+            'terminal.history.error': 'History failed.',
+            'terminal.history.retry': 'Retry history',
+            'terminal.history.insert': 'Insert history command',
+            'terminal.history.inserted': 'Inserted · not executed',
+            'terminal.history.insertFailed': 'Could not insert command.',
         }[key] ?? key),
         locale: 'en',
     }),
@@ -87,6 +103,10 @@ const defaultProps: TerminalControlDockProps = {
     searchMounted: false,
     onSearchClose: vi.fn(),
     searchState: EMPTY_TERMINAL_SEARCH_STATE,
+    historyState: { status: 'idle', entries: [] },
+    onHistoryOpen: vi.fn(),
+    onHistoryRefresh: vi.fn(),
+    onHistoryClose: vi.fn(),
     ctrlActive: false,
     altActive: false,
     onQuickInput: vi.fn(),
@@ -150,7 +170,7 @@ afterEach(() => {
 })
 
 describe('TerminalControlDock', () => {
-    it('renders a slim six-item dock with Search and Snippets enabled while History remains disabled', () => {
+    it('renders a slim six-item dock with Search, Snippets, and History enabled', () => {
         renderDock()
 
         expect(screen.getByRole('toolbar', { name: 'Terminal controls' })).toHaveClass(
@@ -171,7 +191,7 @@ describe('TerminalControlDock', () => {
         ]))
         expect(screen.getByRole('button', { name: 'Snippets' })).toBeEnabled()
         expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled()
-        expect(screen.getByRole('button', { name: 'History' })).toBeDisabled()
+        expect(screen.getByRole('button', { name: 'History' })).toBeEnabled()
     })
 
     it('opens Search in a floating region without a dialog or automatic focus', () => {
@@ -302,7 +322,40 @@ describe('TerminalControlDock', () => {
             },
         }))
         expect(screen.getByRole('searchbox', { name: 'Search terminal output' })).toBeVisible()
-        expect(screen.getByRole('button', { name: 'History' })).toBeDisabled()
+        expect(screen.getByRole('button', { name: 'History' })).toBeEnabled()
+    })
+
+    it('opens History in the shared anchored layer and inserts without executing', () => {
+        const onActiveToolChange = vi.fn()
+        const onHistoryOpen = vi.fn()
+        const onWritePlainInput = vi.fn(() => true)
+        const rendered = renderDock({
+            onActiveToolChange,
+            onHistoryOpen,
+            onWritePlainInput,
+        })
+
+        fireEvent.click(screen.getByRole('button', { name: 'History' }))
+        expect(onActiveToolChange).toHaveBeenCalledWith('history')
+
+        rendered.rerender(makeDock({
+            activeTool: 'history',
+            onActiveToolChange,
+            onHistoryOpen,
+            onWritePlainInput,
+            historyState: {
+                status: 'ready',
+                entries: [{ index: 9, command: 'git status' }],
+            },
+        }))
+
+        expect(onHistoryOpen).toHaveBeenCalledOnce()
+        const panel = screen.getByRole('region', { name: 'History' })
+        expect(panel.parentElement).toHaveClass('absolute', 'lg:top-10', 'lg:w-[480px]')
+        fireEvent.click(screen.getByRole('button', { name: 'Insert history command' }))
+        expect(onWritePlainInput).toHaveBeenCalledWith('git status')
+        expect(onWritePlainInput).not.toHaveBeenCalledWith('git status\r')
+        expect(onActiveToolChange).toHaveBeenCalledWith(null)
     })
 
     it('opens Snippets in a floating region rather than a dialog', () => {

@@ -3,6 +3,7 @@ import type { Terminal } from '@xterm/xterm'
 import type { ApiClient } from '@/api/client'
 import {
     TerminalControlDock,
+    TerminalToolIcon,
     type TerminalDockTool,
 } from '@/components/Terminal/TerminalControlDock'
 import { TerminalView } from '@/components/Terminal/TerminalView'
@@ -12,6 +13,7 @@ import {
     EMPTY_TERMINAL_SEARCH_STATE,
     type TerminalSearchState,
 } from '@/components/Terminal/terminalSearch'
+import { useTerminalHistory } from '@/components/Terminal/useTerminalHistory'
 import {
     AppDialog,
     AppDialogContent,
@@ -24,6 +26,7 @@ import { useSession } from '@/hooks/queries/useSession'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useTerminalSocket } from '@/hooks/useTerminalSocket'
 import { isRemoteTerminalSupported } from '@/utils/terminalSupport'
+import { useTranslation } from '@/lib/use-translation'
 
 
 function EditorSessionTerminalBody(props: {
@@ -79,6 +82,7 @@ function EditorTerminalBody(props: {
     mobileMode?: boolean
 }) {
     const { token, baseUrl } = useAppContext()
+    const { t } = useTranslation()
     const isDockViewport = useMediaQuery('(max-width: 1023px)')
     const sessionId = props.tab.sessionId ?? null
     const machineId = props.tab.machineId ?? null
@@ -109,6 +113,8 @@ function EditorTerminalBody(props: {
         close,
         onOutput,
         onExit,
+        requestHistory,
+        onHistory,
     } = useTerminalSocket({
         token,
         baseUrl,
@@ -158,6 +164,21 @@ function EditorTerminalBody(props: {
             setActiveDockTool(null)
         }
     }, [activeDockTool])
+
+    const historyTerminalId = props.isActive && !quickInputDisabled
+        ? props.tab.id
+        : null
+    const requestTerminalHistory = useCallback((requestId: string, limit: number) => (
+        historyTerminalId
+            ? requestHistory(requestId, limit)
+            : false
+    ), [historyTerminalId, requestHistory])
+    const history = useTerminalHistory({
+        terminalContextKey: historyTerminalId,
+        terminalId: historyTerminalId,
+        request: requestTerminalHistory,
+        subscribe: onHistory,
+    })
 
     const searchEnabled = searchMounted && searchIdentity !== null
     const searchCallbackIdentity = searchIdentity
@@ -336,6 +357,27 @@ function EditorTerminalBody(props: {
                         {exitInfo.signal ? ` (${exitInfo.signal})` : ''}
                     </span>
                 ) : null}
+                <div className="ml-auto hidden items-stretch lg:flex">
+                    {(['search', 'snippets', 'history'] as const).map((tool) => (
+                        <button
+                            key={tool}
+                            type="button"
+                            aria-label={t(`terminal.controls.${tool}`)}
+                            aria-pressed={activeDockTool === tool}
+                            disabled={quickInputDisabled}
+                            onClick={() => handleActiveDockToolChange(
+                                activeDockTool === tool ? null : tool,
+                            )}
+                            className={`grid min-h-8 min-w-8 place-items-center border-l border-[var(--app-border)] transition-colors motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-40 ${
+                                activeDockTool === tool
+                                    ? 'bg-violet-500/10 text-violet-600 dark:text-violet-300'
+                                    : 'text-[var(--app-hint)] hover:bg-[var(--app-subtle-bg)] hover:text-[var(--app-fg)]'
+                            }`}
+                        >
+                            <TerminalToolIcon tool={tool} />
+                        </button>
+                    ))}
+                </div>
             </div>
             {errorMessage ? (
                 <div className="border-b border-[var(--app-border)] px-2 py-1 text-xs text-red-500">
@@ -400,6 +442,10 @@ function EditorTerminalBody(props: {
                 searchMounted={searchMounted}
                 onSearchClose={() => clearSearch()}
                 searchState={searchState}
+                historyState={history.state}
+                onHistoryOpen={history.open}
+                onHistoryRefresh={history.refresh}
+                onHistoryClose={history.close}
                 ctrlActive={quickInput.ctrlActive}
                 altActive={quickInput.altActive}
                 onQuickInput={quickInput.sendQuickInput}

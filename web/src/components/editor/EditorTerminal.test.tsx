@@ -85,6 +85,8 @@ var mocks = {
     closesByTerminalId: new Map<string, ReturnType<typeof vi.fn>>(),
     writesByTerminalId: new Map<string, ReturnType<typeof vi.fn>>(),
     terminalStatusesById: new Map<string, string>(),
+    historyListenersByTerminalId: new Map<string, (payload: unknown) => void>(),
+    historyRequestsByTerminalId: new Map<string, ReturnType<typeof vi.fn>>(),
 }
 
 vi.mock('@/lib/app-context', () => ({
@@ -112,6 +114,22 @@ vi.mock('@/lib/use-translation', () => ({
             'terminal.controls.navigation': 'Navigation',
             'terminal.controls.functionKeys': 'Function keys',
             'terminal.controls.symbols': 'Symbols',
+            'terminal.history.title': 'History',
+            'terminal.history.insertOnly': 'Insert only · does not run',
+            'terminal.history.count': '1 command',
+            'terminal.history.searchPlaceholder': 'Search history',
+            'terminal.history.refresh': 'Refresh history',
+            'terminal.history.close': 'Close history',
+            'terminal.history.loading': 'Loading history…',
+            'terminal.history.empty': 'No commands yet.',
+            'terminal.history.noMatches': 'No matching commands.',
+            'terminal.history.unsupported': 'Unsupported shell.',
+            'terminal.history.notReady': 'History not ready.',
+            'terminal.history.error': 'History failed.',
+            'terminal.history.retry': 'Retry history',
+            'terminal.history.insert': 'Insert history command',
+            'terminal.history.inserted': 'Inserted · not executed',
+            'terminal.history.insertFailed': 'Could not insert command.',
         }[key] ?? key)
     })
 }))
@@ -262,13 +280,18 @@ describe('EditorTerminal', () => {
         mocks.closesByTerminalId.clear()
         mocks.writesByTerminalId.clear()
         mocks.terminalStatusesById.clear()
+        mocks.historyListenersByTerminalId.clear()
+        mocks.historyRequestsByTerminalId.clear()
         mocks.useTerminalSocket.mockImplementation((options: { terminalId: string }) => {
             const disconnect = vi.fn()
             const close = vi.fn()
             const write = vi.fn(() => true)
+            const requestHistory = mocks.historyRequestsByTerminalId.get(options.terminalId)
+                ?? vi.fn(() => true)
             mocks.disconnectsByTerminalId.set(options.terminalId, disconnect)
             mocks.closesByTerminalId.set(options.terminalId, close)
             mocks.writesByTerminalId.set(options.terminalId, write)
+            mocks.historyRequestsByTerminalId.set(options.terminalId, requestHistory)
             return {
             state: {
                 status: mocks.terminalStatusesById.get(options.terminalId)
@@ -280,7 +303,11 @@ describe('EditorTerminal', () => {
             disconnect,
             close,
             onOutput: vi.fn(),
-            onExit: vi.fn()
+            onExit: vi.fn(),
+            requestHistory,
+            onHistory: vi.fn((handler) => {
+                mocks.historyListenersByTerminalId.set(options.terminalId, handler)
+            })
             }
         })
         mocks.isRemoteTerminalSupported.mockReturnValue(true)
@@ -506,7 +533,7 @@ describe('EditorTerminal', () => {
         renderMachineTerminal({ mobileMode: true })
         const { focus } = mountLastTerminal()
 
-        fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+        fireEvent.click(screen.getAllByRole('button', { name: 'Search' }).at(-1)!)
         expect(mocks.terminalViewProps.at(-1)).toMatchObject({
             searchActive: true,
             dismissMobileInteraction: true,
@@ -542,11 +569,42 @@ describe('EditorTerminal', () => {
         expect(focus).not.toHaveBeenCalled()
     })
 
+    it('offers desktop History beside Search and Snippets and inserts without Enter', () => {
+        renderMachineTerminal()
+
+        expect(screen.getAllByRole('button', { name: 'Search' }).length).toBeGreaterThan(0)
+        expect(screen.getAllByRole('button', { name: 'Snippets' }).length).toBeGreaterThan(0)
+        fireEvent.click(screen.getAllByRole('button', { name: 'History' })[0]!)
+
+        const requestHistory = mocks.historyRequestsByTerminalId.get('term-machine')
+        expect(requestHistory).toHaveBeenCalledWith(expect.any(String), 100)
+        const requestId = requestHistory?.mock.calls.at(-1)?.[0]
+        act(() => mocks.historyListenersByTerminalId.get('term-machine')?.({
+            machineId: 'machine-1',
+            terminalId: 'term-machine',
+            requestId,
+            status: 'ok',
+            shell: 'bash',
+            entries: [{ index: 5, command: 'pwd' }],
+        }))
+
+        fireEvent.click(screen.getByRole('button', {
+            name: 'Insert history command',
+        }))
+        expectTerminalWrite('term-machine', 'pwd')
+        expect(mocks.useTerminalSocket.mock.results.some((result, index) => {
+            const options = mocks.useTerminalSocket.mock.calls[index]?.[0] as { terminalId?: string }
+            return options.terminalId === 'term-machine'
+                && (result.value as { write: ReturnType<typeof vi.fn> }).write
+                    .mock.calls.some(([data]) => data === 'pwd\r')
+        })).toBe(false)
+    })
+
     it('retains machine Search on mobile body tap and toggle', () => {
         setDockViewport(true)
         renderMachineTerminal({ mobileMode: true })
 
-        fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+        fireEvent.click(screen.getAllByRole('button', { name: 'Search' }).at(-1)!)
         const controller = searchController()
         act(() => mocks.terminalViewProps.at(-1)?.onSearchStateChange?.(
             readySearchState(controller),
@@ -562,14 +620,14 @@ describe('EditorTerminal', () => {
         expect(screen.getByRole('region', { name: 'Search terminal output' }))
             .toBeVisible()
 
-        fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+        fireEvent.click(screen.getAllByRole('button', { name: 'Search' }).at(-1)!)
         expect(controller.clear).not.toHaveBeenCalled()
         expect(screen.getByRole('region', {
             name: 'Search terminal output',
             hidden: true,
         }).parentElement).toHaveAttribute('hidden')
 
-        fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+        fireEvent.click(screen.getAllByRole('button', { name: 'Search' }).at(-1)!)
         expect(screen.getByRole('textbox', {
             name: 'Search terminal output',
         })).toHaveValue('needle')
@@ -755,7 +813,7 @@ describe('EditorTerminal', () => {
         const props = { mobileMode: true }
         const rendered = renderMachineTerminal(props)
 
-        fireEvent.click(screen.getByRole('button', { name: 'Snippets' }))
+        fireEvent.click(screen.getAllByRole('button', { name: 'Snippets' }).at(-1)!)
         fireEvent.change(screen.getByRole('textbox', { name: 'Search snippets' }), {
             target: { value: 'stale search' },
         })
@@ -794,7 +852,7 @@ describe('EditorTerminal', () => {
         )
         expect(screen.queryByRole('region', { name: 'Snippet content' })).not.toBeInTheDocument()
 
-        fireEvent.click(screen.getByRole('button', { name: 'Snippets' }))
+        fireEvent.click(screen.getAllByRole('button', { name: 'Snippets' }).at(-1)!)
         expect(screen.getByRole('textbox', { name: 'Search snippets' })).toHaveValue('')
         expect(screen.queryByRole('textbox', { name: 'Name' })).not.toBeInTheDocument()
     })
@@ -803,7 +861,7 @@ describe('EditorTerminal', () => {
         const rendered = renderMachineTerminal({ mobileMode: true })
         const disconnect = mocks.disconnectsByTerminalId.get('term-machine')
 
-        fireEvent.click(screen.getByRole('button', { name: 'Snippets' }))
+        fireEvent.click(screen.getAllByRole('button', { name: 'Snippets' }).at(-1)!)
         expect(screen.getByRole('region', { name: 'Snippet content' })).toBeVisible()
 
         rendered.unmount()
