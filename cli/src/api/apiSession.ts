@@ -16,6 +16,7 @@ import {
     TerminalCloseAllPayloadSchema,
     TerminalClosePayloadSchema,
     TerminalDetachPayloadSchema,
+    TerminalHistoryRequestSchema,
     TerminalKeepalivePayloadSchema,
     TerminalListRequestSchema,
     TerminalOpenPayloadSchema,
@@ -220,6 +221,10 @@ export class ApiSessionClient extends EventEmitter {
 
         this.socket.on('terminal:detach', handleTerminalEvent(TerminalDetachPayloadSchema, (payload) => {
             this.terminalManager.detach(payload.terminalId)
+        }))
+
+        this.socket.on('terminal:history', handleTerminalEvent(TerminalHistoryRequestSchema, (payload) => {
+            this.socket.emit('terminal:history-result', this.terminalManager.getHistory(payload))
         }))
 
         this.socket.on('terminal:list', (data: unknown) => {

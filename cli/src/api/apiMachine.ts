@@ -12,6 +12,7 @@ import type { Update, UpdateMachineBody } from '@hapi/protocol'
 import {
     TerminalClosePayloadSchema,
     TerminalDetachPayloadSchema,
+    TerminalHistoryRequestSchema,
     TerminalOpenPayloadSchema,
     TerminalResizePayloadSchema,
     TerminalWritePayloadSchema
@@ -41,6 +42,7 @@ interface ServerToRunnerEvents {
     'terminal:resize': (data: unknown) => void
     'terminal:close': (data: unknown) => void
     'terminal:detach': (data: unknown) => void
+    'terminal:history': (data: unknown) => void
     error: (data: { message: string }) => void
 }
 
@@ -74,6 +76,7 @@ interface RunnerToServerEvents {
     'terminal:output': (data: unknown) => void
     'terminal:exit': (data: unknown) => void
     'terminal:error': (data: unknown) => void
+    'terminal:history-result': (data: unknown) => void
 }
 
 type MachineRpcHandlers = {
@@ -544,6 +547,10 @@ export class ApiMachineClient {
 
         this.socket.on('terminal:detach', handleTerminalEvent(TerminalDetachPayloadSchema, (payload) => {
             this.terminalManager.detach(payload.terminalId)
+        }))
+
+        this.socket.on('terminal:history', handleTerminalEvent(TerminalHistoryRequestSchema, (payload) => {
+            this.socket.emit('terminal:history-result', this.terminalManager.getHistory(payload))
         }))
 
         this.socket.on('update', (data: Update) => {

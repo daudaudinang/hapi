@@ -281,6 +281,52 @@ describe('ApiSessionClient.updateMetadata', () => {
         expect(fakeSocket.emit).not.toHaveBeenCalledWith('terminal:write', expect.anything())
     })
 
+    it('returns live history for a valid session terminal request', () => {
+        const fakeSocket = makeSocket()
+        ioMock.mockReturnValue(fakeSocket)
+        const result = {
+            sessionId: 'session-1',
+            terminalId: 't1',
+            requestId: 'request-1',
+            status: 'ok' as const,
+            shell: 'bash',
+            entries: [{ index: 3, command: 'git status' }]
+        }
+        const historySpy = vi.spyOn(TerminalManager.prototype, 'getHistory').mockReturnValue(result)
+        new ApiSessionClient('cli-token', makeSession({ path: '/tmp/project', host: 'test-host' }))
+
+        fakeSocket.trigger('terminal:history', {
+            sessionId: 'session-1',
+            terminalId: 't1',
+            requestId: 'request-1',
+            limit: 100
+        })
+
+        expect(historySpy).toHaveBeenCalledWith({
+            sessionId: 'session-1',
+            terminalId: 't1',
+            requestId: 'request-1',
+            limit: 100
+        })
+        expect(fakeSocket.emit).toHaveBeenCalledWith('terminal:history-result', result)
+    })
+
+    it('ignores history requests for another session', () => {
+        const fakeSocket = makeSocket()
+        ioMock.mockReturnValue(fakeSocket)
+        const historySpy = vi.spyOn(TerminalManager.prototype, 'getHistory')
+        new ApiSessionClient('cli-token', makeSession({ path: '/tmp/project', host: 'test-host' }))
+
+        fakeSocket.trigger('terminal:history', {
+            sessionId: 'other-session',
+            terminalId: 't1',
+            requestId: 'request-1'
+        })
+
+        expect(historySpy).not.toHaveBeenCalled()
+        expect(fakeSocket.emit).not.toHaveBeenCalledWith('terminal:history-result', expect.anything())
+    })
+
     it('emits updated terminal list with closed_user after explicit close-one', () => {
         const fakeSocket = makeSocket()
         ioMock.mockReturnValue(fakeSocket)
