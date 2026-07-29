@@ -1015,6 +1015,46 @@ describe('SessionTerminalTabs', () => {
         expect(mocks.controller.resize).toHaveBeenCalledWith('t1', 120, 40)
     })
 
+    it('reattaches the active terminal after the session socket reconnects', () => {
+        mocks.controller = makeController([state('t1', 'running')])
+        const rendered = renderTabs()
+
+        mocks.terminalMounts.at(-1)?.onResize?.(100, 30)
+        expect(mocks.controller.create).toHaveBeenCalledTimes(1)
+
+        mocks.controller = {
+            ...mocks.controller,
+            state: { status: 'error' as const, error: 'Disconnected' },
+        }
+        rendered.rerender(
+            <SessionTerminalTabs
+                sessionId="session-1"
+                active={true}
+                terminalSupported={true}
+            />,
+        )
+        mocks.controller = {
+            ...mocks.controller,
+            state: { status: 'connected' as const },
+        }
+        rendered.rerender(
+            <SessionTerminalTabs
+                sessionId="session-1"
+                active={true}
+                terminalSupported={true}
+            />,
+        )
+
+        expect(mocks.controller.create).toHaveBeenCalledTimes(2)
+        expect(mocks.controller.create).toHaveBeenLastCalledWith({
+            terminalId: 't1',
+            cols: 100,
+            rows: 30,
+            cwd: undefined,
+            replay: true,
+        })
+    })
+
     it('blocks rapid plus clicks while create is pending', () => {
         mocks.controller = makeController([state('t1', 'running')])
 

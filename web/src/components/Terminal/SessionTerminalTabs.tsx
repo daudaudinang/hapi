@@ -121,6 +121,7 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
     const inputDisposableRef = useRef<{ dispose: () => void } | null>(null)
     const buffersRef = useRef<Map<string, string>>(new Map())
     const attachedTerminalIdsRef = useRef<Set<string>>(new Set())
+    const reconnectAttachPendingRef = useRef(false)
 
     const visibleTerminals = useMemo(
         () => controller.terminals.filter(isVisibleTerminalTab),
@@ -442,6 +443,34 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
         }
         bootstrapTerminal(size)
     }, [activeLiveTerminal, bootstrapTerminal, controller.create, controller.resize, props.cwd, terminalSocketConnected])
+
+    useEffect(() => {
+        if (!terminalSocketConnected) {
+            attachedTerminalIdsRef.current.clear()
+            reconnectAttachPendingRef.current = true
+            return
+        }
+        const size = lastSizeRef.current
+        if (
+            !reconnectAttachPendingRef.current
+            || !size
+            || !activeLiveTerminal
+            || attachedTerminalIdsRef.current.has(activeLiveTerminal.terminalId)
+        ) {
+            return
+        }
+        const accepted = controller.create({
+            terminalId: activeLiveTerminal.terminalId,
+            cols: size.cols,
+            rows: size.rows,
+            cwd: props.cwd,
+            replay: true,
+        })
+        if (accepted) {
+            attachedTerminalIdsRef.current.add(activeLiveTerminal.terminalId)
+            reconnectAttachPendingRef.current = false
+        }
+    }, [activeLiveTerminal, controller.create, props.cwd, terminalSocketConnected])
 
     const handleTerminalMount = useCallback((terminal: Terminal) => {
         terminalRef.current = terminal
