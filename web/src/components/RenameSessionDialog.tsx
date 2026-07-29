@@ -59,7 +59,7 @@ export function RenameSessionDialog(props: RenameSessionDialogProps) {
 
     return (
         <AppDialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <AppDialogContent className="max-w-sm">
+            <AppDialogContent presentation="alert" className="max-w-sm">
                 <AppDialogHeader title={t('dialog.rename.title')} />
                 <form onSubmit={handleSubmit} className="contents">
                     <AppDialogBody className="space-y-4 p-4">

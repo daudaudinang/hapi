@@ -872,7 +872,7 @@ export function EditorTabs(props: {
                 }}
             >
                 {pendingCloseTab && (
-                    <AppDialogContent className="bottom-0 top-auto w-full max-w-none translate-y-0 rounded-b-none rounded-t-xl sm:max-w-md sm:left-1/2 sm:bottom-auto sm:top-1/2 sm:-translate-y-1/2 sm:rounded-xl">
+                    <AppDialogContent presentation="alert" className="max-w-md">
                         <AppDialogHeader
                             title="Close unsaved tab?"
                             subtitle={`${pendingCloseTab.label} has unsaved changes.`}

@@ -149,8 +149,13 @@ export default function TeamChatDetailPage() {
             {api && directChatParticipant?.sessionId ? (
                 <Suspense fallback={
                     <AppDialog open onOpenChange={(open) => !open && setDirectChatParticipant(null)}>
-                        <AppDialogContent dismissible={false} className="max-w-sm">
-                            <AppDialogHeader title="Loading direct chat" />
+                        <AppDialogContent presentation="workspace" dismissible={false} className="max-w-sm">
+                            <AppDialogHeader
+                                title="Loading direct chat"
+                                mobileNavigation="back"
+                                mobileBackLabel="Back to Team Chat"
+                                onMobileBack={() => setDirectChatParticipant(null)}
+                            />
                             <AppDialogBody className="px-4 py-3 text-sm text-[var(--app-hint)]">
                                 Loading direct chat…
                             </AppDialogBody>
@@ -171,7 +176,7 @@ export default function TeamChatDetailPage() {
             ) : null}
             {deleteConfirmOpen && teamChat && teamChatId ? (
                 <AppDialog open onOpenChange={(open) => !open && setDeleteConfirmOpen(false)}>
-                    <AppDialogContent dismissible={false} className="max-w-md text-[var(--app-fg)]">
+                    <AppDialogContent presentation="alert" dismissible={false} className="max-w-md text-[var(--app-fg)]">
                         <AppDialogHeader
                             title="Delete Team Chat?"
                             closeDisabled={isPending}

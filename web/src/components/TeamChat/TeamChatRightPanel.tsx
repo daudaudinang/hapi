@@ -731,7 +731,11 @@ export function TeamChatRightPanel(props: {
                     open
                     onOpenChange={(open) => !open && setIsAddingMember(false)}
                 >
-                    <AppDialogContent dismissible={false} className="left-0 top-0 h-[100dvh] w-full max-w-none translate-x-0 translate-y-0 rounded-none text-[var(--app-fg)] sm:left-1/2 sm:top-1/2 sm:h-auto sm:max-h-[calc(100vh-32px)] sm:max-w-3xl sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl lg:max-w-5xl">
+                    <AppDialogContent
+                        presentation="workspace"
+                        dismissible={false}
+                        className="text-[var(--app-fg)] sm:h-auto sm:max-h-[calc(100dvh-32px)] sm:max-w-3xl lg:max-w-5xl"
+                    >
                         <AppDialogHeader
                             title="Add member"
                             subtitle="Add an existing session or create a new one with a Team alias."
@@ -1083,7 +1087,11 @@ export function TeamChatRightPanel(props: {
                         }
                     }}
                 >
-                    <AppDialogContent dismissible={false} className="left-0 top-0 h-[100dvh] w-full max-w-2xl translate-x-0 translate-y-0 rounded-none text-[var(--app-fg)] sm:left-1/2 sm:top-1/2 sm:h-auto sm:max-h-[calc(100vh-32px)] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl">
+                    <AppDialogContent
+                        presentation="workspace"
+                        dismissible={false}
+                        className="max-w-2xl text-[var(--app-fg)] sm:h-auto sm:max-h-[calc(100dvh-32px)]"
+                    >
                         <AppDialogHeader
                             title={`Cấu hình @${configParticipant.displayName}`}
                             subtitle="Member settings apply only in this Team Chat. Session settings affect the original session."
@@ -1207,7 +1215,7 @@ export function TeamChatRightPanel(props: {
                         }
                     }}
                 >
-                    <AppDialogContent dismissible={false} className="max-w-md text-[var(--app-fg)]">
+                    <AppDialogContent presentation="alert" dismissible={false} className="max-w-md text-[var(--app-fg)]">
                         <AppDialogHeader
                             title={`Remove @${removeParticipant.displayName}?`}
                             subtitle="Remove this member khỏi Team Chat này. Session gốc sẽ không bị xoá."

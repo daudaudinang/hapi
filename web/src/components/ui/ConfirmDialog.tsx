@@ -60,7 +60,7 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
 
     return (
         <AppDialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <AppDialogContent className="max-w-sm" dismissible={!isPending}>
+            <AppDialogContent presentation="alert" className="max-w-sm" dismissible={!isPending}>
                 <AppDialogHeader title={title} closeDisabled={isPending} />
                 <AppDialogBody className="p-4">
                     <p className="whitespace-pre-line text-sm text-[var(--app-hint)]">

@@ -62,3 +62,34 @@ it('classifies application-level mobile dialog presentations', () => {
         expect(sources[file], file).toContain(`presentation="${presentation}"`)
     }
 })
+
+it('requires every feature AppDialogContent to declare a presentation', () => {
+    const offenders = Object.entries(sources).flatMap(([file, source]) => {
+        if (file.endsWith('ui/app-dialog.tsx') || file.endsWith('.test.tsx')) {
+            return []
+        }
+
+        const openings = source.match(/<AppDialogContent\b[\s\S]*?>/g) ?? []
+        return openings.some((opening) => !/\bpresentation=/.test(opening))
+            ? [file]
+            : []
+    })
+
+    expect(offenders).toEqual([])
+})
+
+it('keeps mobile dialog positioning inside the shared component', () => {
+    const featurePositioning = /\b(?:bottom-0|top-auto|h-\[100dvh\]|translate-y-0|rounded-b-none|rounded-t-(?:xl|2xl))\b/
+    const offenders = Object.entries(sources).flatMap(([file, source]) => {
+        if (file.endsWith('ui/app-dialog.tsx') || file.endsWith('.test.tsx')) {
+            return []
+        }
+
+        const openings = source.match(/<AppDialogContent\b[\s\S]*?>/g) ?? []
+        return openings.some((opening) => featurePositioning.test(opening))
+            ? [file]
+            : []
+    })
+
+    expect(offenders).toEqual([])
+})

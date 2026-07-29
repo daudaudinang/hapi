@@ -78,7 +78,7 @@ export function DiffView(props: {
                     </div>
                 </button>
             </AppDialogTrigger>
-            <AppDialogContent className="max-w-4xl">
+            <AppDialogContent presentation="workspace" className="max-w-4xl">
                 <AppDialogHeader title={title} subtitle={stats.label} />
                 <AppDialogBody className="max-h-[75vh] overflow-auto p-3">
                     {DiffInline}

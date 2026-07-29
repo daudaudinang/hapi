@@ -270,7 +270,7 @@ function ManualPasteDialog(props: {
 
     return (
         <AppDialog open={props.open} onOpenChange={props.onOpenChange}>
-            <AppDialogContent className="max-w-md">
+            <AppDialogContent presentation="alert" className="max-w-md">
                 <AppDialogHeader
                     title={t('terminal.paste.fallbackTitle')}
                     subtitle={t('terminal.paste.fallbackDescription')}

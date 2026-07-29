@@ -146,7 +146,7 @@ function DeleteConfirmModal(props: {
 
     return (
         <AppDialog open onOpenChange={(open) => !open && props.onCancel()}>
-            <AppDialogContent dismissible={false} className="max-w-md text-sm text-[var(--app-fg)]">
+            <AppDialogContent presentation="alert" dismissible={false} className="max-w-md text-sm text-[var(--app-fg)]">
                 <AppDialogHeader
                     title={title}
                     subtitle="This will permanently delete the selected file/folder items."

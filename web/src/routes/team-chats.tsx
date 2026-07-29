@@ -182,7 +182,7 @@ export default function TeamChatsPage() {
             </div>
             {createOpen ? (
                 <AppDialog open onOpenChange={(open) => !open && setCreateOpen(false)}>
-                    <AppDialogContent dismissible={false} className="max-w-md text-[var(--app-fg)]">
+                    <AppDialogContent presentation="alert" dismissible={false} className="max-w-md text-[var(--app-fg)]">
                         <AppDialogHeader
                             title="New Team Chat"
                             subtitle="Start with an empty room. You can add sessions after it opens."
@@ -236,7 +236,7 @@ export default function TeamChatsPage() {
             ) : null}
             {deleteCandidate ? (
                 <AppDialog open onOpenChange={(open) => !open && setDeleteCandidate(null)}>
-                    <AppDialogContent dismissible={false} className="max-w-md text-[var(--app-fg)]">
+                    <AppDialogContent presentation="alert" dismissible={false} className="max-w-md text-[var(--app-fg)]">
                         <AppDialogHeader
                             title="Delete Team Chat?"
                             closeDisabled={isPending}

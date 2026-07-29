@@ -161,7 +161,7 @@ export function CliOutputBlock(props: { text: string }) {
                             </div>
                         </button>
                     </AppDialogTrigger>
-                    <AppDialogContent className="max-w-2xl">
+                    <AppDialogContent presentation="workspace" className="max-w-2xl">
                         <AppDialogHeader title={t('terminal.commandName')} />
                         <AppDialogBody className="max-h-[75vh] overflow-auto p-3">
                             <div className="min-w-0 max-w-full overflow-x-auto overflow-y-hidden">

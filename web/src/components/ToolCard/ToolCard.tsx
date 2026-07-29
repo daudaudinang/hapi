@@ -376,6 +376,7 @@ function ToolCardInner(props: ToolCardProps) {
 
     const detailsDialog = (
         <AppDialogContent
+            presentation="workspace"
             className="max-w-2xl"
         >
             <AppDialogHeader

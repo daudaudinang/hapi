@@ -165,7 +165,7 @@ function MobileConfirmModal(props: {
         : null
     return (
         <AppDialog open onOpenChange={(open) => !open && props.onCancel()}>
-            <AppDialogContent dismissible={false} className="bottom-0 top-auto w-full max-w-sm translate-y-0 rounded-b-none rounded-t-xl sm:top-1/2 sm:-translate-y-1/2 sm:rounded-xl">
+            <AppDialogContent presentation="alert" dismissible={false} className="max-w-sm">
                 <AppDialogHeader
                     title={isDelete ? 'Delete archived session?' : 'Archive session?'}
                     subtitle={isDelete
@@ -207,7 +207,7 @@ function MobileNewFileModal(props: {
 
     return (
         <AppDialog open onOpenChange={(open) => !open && props.onCancel()}>
-            <AppDialogContent dismissible={false} className="bottom-0 top-auto w-full max-w-sm translate-y-0 rounded-b-none rounded-t-xl sm:top-1/2 sm:-translate-y-1/2 sm:rounded-xl">
+            <AppDialogContent presentation="alert" dismissible={false} className="max-w-sm">
                 <AppDialogHeader
                     title="New file"
                     subtitle="Create inside"

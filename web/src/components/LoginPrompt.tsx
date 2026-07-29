@@ -184,7 +184,7 @@ export function LoginPrompt(props: LoginPromptProps) {
                                     Hub {props.serverUrl ? `${t('login.server.custom')}` : `${t('login.server.default')}`}
                                 </button>
                             </AppDialogTrigger>
-                            <AppDialogContent className="max-w-md">
+                            <AppDialogContent presentation="alert" className="max-w-md">
                                 <AppDialogHeader
                                     title={t('login.server.title')}
                                     subtitle={t('login.server.description')}

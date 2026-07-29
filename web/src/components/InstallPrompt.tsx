@@ -43,8 +43,9 @@ export function InstallPrompt() {
             return (
                 <AppDialog open onOpenChange={(open) => !open && setShowIOSGuide(false)}>
                     <AppDialogContent
+                        presentation="sheet"
                         dismissible={false}
-                        className="bottom-0 top-auto w-full max-w-lg translate-y-0 rounded-b-none rounded-t-2xl sm:top-1/2 sm:-translate-y-1/2 sm:rounded-xl"
+                        className="max-w-lg"
                     >
                         <AppDialogHeader title={t('install.title')} />
                         <AppDialogBody className="space-y-3 p-5">
