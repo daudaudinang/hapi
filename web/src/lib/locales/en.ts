@@ -262,6 +262,7 @@ const en = {
   'terminal.history.empty': 'No commands yet.',
   'terminal.history.noMatches': 'No commands match your search.',
   'terminal.history.unsupported': 'This shell does not support live history yet.',
+  'terminal.history.cliOutdated': 'Restart this Hapi session or runner with the latest CLI to use History.',
   'terminal.history.notReady': 'History is not ready yet.',
   'terminal.history.error': 'Could not read terminal history.',
   'terminal.history.retry': 'Retry',

@@ -306,11 +306,20 @@ export const TerminalHistoryEntrySchema = z.object({
 }).strict()
 export type TerminalHistoryEntry = z.infer<typeof TerminalHistoryEntrySchema>
 
+export const TERMINAL_HISTORY_CLI_CAPABILITY = 'terminal-history-v1' as const
+export const CLI_CAPABILITIES = [TERMINAL_HISTORY_CLI_CAPABILITY] as const
+export const CliCapabilitySchema = z.enum(CLI_CAPABILITIES)
+export const CliCapabilitiesSchema = z.array(
+    z.string().min(1).max(64).regex(/^[a-z0-9][a-z0-9._:-]*$/)
+).max(32)
+export type CliCapability = z.infer<typeof CliCapabilitySchema>
+
 export const TerminalHistoryStatusSchema = z.enum([
     'ok',
     'unsupported_shell',
     'not_ready',
-    'read_failed'
+    'read_failed',
+    'cli_outdated'
 ])
 export type TerminalHistoryStatus = z.infer<typeof TerminalHistoryStatusSchema>
 

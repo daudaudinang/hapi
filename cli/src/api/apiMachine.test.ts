@@ -208,6 +208,23 @@ describe('ApiMachineClient terminal legacy boundary', () => {
         client.shutdown()
     })
 
+    it('advertises terminal history support during the runner socket handshake', () => {
+        const machine = makeMachine('machine-1')
+        const client = new ApiMachineClient('cli-token', machine, workspaceRoot)
+
+        client.connect()
+
+        expect(ioMock).toHaveBeenCalledWith(
+            expect.any(String),
+            expect.objectContaining({
+                auth: expect.objectContaining({
+                    capabilities: expect.arrayContaining(['terminal-history-v1'])
+                })
+            })
+        )
+        client.shutdown()
+    })
+
     it('returns live history for a valid machine terminal request', () => {
         const machine = makeMachine('machine-1')
         const client = new ApiMachineClient('cli-token', machine, workspaceRoot)

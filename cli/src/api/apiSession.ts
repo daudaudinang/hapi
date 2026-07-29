@@ -13,6 +13,7 @@ import type { MarkTeamMentionNoActionInput, ReportToTeamInput, SessionEndReason,
 import { TeamChatMessageSchema, TeamMentionRequestSchema } from '@hapi/protocol/schemas'
 import type { ClientToServerEvents, ServerToClientEvents, Update } from '@hapi/protocol'
 import {
+    CLI_CAPABILITIES,
     TerminalCloseAllPayloadSchema,
     TerminalClosePayloadSchema,
     TerminalDetachPayloadSchema,
@@ -126,7 +127,8 @@ export class ApiSessionClient extends EventEmitter {
             auth: {
                 token: this.token,
                 clientType: 'session-scoped' as const,
-                sessionId: this.sessionId
+                sessionId: this.sessionId,
+                capabilities: CLI_CAPABILITIES
             },
             path: '/socket.io/',
             reconnection: true,

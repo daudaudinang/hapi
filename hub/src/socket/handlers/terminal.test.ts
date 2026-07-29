@@ -142,6 +142,7 @@ describe('terminal socket handlers', () => {
     it('privately forwards a clamped history request with an opaque correlation id', () => {
         const { terminalSocket, cliNamespace, terminalRegistry, terminalHistoryRequests } = createHarness()
         const cliSocket = new FakeSocket('cli-socket')
+        cliSocket.data.cliCapabilities = new Set(['terminal-history-v1'])
         connectCliSocket(cliNamespace, cliSocket, 'session-1')
         terminalRegistry.register({
             terminalId: 'terminal-1',
@@ -170,6 +171,33 @@ describe('terminal socket handlers', () => {
 
         terminalSocket.trigger('disconnect')
         expect(terminalHistoryRequests.has(correlationId)).toBe(false)
+    })
+
+    it('reports an outdated CLI immediately instead of silently timing out history', () => {
+        const { terminalSocket, cliNamespace, terminalRegistry } = createHarness()
+        const cliSocket = new FakeSocket('old-cli-socket')
+        connectCliSocket(cliNamespace, cliSocket, 'session-1')
+        terminalRegistry.register({
+            terminalId: 'terminal-1',
+            sessionId: 'session-1',
+            namespace: 'default',
+            socketId: terminalSocket.id,
+            cliSocketId: cliSocket.id
+        })
+
+        terminalSocket.trigger('terminal:history', {
+            terminalId: 'terminal-1',
+            requestId: 'web-request-1'
+        })
+
+        expect(lastEmit(terminalSocket, 'terminal:history-result')?.data).toEqual({
+            sessionId: 'session-1',
+            terminalId: 'terminal-1',
+            requestId: 'web-request-1',
+            status: 'cli_outdated',
+            entries: []
+        })
+        expect(lastEmit(cliSocket, 'terminal:history')).toBeUndefined()
     })
 
     it('does not forward history for an unowned terminal', () => {

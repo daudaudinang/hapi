@@ -266,6 +266,7 @@ export default {
   'terminal.history.empty': '暂无命令。',
   'terminal.history.noMatches': '没有匹配的命令。',
   'terminal.history.unsupported': '此 Shell 暂不支持实时历史记录。',
+  'terminal.history.cliOutdated': '请使用最新的 Hapi CLI 重新启动此会话或运行器以使用历史记录。',
   'terminal.history.notReady': '历史记录尚未准备好。',
   'terminal.history.error': '无法读取终端历史记录。',
   'terminal.history.retry': '重试',

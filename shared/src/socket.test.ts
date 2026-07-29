@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import {
+    CliCapabilitiesSchema,
     TerminalCloseAllPayloadSchema,
     TerminalClosePayloadSchema,
     TerminalErrorPayloadSchema,
@@ -74,6 +75,13 @@ const baseMachineState = {
 }
 
 describe('terminal lifecycle socket schemas', () => {
+    it('accepts future CLI capability names without discarding the whole advertisement', () => {
+        expect(CliCapabilitiesSchema.safeParse([
+            'terminal-history-v1',
+            'future-capability-v2'
+        ]).success).toBe(true)
+    })
+
     it('validates scoped terminal history requests and results', () => {
         expect(TerminalHistoryRequestSchema.safeParse({
             sessionId: 'session-1',
@@ -112,6 +120,14 @@ describe('terminal lifecycle socket schemas', () => {
             status: 'ok',
             entries: [{ index: -1, command: '' }]
         }).success).toBe(false)
+
+        expect(TerminalHistoryResultSchema.safeParse({
+            sessionId: 'session-1',
+            terminalId: 'terminal-1',
+            requestId: 'request-1',
+            status: 'cli_outdated',
+            entries: []
+        }).success).toBe(true)
     })
 
     it('accepts typed session and machine scopes', () => {

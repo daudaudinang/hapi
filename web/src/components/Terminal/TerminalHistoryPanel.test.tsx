@@ -17,6 +17,7 @@ vi.mock('@/lib/use-translation', () => ({
             'terminal.history.empty': 'No commands yet.',
             'terminal.history.noMatches': 'No matching commands.',
             'terminal.history.unsupported': 'This shell does not support live history.',
+            'terminal.history.cliOutdated': 'Restart this session with the latest Hapi CLI.',
             'terminal.history.notReady': 'History is not ready yet.',
             'terminal.history.error': 'Could not read history.',
             'terminal.history.retry': 'Retry',
@@ -90,11 +91,20 @@ describe('TerminalHistoryPanel', () => {
         [{ status: 'loading', entries: [] }, 'Loading history…'],
         [{ status: 'ready', entries: [] }, 'No commands yet.'],
         [{ status: 'unsupported', entries: [], shell: 'zsh' }, 'This shell does not support live history.'],
+        [{ status: 'error', entries: [], message: 'cli_outdated' }, 'Restart this session with the latest Hapi CLI.'],
         [{ status: 'error', entries: [], message: 'not_ready' }, 'History is not ready yet.'],
         [{ status: 'error', entries: [], message: 'read_failed' }, 'Could not read history.'],
     ] as Array<[TerminalHistoryState, string]>)('renders the %s state', (state, copy) => {
         renderPanel({ state })
         expect(screen.getByText(copy)).toBeVisible()
+    })
+
+    it('does not offer a retry that cannot upgrade an outdated session', () => {
+        renderPanel({
+            state: { status: 'error', entries: [], message: 'cli_outdated' }
+        })
+
+        expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
     })
 
     it('refreshes, closes, and shows a dedicated empty-search state', () => {

@@ -67,20 +67,24 @@ export function TerminalHistoryPanel(props: TerminalHistoryPanelProps) {
             return <p>{t('terminal.history.unsupported')}</p>
         }
         if (props.state.status === 'error') {
+            const message = props.state.message === 'cli_outdated'
+                ? t('terminal.history.cliOutdated')
+                : props.state.message === 'not_ready'
+                    ? t('terminal.history.notReady')
+                    : t('terminal.history.error')
+
             return (
                 <div className="flex flex-col items-center gap-3">
-                    <p role="alert">
-                        {props.state.message === 'not_ready'
-                            ? t('terminal.history.notReady')
-                            : t('terminal.history.error')}
-                    </p>
-                    <button
-                        type="button"
-                        onClick={props.onRefresh}
-                        className="min-h-11 rounded-lg border border-[var(--app-border)] bg-[var(--app-secondary-bg)] px-4 text-xs font-semibold text-[var(--app-fg)] transition-colors motion-reduce:transition-none hover:border-violet-500/40 hover:text-violet-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 dark:hover:text-violet-300"
-                    >
-                        {t('terminal.history.retry')}
-                    </button>
+                    <p role="alert">{message}</p>
+                    {props.state.message !== 'cli_outdated' ? (
+                        <button
+                            type="button"
+                            onClick={props.onRefresh}
+                            className="min-h-11 rounded-lg border border-[var(--app-border)] bg-[var(--app-secondary-bg)] px-4 text-xs font-semibold text-[var(--app-fg)] transition-colors motion-reduce:transition-none hover:border-violet-500/40 hover:text-violet-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 dark:hover:text-violet-300"
+                        >
+                            {t('terminal.history.retry')}
+                        </button>
+                    ) : null}
                 </div>
             )
         }

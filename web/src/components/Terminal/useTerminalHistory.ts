@@ -6,7 +6,7 @@ export type TerminalHistoryState =
     | { status: 'loading'; entries: [] }
     | { status: 'ready'; entries: TerminalHistoryEntry[] }
     | { status: 'unsupported'; entries: []; shell?: string }
-    | { status: 'error'; entries: []; message: 'not_ready' | 'read_failed' | 'request_failed' }
+    | { status: 'error'; entries: []; message: 'not_ready' | 'read_failed' | 'request_failed' | 'cli_outdated' }
 
 type UseTerminalHistoryOptions = {
     terminalContextKey: string | null

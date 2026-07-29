@@ -195,6 +195,25 @@ describe('ApiSessionClient.updateMetadata', () => {
         expect(fakeSocket.emitWithAck).not.toHaveBeenCalled()
     })
 
+    it('advertises terminal history support during the CLI socket handshake', () => {
+        const fakeSocket = makeSocket()
+        ioMock.mockReturnValue(fakeSocket)
+
+        new ApiSessionClient(
+            'cli-token',
+            makeSession({ path: '/tmp/project', host: 'test-host' })
+        )
+
+        expect(ioMock).toHaveBeenCalledWith(
+            expect.any(String),
+            expect.objectContaining({
+                auth: expect.objectContaining({
+                    capabilities: expect.arrayContaining(['terminal-history-v1'])
+                })
+            })
+        )
+    })
+
 
 
     it('marks a Team mention no-action through the CLI session-scoped route', async () => {

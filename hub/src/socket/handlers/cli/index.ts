@@ -1,3 +1,4 @@
+import { CliCapabilitiesSchema, CliCapabilitySchema } from '@hapi/protocol'
 import type { CodexCollaborationMode, PermissionMode } from '@hapi/protocol/types'
 import type { Store, StoredMachine, StoredSession } from '../../../store'
 import type { RpcRegistry } from '../../rpcRegistry'
@@ -99,6 +100,15 @@ export function registerCliHandlers(socket: CliSocketWithData, deps: CliHandlers
     }
 
     const auth = socket.handshake.auth as Record<string, unknown> | undefined
+    const parsedCapabilities = CliCapabilitiesSchema.safeParse(auth?.capabilities)
+    socket.data.cliCapabilities = new Set(
+        parsedCapabilities.success
+            ? parsedCapabilities.data.flatMap((capability) => {
+                const knownCapability = CliCapabilitySchema.safeParse(capability)
+                return knownCapability.success ? [knownCapability.data] : []
+            })
+            : []
+    )
     const sessionId = typeof auth?.sessionId === 'string' ? auth.sessionId : null
     if (sessionId && resolveSessionAccess(sessionId).ok) {
         socket.join(`session:${sessionId}`)

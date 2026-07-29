@@ -1,9 +1,10 @@
-import type { ClientToServerEvents, ServerToClientEvents } from '@hapi/protocol'
+import type { CliCapability, ClientToServerEvents, ServerToClientEvents } from '@hapi/protocol'
 import type { DefaultEventsMap, Server, Socket } from 'socket.io'
 
 export type SocketData = {
     namespace?: string
     userId?: number
+    cliCapabilities?: ReadonlySet<CliCapability>
 }
 
 export type SocketServer = Server<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, SocketData>

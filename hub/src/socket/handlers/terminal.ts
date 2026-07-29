@@ -1,4 +1,5 @@
 import {
+    TERMINAL_HISTORY_CLI_CAPABILITY,
     TerminalKeepalivePayloadSchema,
     TerminalListRequestSchema,
     TerminalOpenPayloadSchema,
@@ -404,6 +405,16 @@ export function registerTerminalHandlers(socket: SocketWithData, deps: TerminalH
         const cliSocket = resolveCliSocket(entry, true)
         const scope = getEntryScope(entry) as TerminalHistoryScope | null
         if (!cliSocket || !scope) {
+            return
+        }
+        if (!cliSocket.data.cliCapabilities?.has(TERMINAL_HISTORY_CLI_CAPABILITY)) {
+            socket.emit('terminal:history-result', {
+                ...scope,
+                terminalId: entry.terminalId,
+                requestId: parsed.data.requestId,
+                status: 'cli_outdated',
+                entries: []
+            })
             return
         }
 

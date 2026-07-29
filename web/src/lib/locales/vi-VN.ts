@@ -266,6 +266,7 @@ export default {
   'terminal.history.empty': 'Chưa có lệnh nào.',
   'terminal.history.noMatches': 'Không có lệnh phù hợp.',
   'terminal.history.unsupported': 'Shell này chưa hỗ trợ lịch sử trực tiếp.',
+  'terminal.history.cliOutdated': 'Hãy khởi động lại session hoặc runner bằng Hapi CLI mới nhất để dùng Lịch sử.',
   'terminal.history.notReady': 'Lịch sử chưa sẵn sàng.',
   'terminal.history.error': 'Không thể đọc lịch sử terminal.',
   'terminal.history.retry': 'Thử lại',

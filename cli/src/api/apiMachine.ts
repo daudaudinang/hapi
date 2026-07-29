@@ -10,6 +10,7 @@ import { logger } from '@/ui/logger'
 import { configuration } from '@/configuration'
 import type { Update, UpdateMachineBody } from '@hapi/protocol'
 import {
+    CLI_CAPABILITIES,
     TerminalClosePayloadSchema,
     TerminalDetachPayloadSchema,
     TerminalHistoryRequestSchema,
@@ -438,7 +439,8 @@ export class ApiMachineClient {
             auth: {
                 token: this.token,
                 clientType: 'machine-scoped' as const,
-                machineId: this.machine.id
+                machineId: this.machine.id,
+                capabilities: CLI_CAPABILITIES
             },
             path: '/socket.io/',
             reconnection: true,
