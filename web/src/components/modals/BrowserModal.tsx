@@ -36,10 +36,16 @@ export function BrowserModal(props: { machineId?: string; initialPath?: string; 
     }, [navigate, search.modalReturnTo])
 
     return (
-        <AppDialogContent className="h-[85vh] max-h-[85vh] w-[95vw] max-w-2xl">
+        <AppDialogContent
+            presentation="workspace"
+            className="h-[85vh] max-h-[85vh] w-[95vw] max-w-2xl"
+        >
             <AppDialogHeader
                 title={search.modalReturnTo === 'editor' ? 'Open project folder' : t('browse.title')}
                 subtitle="Browse workspaces"
+                mobileNavigation="back"
+                mobileBackLabel="Back"
+                onMobileBack={props.onClose}
             />
             <AppDialogBody className="overflow-hidden p-4">
                 <WorkspaceBrowser

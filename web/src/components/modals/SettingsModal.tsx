@@ -180,8 +180,16 @@ export function SettingsModal(props: { onClose: () => void }) {
     }, [isOpen, isAppearanceOpen, isFontOpen, isTerminalFontOpen, isVoiceOpen])
 
     return (
-        <AppDialogContent className="max-h-[85vh] w-[95vw] max-w-2xl">
-            <AppDialogHeader title={t('settings.title')} />
+        <AppDialogContent
+            presentation="workspace"
+            className="max-h-[85vh] w-[95vw] max-w-2xl"
+        >
+            <AppDialogHeader
+                title={t('settings.title')}
+                mobileNavigation="back"
+                mobileBackLabel="Back"
+                onMobileBack={props.onClose}
+            />
             <AppDialogBody className="app-scroll-y bg-[var(--app-bg)]">
                 <div className="mx-auto w-full max-w-content pb-4">
                     {/* Language section */}

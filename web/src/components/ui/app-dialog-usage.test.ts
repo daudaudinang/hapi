@@ -46,3 +46,19 @@ it('keeps full-screen modal overlays inside AppDialog', () => {
 
     expect(offenders).toEqual([])
 })
+
+it('classifies application-level mobile dialog presentations', () => {
+    const expectedPresentations = {
+        '/src/components/modals/BrowserModal.tsx': 'workspace',
+        '/src/components/modals/FilesModal.tsx': 'workspace',
+        '/src/components/modals/SettingsModal.tsx': 'workspace',
+        '/src/components/modals/NewSessionModal.tsx': 'workspace',
+        '/src/components/modals/ReplacePinModal.tsx': 'sheet',
+        '/src/components/TeamChat/TeamSessionChatModal.tsx': 'workspace',
+        '/src/components/SessionGoalControl.tsx': 'sheet',
+    } as const
+
+    for (const [file, presentation] of Object.entries(expectedPresentations)) {
+        expect(sources[file], file).toContain(`presentation="${presentation}"`)
+    }
+})

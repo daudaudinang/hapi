@@ -285,10 +285,16 @@ export function FilesModal(props: { sessionId: string; path?: string; onClose: (
     }, [])
 
     return (
-        <AppDialogContent className="h-[85vh] max-h-[800px] w-[95vw] max-w-3xl">
+        <AppDialogContent
+            presentation="workspace"
+            className="h-[85vh] max-h-[800px] w-[95vw] max-w-3xl"
+        >
             <AppDialogHeader
                 title="Files"
                 subtitle={subtitle}
+                mobileNavigation="back"
+                mobileBackLabel="Back to session"
+                onMobileBack={props.onClose}
                 actions={(
                     <button
                         type="button"

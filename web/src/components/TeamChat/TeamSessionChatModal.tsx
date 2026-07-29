@@ -170,7 +170,10 @@ export function TeamSessionChatModal(props: {
 
     return (
         <AppDialog open onOpenChange={(open) => !open && props.onClose()}>
-            <AppDialogContent className="h-[min(92vh,900px)] w-[min(1120px,calc(100vw-1rem))] max-w-none text-[var(--app-fg)] sm:w-[min(1120px,calc(100vw-2rem))]">
+            <AppDialogContent
+                presentation="workspace"
+                className="h-[min(92vh,900px)] w-[min(1120px,calc(100vw-1rem))] max-w-none text-[var(--app-fg)] sm:w-[min(1120px,calc(100vw-2rem))]"
+            >
                 <AppDialogHeader
                     title={`Direct chat with @${props.alias}`}
                     subtitle={(
@@ -199,6 +202,9 @@ export function TeamSessionChatModal(props: {
                         </div>
                     )}
                     closeLabel="Close direct chat"
+                    mobileNavigation="back"
+                    mobileBackLabel="Back to Team Chat"
+                    onMobileBack={props.onClose}
                     className="sm:pl-4"
                 />
 

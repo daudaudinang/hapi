@@ -136,7 +136,7 @@ export function SessionGoalControl(props: {
                     <span aria-hidden="true">🎯</span>
                 </Button>
             </AppDialogTrigger>
-            <AppDialogContent className="max-w-md">
+            <AppDialogContent presentation="sheet" className="max-w-md">
                 <AppDialogHeader
                     title="Codex goal"
                     subtitle="This goal is native Codex state. When active, Codex may continue working toward it when idle."

@@ -137,7 +137,10 @@ export function NewSessionModal(props: { onClose: () => void }) {
     }, [navigate, search.modalReturnTo])
 
     return (
-        <AppDialogContent className="max-h-[85vh] w-[95vw] max-w-2xl">
+        <AppDialogContent
+            presentation="workspace"
+            className="max-h-[85vh] w-[95vw] max-w-2xl"
+        >
             <AppDialogHeader title={t('newSession.title')} subtitle="Create a new session" />
             <AppDialogBody className="app-scroll-y p-4">
                 {machinesError ? (

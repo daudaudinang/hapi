@@ -81,7 +81,10 @@ export function ReplacePinModal(props: { onClose: () => void }) {
         .filter((s): s is SessionSummary => s !== undefined)
 
     return (
-        <AppDialogContent className="max-h-[85vh] w-[95vw] max-w-lg">
+        <AppDialogContent
+            presentation="sheet"
+            className="max-h-[85vh] w-[95vw] max-w-lg"
+        >
             <AppDialogHeader
                 title="Maximum Pins Reached"
                 subtitle="You can only pin up to 4 sessions. Select a session below to replace it with your new session, or skip pinning."
