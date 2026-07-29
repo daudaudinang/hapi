@@ -558,6 +558,37 @@ describe('TerminalSnippetPanel editor', () => {
         expect(screen.getByLabelText('Description (optional)')).toHaveAttribute('maxlength', '240')
         expect(screen.getByText(/Do not store passwords, tokens, or secrets/)).toBeVisible()
     })
+
+    it('uses a compact mobile grid while preserving the spacious desktop layout', () => {
+        renderPanel()
+        fireEvent.click(screen.getByRole('button', { name: 'New' }))
+
+        const nameField = screen.getByLabelText('Name').closest('[data-editor-field]')
+        const command = screen.getByLabelText('Command')
+        const commandField = command.closest('[data-editor-field]')
+        const description = screen.getByLabelText('Description (optional)')
+        const descriptionField = description.closest('[data-editor-field]')
+        const save = screen.getByRole('button', { name: 'Save' })
+
+        expect(nameField).toHaveClass('col-span-2', 'sm:col-span-1', 'order-1')
+        expect(descriptionField).toHaveClass(
+            'col-span-3',
+            'sm:col-span-1',
+            'order-2',
+            'sm:order-3',
+        )
+        expect(commandField).toHaveClass(
+            'col-span-5',
+            'sm:col-span-1',
+            'order-3',
+            'sm:order-2',
+        )
+        expect(command).toHaveAttribute('rows', '3')
+        expect(command).toHaveClass('resize-none', 'sm:resize-y')
+        expect(description).toHaveAttribute('rows', '1')
+        expect(description).toHaveClass('resize-none', 'sm:resize-y')
+        expect(save).toHaveClass('w-full', 'sm:w-auto')
+    })
 })
 
 describe('TerminalSnippetPanel deletion and accessibility', () => {

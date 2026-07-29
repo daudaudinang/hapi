@@ -28,7 +28,7 @@ export function TerminalSnippetEditor(props: {
 }) {
     const { t } = useTranslation()
     return (
-        <form onSubmit={props.onSubmit} className="space-y-3">
+        <form onSubmit={props.onSubmit} className="flex flex-col gap-2.5 sm:gap-3">
             <div className="flex items-center gap-2">
                 <button
                     type="button"
@@ -43,42 +43,56 @@ export function TerminalSnippetEditor(props: {
                     {t(props.editor.mode === 'create'
                         ? 'terminal.snippets.editor.newTitle'
                         : 'terminal.snippets.editor.editTitle')}
-                </h3>
+                    </h3>
             </div>
 
-            <EditorField label={t('terminal.snippets.editor.name')}>
-                <input
-                    required
-                    maxLength={TERMINAL_SNIPPET_NAME_MAX_LENGTH}
-                    value={props.editor.name}
-                    onChange={(event) => props.onChange('name', event.target.value)}
-                    className="min-h-11 w-full rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)] px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
-                />
-            </EditorField>
-            <EditorField label={t('terminal.snippets.editor.command')}>
-                <textarea
-                    required
-                    rows={5}
-                    maxLength={TERMINAL_SNIPPET_COMMAND_MAX_LENGTH}
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    value={props.editor.command}
-                    onChange={(event) => props.onChange('command', event.target.value)}
-                    className="w-full resize-y rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)] px-3 py-2 font-mono text-sm outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
-                />
-            </EditorField>
-            <EditorField label={t('terminal.snippets.editor.description')}>
-                <textarea
-                    rows={2}
-                    maxLength={TERMINAL_SNIPPET_DESCRIPTION_MAX_LENGTH}
-                    value={props.editor.description}
-                    onChange={(event) => props.onChange('description', event.target.value)}
-                    className="w-full resize-y rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)] px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
-                />
-            </EditorField>
-            <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-                {t('terminal.snippets.editor.secretWarning')}
+            <div className="grid grid-cols-5 gap-2 sm:grid-cols-1 sm:gap-3">
+                <EditorField
+                    label={t('terminal.snippets.editor.name')}
+                    className="order-1 col-span-2 sm:col-span-1"
+                >
+                    <input
+                        required
+                        maxLength={TERMINAL_SNIPPET_NAME_MAX_LENGTH}
+                        value={props.editor.name}
+                        onChange={(event) => props.onChange('name', event.target.value)}
+                        className="min-h-11 w-full rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)] px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                    />
+                </EditorField>
+                <EditorField
+                    label={t('terminal.snippets.editor.command')}
+                    className="order-3 col-span-5 sm:order-2 sm:col-span-1"
+                >
+                    <textarea
+                        required
+                        rows={3}
+                        maxLength={TERMINAL_SNIPPET_COMMAND_MAX_LENGTH}
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        value={props.editor.command}
+                        onChange={(event) => props.onChange('command', event.target.value)}
+                        className="min-h-20 w-full resize-none rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)] px-3 py-2 font-mono text-sm outline-none focus-visible:ring-2 focus-visible:ring-violet-500 sm:min-h-[7.75rem] sm:resize-y"
+                    />
+                </EditorField>
+                <EditorField
+                    label={t('terminal.snippets.editor.description')}
+                    className="order-2 col-span-3 sm:order-3 sm:col-span-1"
+                >
+                    <textarea
+                        rows={1}
+                        maxLength={TERMINAL_SNIPPET_DESCRIPTION_MAX_LENGTH}
+                        value={props.editor.description}
+                        onChange={(event) => props.onChange('description', event.target.value)}
+                        className="min-h-11 w-full resize-none rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)] px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-violet-500 sm:min-h-16 sm:resize-y"
+                    />
+                </EditorField>
+            </div>
+            <p className="flex items-start gap-2 rounded-lg bg-amber-500/10 px-2.5 py-1.5 text-xs leading-4 text-amber-700 dark:text-amber-300 sm:rounded-xl sm:px-3 sm:py-2">
+                <span aria-hidden="true" className="mt-0.5 shrink-0 text-[0.6rem]">
+                    ◆
+                </span>
+                <span>{t('terminal.snippets.editor.secretWarning')}</span>
             </p>
             {props.error ? (
                 <p
@@ -92,7 +106,7 @@ export function TerminalSnippetEditor(props: {
                 <button
                     type="submit"
                     disabled={props.isPending || !props.apiAvailable}
-                    className="min-h-11 min-w-11 rounded-xl bg-[var(--app-button)] px-4 text-sm font-semibold text-[var(--app-button-text)] transition-opacity motion-reduce:transition-none hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)] disabled:cursor-not-allowed disabled:opacity-50"
+                    className="min-h-11 min-w-11 w-full rounded-xl bg-[var(--app-button)] px-4 text-sm font-semibold text-[var(--app-button-text)] transition-opacity motion-reduce:transition-none hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)] disabled:cursor-not-allowed disabled:opacity-50 sm:ml-auto sm:w-auto"
                 >
                     {props.isPending
                         ? t('terminal.snippets.editor.saving')
@@ -103,10 +117,17 @@ export function TerminalSnippetEditor(props: {
     )
 }
 
-function EditorField(props: { label: string; children: ReactNode }) {
+function EditorField(props: {
+    label: string
+    children: ReactNode
+    className?: string
+}) {
     return (
-        <label className="block space-y-1.5 text-xs font-medium text-[var(--app-hint)]">
-            <span>{props.label}</span>
+        <label
+            data-editor-field=""
+            className={`min-w-0 space-y-1.5 text-xs font-medium text-[var(--app-hint)] ${props.className ?? ''}`}
+        >
+            <span className="block truncate">{props.label}</span>
             {props.children}
         </label>
     )
