@@ -95,7 +95,7 @@ vi.mock('@/lib/app-context', () => ({
 
 vi.mock('@/lib/use-translation', () => ({
     useTranslation: () => ({
-        t: (key: string) => ({
+        t: (key: string, values?: Record<string, string | number>) => ({
             'button.paste': 'Paste',
             'button.cancel': 'Cancel',
             'terminal.paste.fallbackTitle': 'Paste input',
@@ -114,6 +114,37 @@ vi.mock('@/lib/use-translation', () => ({
             'terminal.controls.navigation': 'Navigation',
             'terminal.controls.functionKeys': 'Function keys',
             'terminal.controls.symbols': 'Symbols',
+            'terminal.keys.saved': `Saved · ${values?.count ?? 0}`,
+            'terminal.keys.manage': 'Manage',
+            'terminal.keys.emptySaved': 'No saved combinations yet.',
+            'terminal.keys.combination': 'Key combination',
+            'terminal.keys.empty': 'No key selected',
+            'terminal.keys.groups': 'Key groups',
+            'terminal.keys.add': 'Add key',
+            'terminal.keys.save': 'Save',
+            'terminal.keys.savedSuccess': 'Combination saved.',
+            'terminal.keys.clear': 'Clear all',
+            'terminal.keys.send': 'Send',
+            'terminal.keys.remove': `Remove ${values?.key ?? ''}`,
+            'terminal.keys.pickTitle': 'Choose keys',
+            'terminal.keys.pickSubtitle': 'Compose a terminal key chord',
+            'terminal.keys.apply': 'Apply combination',
+            'terminal.keys.basic': 'Basic',
+            'terminal.keys.alphanumeric': 'Letters & numbers',
+            'terminal.keys.function': 'F1–F12',
+            'terminal.keys.symbol': 'Symbols',
+            'terminal.keys.savedTitle': 'Saved combinations',
+            'terminal.keys.savedSubtitle': `${values?.count ?? 0} on this device`,
+            'terminal.keys.load': 'Load',
+            'terminal.keys.delete': 'Delete',
+            'terminal.keys.deleted': 'Combination deleted.',
+            'terminal.keys.undo': 'Undo',
+            'terminal.keys.localOnly': 'Stored only on this device',
+            'terminal.keys.duplicate': 'This combination is already saved.',
+            'terminal.keys.limit': 'Limit reached.',
+            'terminal.keys.unavailable': 'Storage unavailable.',
+            'terminal.keys.unsupported': 'Unsupported combination.',
+            'terminal.keys.sendFailed': 'Could not send.',
             'terminal.history.title': 'History',
             'terminal.history.insertOnly': 'Insert only · does not run',
             'terminal.history.count': '1 command',
@@ -1069,16 +1100,18 @@ describe('EditorTerminal', () => {
         expect(onCloseTab).toHaveBeenCalledWith('term-machine')
     })
 
-    it('shows the mobile terminal dock and writes helper key sequences', () => {
+    it('shows the mobile terminal dock and sends a composed key only on Send', () => {
         renderMachineTerminal({ mobileMode: true })
 
         fireEvent.click(screen.getByRole('button', { name: 'Keys' }))
-        pressQuickKey('Tab')
+        fireEvent.click(screen.getByRole('button', { name: 'Add key' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Tab' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Apply combination' }))
 
-        expectTerminalWrite('term-machine', '\t')
         expect(screen.getByRole('toolbar', { name: 'Terminal controls' })).toBeInTheDocument()
-        expect(screen.getByRole('button', { name: 'Escape' })).toBeInTheDocument()
-        expect(screen.getByRole('button', { name: 'Control' })).toBeInTheDocument()
+        expect(mocks.writesByTerminalId.get('term-machine')).not.toHaveBeenCalled()
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+        expectTerminalWrite('term-machine', '\t')
     })
 
     it('does not focus xterm from the mobile Keys action', () => {
@@ -1159,7 +1192,7 @@ describe('EditorTerminal', () => {
         expect(focus).toHaveBeenCalledTimes(1)
     })
 
-    it('does not refocus xterm when tapping mobile helper keys', () => {
+    it('does not refocus xterm while composing and sending mobile keys', () => {
         setDockViewport(true)
         renderMachineTerminal({ mobileMode: true })
         const terminal = mountLastTerminal()
@@ -1168,11 +1201,12 @@ describe('EditorTerminal', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Keys' }))
         terminal.focus.mockClear()
 
-        pressQuickKey('Escape')
-        pressQuickKey('Tab')
+        fireEvent.click(screen.getByRole('button', { name: 'Add key' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Esc' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Apply combination' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }))
 
         expectTerminalWrite('term-machine', '\u001b')
-        expectTerminalWrite('term-machine', '\t')
         expect(terminal.focus).not.toHaveBeenCalled()
     })
 
@@ -1208,20 +1242,25 @@ describe('EditorTerminal', () => {
         expectTerminalWrite('term-machine', '\u001b[15~')
     })
 
-    it('keeps modifiers, navigation and function layers in the Keys panel', () => {
+    it('offers modifiers, navigation, and function keys in the shared picker sheet', () => {
         renderMachineTerminal({ mobileMode: true })
         fireEvent.click(screen.getByRole('button', { name: 'Keys' }))
 
         const keyboardPanel = screen.getByRole('region', { name: 'Terminal helper keys' })
-        for (const key of ['Escape', 'Tab', 'Control', 'Alternate']) {
-            expect(within(keyboardPanel).getByRole('button', { name: key })).toBeInTheDocument()
+        expect(within(keyboardPanel).getByRole('button', { name: 'Add key' })).toBeInTheDocument()
+        fireEvent.click(within(keyboardPanel).getByRole('button', { name: 'Add key' }))
+
+        const picker = screen.getByRole('dialog', { name: 'Choose keys' })
+        expect(picker).toHaveAttribute('data-app-dialog-presentation', 'sheet')
+        for (const key of ['Ctrl', 'Alt', 'Shift', 'Esc', 'Tab']) {
+            expect(within(picker).getByRole('button', { name: key })).toBeInTheDocument()
         }
-        for (const key of ['Arrow left', 'Arrow up', 'Arrow down', 'Arrow right']) {
-            expect(within(keyboardPanel).getByRole('button', { name: key })).toBeInTheDocument()
+        for (const key of ['←', '↑', '↓', '→']) {
+            expect(within(picker).getByRole('button', { name: key })).toBeInTheDocument()
         }
 
-        fireEvent.click(within(keyboardPanel).getByRole('button', { name: 'Function keys' }))
-        expect(within(keyboardPanel).getByRole('button', { name: 'F1' })).toBeInTheDocument()
-        expect(within(keyboardPanel).queryByRole('button', { name: 'Escape' })).not.toBeInTheDocument()
+        fireEvent.click(within(picker).getByRole('tab', { name: 'F1–F12' }))
+        expect(within(picker).getByRole('button', { name: 'F1' })).toBeInTheDocument()
+        expect(within(picker).queryByRole('button', { name: 'Esc' })).not.toBeInTheDocument()
     })
 })

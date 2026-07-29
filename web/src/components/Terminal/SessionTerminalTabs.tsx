@@ -688,10 +688,7 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
                 onHistoryOpen={history.open}
                 onHistoryRefresh={history.refresh}
                 onHistoryClose={history.close}
-                ctrlActive={quickInput.ctrlActive}
-                altActive={quickInput.altActive}
                 onQuickInput={quickInput.sendQuickInput}
-                onModifierToggle={quickInput.toggleModifier}
                 onWritePlainInput={quickInput.writePlainInput}
             />
 

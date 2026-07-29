@@ -14,7 +14,7 @@ import {
 
 vi.mock('@/lib/use-translation', () => ({
     useTranslation: () => ({
-        t: (key: string) => ({
+        t: (key: string, values?: Record<string, string | number>) => ({
             'button.cancel': 'Cancel',
             'button.paste': 'Paste',
             'terminal.paste.fallbackTitle': 'Paste input',
@@ -33,6 +33,37 @@ vi.mock('@/lib/use-translation', () => ({
             'terminal.controls.navigation': 'Navigation',
             'terminal.controls.functionKeys': 'Function keys',
             'terminal.controls.symbols': 'Symbols',
+            'terminal.keys.saved': `Saved · ${values?.count ?? 0}`,
+            'terminal.keys.manage': 'Manage',
+            'terminal.keys.emptySaved': 'No saved combinations yet.',
+            'terminal.keys.combination': 'Key combination',
+            'terminal.keys.empty': 'No key selected',
+            'terminal.keys.groups': 'Key groups',
+            'terminal.keys.add': 'Add key',
+            'terminal.keys.save': 'Save',
+            'terminal.keys.savedSuccess': 'Combination saved.',
+            'terminal.keys.clear': 'Clear all',
+            'terminal.keys.send': 'Send',
+            'terminal.keys.remove': `Remove ${values?.key ?? ''}`,
+            'terminal.keys.pickTitle': 'Choose keys',
+            'terminal.keys.pickSubtitle': 'Compose a terminal key chord',
+            'terminal.keys.apply': 'Apply combination',
+            'terminal.keys.basic': 'Basic',
+            'terminal.keys.alphanumeric': 'Letters & numbers',
+            'terminal.keys.function': 'F1–F12',
+            'terminal.keys.symbol': 'Symbols',
+            'terminal.keys.savedTitle': 'Saved combinations',
+            'terminal.keys.savedSubtitle': `${values?.count ?? 0} on this device`,
+            'terminal.keys.load': 'Load',
+            'terminal.keys.delete': 'Delete',
+            'terminal.keys.deleted': 'Combination deleted.',
+            'terminal.keys.undo': 'Undo',
+            'terminal.keys.localOnly': 'Stored only on this device',
+            'terminal.keys.duplicate': 'This combination is already saved.',
+            'terminal.keys.limit': 'Limit reached.',
+            'terminal.keys.unavailable': 'Storage unavailable.',
+            'terminal.keys.unsupported': 'Unsupported combination.',
+            'terminal.keys.sendFailed': 'Could not send.',
             'terminal.search.title': 'Search terminal output',
             'terminal.search.input': 'Search terminal output',
             'terminal.search.caseSensitive': 'Match case',
@@ -107,10 +138,7 @@ const defaultProps: TerminalControlDockProps = {
     onHistoryOpen: vi.fn(),
     onHistoryRefresh: vi.fn(),
     onHistoryClose: vi.fn(),
-    ctrlActive: false,
-    altActive: false,
-    onQuickInput: vi.fn(),
-    onModifierToggle: vi.fn(),
+    onQuickInput: vi.fn(() => true),
     onWritePlainInput: vi.fn(() => true),
 }
 
@@ -147,6 +175,7 @@ function renderDock(overrides: Partial<TerminalControlDockProps> = {}) {
 
 function ControlledDock(props: {
     onWritePlainInput: (text: string) => boolean
+    onQuickInput?: (sequence: string) => boolean
     terminalContextKey?: string | null
 }) {
     const [activeTool, setActiveTool] = useState<TerminalControlDockProps['activeTool']>(null)
@@ -156,6 +185,7 @@ function ControlledDock(props: {
         activeTool,
         onActiveToolChange: setActiveTool,
         onWritePlainInput: props.onWritePlainInput,
+        onQuickInput: props.onQuickInput ?? defaultProps.onQuickInput,
     } as TerminalControlDockProps
     return (
         <TerminalControlDock {...dockProps} />
@@ -574,23 +604,50 @@ describe('TerminalControlDock', () => {
         expect(onWritePlainInput).toHaveBeenCalledWith('pwd')
     })
 
-    it('routes helper sequences through onQuickInput', () => {
-        const onQuickInput = vi.fn()
+    it('opens the key composer without writing to the terminal', () => {
+        const onQuickInput = vi.fn(() => true)
         renderDock({ activeTool: 'keys', onQuickInput })
 
-        fireEvent.click(screen.getByRole('button', { name: 'Escape' }))
+        expect(screen.getByText('Saved · 0')).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Add key' }))
 
-        expect(onQuickInput).toHaveBeenCalledWith('\u001b')
+        expect(screen.getByRole('dialog', { name: 'Choose keys' })).toBeInTheDocument()
+        expect(onQuickInput).not.toHaveBeenCalled()
     })
 
-    it('routes Ctrl and Alt through onModifierToggle', () => {
-        const onModifierToggle = vi.fn()
-        renderDock({ activeTool: 'keys', onModifierToggle })
+    it('writes a composed chord only after Send', () => {
+        const onQuickInput = vi.fn(() => true)
+        renderDock({ activeTool: 'keys', onQuickInput })
 
-        fireEvent.click(screen.getByRole('button', { name: 'Control' }))
-        fireEvent.click(screen.getByRole('button', { name: 'Alternate' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Add key' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Ctrl' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Shift' }))
+        fireEvent.click(screen.getByRole('tab', { name: 'F1–F12' }))
+        fireEvent.click(screen.getByRole('button', { name: 'F10' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Apply combination' }))
 
-        expect(onModifierToggle.mock.calls).toEqual([['ctrl'], ['alt']])
+        expect(onQuickInput).not.toHaveBeenCalled()
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+        expect(onQuickInput).toHaveBeenCalledWith('\x1b[21;6~')
+    })
+
+    it('keeps the composer draft when Keys is toggled closed and open', () => {
+        render(
+            <ControlledDock
+                onWritePlainInput={() => true}
+                onQuickInput={() => true}
+            />,
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: 'Keys' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Add key' }))
+        fireEvent.click(screen.getByRole('tab', { name: 'F1–F12' }))
+        fireEvent.click(screen.getByRole('button', { name: 'F10' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Apply combination' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Keys' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Keys' }))
+
+        expect(screen.getByText('F10')).toBeInTheDocument()
     })
 
     it('announces a successful direct paste without selecting a tool', async () => {

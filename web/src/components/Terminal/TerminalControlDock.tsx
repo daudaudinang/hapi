@@ -12,9 +12,9 @@ import {
 import { useTranslation } from '@/lib/use-translation'
 import {
     ADVANCED_KEY_GROUPS,
-    QUICK_INPUT_ROWS,
     type QuickInput,
 } from './terminalControls'
+import { TerminalKeyComposer } from './TerminalKeyComposer'
 import { TerminalSearchPanel } from './TerminalSearchPanel'
 import { TerminalHistoryPanel } from './TerminalHistoryPanel'
 import { TerminalSnippetPanel } from './TerminalSnippetPanel'
@@ -37,18 +37,8 @@ export type TerminalControlDockProps = {
     onHistoryOpen: () => void
     onHistoryRefresh: () => void
     onHistoryClose: () => void
-    ctrlActive: boolean
-    altActive: boolean
-    onQuickInput: (sequence: string) => void
-    onModifierToggle: (modifier: 'ctrl' | 'alt') => void
+    onQuickInput: (sequence: string) => boolean
     onWritePlainInput: (text: string) => boolean
-}
-
-const FUNCTION_KEYS = ADVANCED_KEY_GROUPS.find((group) => group.label === 'Function keys')?.keys ?? []
-const BACKSPACE: QuickInput = {
-    label: '⌫',
-    sequence: '\u007f',
-    description: 'Backspace',
 }
 
 function toggleTool(
@@ -146,19 +136,13 @@ function DockButton(props: {
 function HelperKeyButton(props: {
     input: QuickInput
     disabled: boolean
-    active?: boolean
-    onQuickInput: (sequence: string) => void
-    onModifierToggle: (modifier: 'ctrl' | 'alt') => void
+    onQuickInput: (sequence: string) => boolean
 }) {
     const handlePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
         event.preventDefault()
     }
 
     const handleClick = () => {
-        if (props.input.modifier) {
-            props.onModifierToggle(props.input.modifier)
-            return
-        }
         props.onQuickInput(props.input.sequence ?? '')
     }
 
@@ -166,73 +150,19 @@ function HelperKeyButton(props: {
         <button
             type="button"
             aria-label={props.input.description}
-            aria-pressed={props.input.modifier ? Boolean(props.active) : undefined}
             disabled={props.disabled}
             onPointerDown={handlePointerDown}
             onClick={handleClick}
-            className={`min-h-12 min-w-12 rounded-xl border px-2 py-1 text-xs font-semibold transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 disabled:cursor-not-allowed disabled:opacity-50 ${
-                props.active
-                    ? 'border-violet-500/40 bg-violet-500/15 text-violet-600 dark:text-violet-300'
-                    : 'border-[var(--app-border)] bg-[var(--app-secondary-bg)] text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)]'
-            }`}
+            className="min-h-12 min-w-12 rounded-xl border border-[var(--app-border)] bg-[var(--app-secondary-bg)] px-2 py-1 text-xs font-semibold text-[var(--app-fg)] transition-colors hover:bg-[var(--app-subtle-bg)] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
             {props.input.label}
         </button>
     )
 }
 
-function HelperKeyGrid(props: {
-    functionLayer: boolean
-    ctrlActive: boolean
-    altActive: boolean
-    disabled: boolean
-    onFunctionLayerChange: (active: boolean) => void
-    onQuickInput: (sequence: string) => void
-    onModifierToggle: (modifier: 'ctrl' | 'alt') => void
-}) {
-    const ordinaryKeys = [...QUICK_INPUT_ROWS.flatMap((row) => row.keys), BACKSPACE]
-    const keys = props.functionLayer ? FUNCTION_KEYS : ordinaryKeys
-
-    return (
-        <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-6">
-            <button
-                type="button"
-                aria-label="Function keys"
-                aria-pressed={props.functionLayer}
-                disabled={props.disabled}
-                onPointerDown={(event) => event.preventDefault()}
-                onClick={() => props.onFunctionLayerChange(!props.functionLayer)}
-                className={`min-h-12 min-w-12 rounded-xl border px-2 py-1 text-xs font-semibold transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 disabled:cursor-not-allowed disabled:opacity-50 ${
-                    props.functionLayer
-                        ? 'border-violet-500/40 bg-violet-500/15 text-violet-600 dark:text-violet-300'
-                        : 'border-[var(--app-border)] bg-[var(--app-secondary-bg)] text-[var(--app-fg)] hover:bg-[var(--app-subtle-bg)]'
-                }`}
-            >
-                Fn
-            </button>
-            {keys.map((input) => (
-                <HelperKeyButton
-                    key={input.label}
-                    input={input}
-                    disabled={props.disabled}
-                    active={
-                        input.modifier === 'ctrl'
-                            ? props.ctrlActive
-                            : input.modifier === 'alt'
-                                ? props.altActive
-                                : false
-                    }
-                    onQuickInput={props.onQuickInput}
-                    onModifierToggle={props.onModifierToggle}
-                />
-            ))}
-        </div>
-    )
-}
-
 function AdvancedKeyGroups(props: {
     disabled: boolean
-    onQuickInput: (sequence: string) => void
+    onQuickInput: (sequence: string) => boolean
 }) {
     const { t } = useTranslation()
     const groupLabels = {
@@ -255,7 +185,6 @@ function AdvancedKeyGroups(props: {
                                 input={input}
                                 disabled={props.disabled}
                                 onQuickInput={props.onQuickInput}
-                                onModifierToggle={() => undefined}
                             />
                         ))}
                     </div>
@@ -311,7 +240,7 @@ export function TerminalControlDock(props: TerminalControlDockProps) {
     const [pasteFeedback, setPasteFeedback] = useState(false)
     const [snippetAnnouncement, setSnippetAnnouncement] = useState(0)
     const [historyAnnouncement, setHistoryAnnouncement] = useState(0)
-    const [functionLayer, setFunctionLayer] = useState(false)
+    const [keysMounted, setKeysMounted] = useState(props.activeTool === 'keys')
     const pasteFeedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
     const snippetFeedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
     const historyFeedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -325,6 +254,12 @@ export function TerminalControlDock(props: TerminalControlDockProps) {
             clearTimeout(pasteFeedbackTimer.current)
         }
     }, [])
+
+    useEffect(() => {
+        if (props.activeTool === 'keys') {
+            setKeysMounted(true)
+        }
+    }, [props.activeTool])
 
     useEffect(() => {
         setSnippetAnnouncement(0)
@@ -488,20 +423,18 @@ export function TerminalControlDock(props: TerminalControlDockProps) {
                 </section>
             ) : null}
 
-            {props.activeTool === 'keys' ? (
+            {keysMounted ? (
                 <section
+                    hidden={props.activeTool !== 'keys'}
                     role="region"
                     aria-label={t('terminal.controls.keysPanel')}
-                    className="absolute bottom-full left-2 right-2 mb-2 rounded-2xl border border-[var(--app-border)] bg-[var(--app-bg)]/95 p-2 shadow-xl backdrop-blur transition-[opacity,transform] duration-150 motion-reduce:transition-none lg:hidden"
+                    className="absolute bottom-full left-2 right-2 mb-2 transition-[opacity,transform] duration-150 motion-reduce:transition-none lg:hidden"
                 >
-                    <HelperKeyGrid
-                        functionLayer={functionLayer}
-                        ctrlActive={props.ctrlActive}
-                        altActive={props.altActive}
+                    <TerminalKeyComposer
+                        terminalContextKey={props.terminalContextKey}
                         disabled={props.disabled}
-                        onFunctionLayerChange={setFunctionLayer}
-                        onQuickInput={props.onQuickInput}
-                        onModifierToggle={props.onModifierToggle}
+                        visible={props.activeTool === 'keys'}
+                        onSend={props.onQuickInput}
                     />
                 </section>
             ) : null}

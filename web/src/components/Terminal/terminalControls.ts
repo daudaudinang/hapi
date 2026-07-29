@@ -20,7 +20,7 @@ export type ModifierState = {
 export type TerminalQuickInput = {
     ctrlActive: boolean
     altActive: boolean
-    sendQuickInput: (sequence: string) => void
+    sendQuickInput: (sequence: string) => boolean
     toggleModifier: (modifier: 'ctrl' | 'alt') => void
     writePlainInput: (text: string) => boolean
     writeTerminalData: (text: string) => void
@@ -141,12 +141,12 @@ export function useTerminalQuickInput(args: {
         return accepted
     }, [args, resetModifiers])
 
-    const sendQuickInput = useCallback((sequence: string) => {
+    const sendQuickInput = useCallback((sequence: string): boolean => {
         if (!sequence || args.disabled) {
-            return
+            return false
         }
-        writeWithModifiers(sequence, { ctrl: ctrlActive, alt: altActive })
-    }, [args, ctrlActive, altActive, writeWithModifiers])
+        return writeWithModifiers(sequence, { ctrl: ctrlActive, alt: altActive })
+    }, [args.disabled, ctrlActive, altActive, writeWithModifiers])
 
     const toggleModifier = useCallback((modifier: 'ctrl' | 'alt') => {
         if (args.disabled) {
