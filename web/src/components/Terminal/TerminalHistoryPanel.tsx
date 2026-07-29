@@ -60,7 +60,7 @@ export function TerminalHistoryPanel(props: TerminalHistoryPanelProps) {
     }
 
     const stateContent = () => {
-        if (props.state.status === 'loading') {
+        if (props.state.status === 'idle' || props.state.status === 'loading') {
             return <p role="status">{t('terminal.history.loading')}</p>
         }
         if (props.state.status === 'unsupported') {

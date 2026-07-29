@@ -86,6 +86,7 @@ describe('TerminalHistoryPanel', () => {
     })
 
     it.each([
+        [{ status: 'idle', entries: [] }, 'Loading history…'],
         [{ status: 'loading', entries: [] }, 'Loading history…'],
         [{ status: 'ready', entries: [] }, 'No commands yet.'],
         [{ status: 'unsupported', entries: [], shell: 'zsh' }, 'This shell does not support live history.'],

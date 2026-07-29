@@ -1,12 +1,16 @@
 import { act, renderHook } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { TerminalHistoryResult } from '@hapi/protocol'
 import { useTerminalHistory } from './useTerminalHistory'
 
 describe('useTerminalHistory', () => {
+    afterEach(() => {
+        vi.useRealTimers()
+    })
+
     it('loads matching history and ignores stale responses', () => {
         let listener: ((result: TerminalHistoryResult) => void) | null = null
-        const request = vi.fn(() => true)
+        const request = vi.fn<(requestId: string, limit: number) => boolean>(() => true)
         const { result } = renderHook(() => useTerminalHistory({
             terminalContextKey: 'session-1:terminal-1',
             terminalId: 'terminal-1',
@@ -50,7 +54,7 @@ describe('useTerminalHistory', () => {
 
     it('maps unsupported, not-ready and request failures to explicit UI states', () => {
         let listener: ((result: TerminalHistoryResult) => void) | null = null
-        const request = vi.fn(() => true)
+        const request = vi.fn<(requestId: string, limit: number) => boolean>(() => true)
         const { result } = renderHook(() => useTerminalHistory({
             terminalContextKey: 'machine-1:terminal-1',
             terminalId: 'terminal-1',
@@ -103,7 +107,7 @@ describe('useTerminalHistory', () => {
 
     it('resets when closed or when terminal identity changes', () => {
         let listener: ((result: TerminalHistoryResult) => void) | null = null
-        const request = vi.fn(() => true)
+        const request = vi.fn<(requestId: string, limit: number) => boolean>(() => true)
         const rendered = renderHook((props: { key: string; terminalId: string }) => useTerminalHistory({
             terminalContextKey: props.key,
             terminalId: props.terminalId,
@@ -132,5 +136,26 @@ describe('useTerminalHistory', () => {
         act(() => rendered.result.current.open())
         act(() => rendered.result.current.close())
         expect(rendered.result.current.state).toEqual({ status: 'idle', entries: [] })
+    })
+
+    it('leaves loading state when the private Hub correlation expires', () => {
+        vi.useFakeTimers()
+        const request = vi.fn<(requestId: string, limit: number) => boolean>(() => true)
+        const { result } = renderHook(() => useTerminalHistory({
+            terminalContextKey: 'session-1:terminal-1',
+            terminalId: 'terminal-1',
+            request,
+            subscribe: () => {},
+        }))
+
+        act(() => result.current.open())
+        expect(result.current.state.status).toBe('loading')
+
+        act(() => vi.advanceTimersByTime(10_001))
+        expect(result.current.state).toEqual({
+            status: 'error',
+            entries: [],
+            message: 'request_failed',
+        })
     })
 })

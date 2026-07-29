@@ -16,6 +16,7 @@ type UseTerminalHistoryOptions = {
 }
 
 let fallbackRequestSequence = 0
+const HISTORY_REQUEST_TIMEOUT_MS = 10_000
 
 function createRequestId(): string {
     if (typeof globalThis.crypto?.randomUUID === 'function') {
@@ -33,6 +34,7 @@ export function useTerminalHistory(options: UseTerminalHistoryOptions): {
 } {
     const [state, setState] = useState<TerminalHistoryState>({ status: 'idle', entries: [] })
     const activeRequestRef = useRef<{ requestId: string; terminalContextKey: string; terminalId: string } | null>(null)
+    const requestTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const terminalContextKeyRef = useRef(options.terminalContextKey)
     const terminalIdRef = useRef(options.terminalId)
     const requestRef = useRef(options.request)
@@ -40,10 +42,19 @@ export function useTerminalHistory(options: UseTerminalHistoryOptions): {
     terminalIdRef.current = options.terminalId
     requestRef.current = options.request
 
+    const clearRequestTimeout = useCallback(() => {
+        if (requestTimeoutRef.current === null) {
+            return
+        }
+        clearTimeout(requestTimeoutRef.current)
+        requestTimeoutRef.current = null
+    }, [])
+
     useEffect(() => {
+        clearRequestTimeout()
         activeRequestRef.current = null
         setState({ status: 'idle', entries: [] })
-    }, [options.terminalContextKey])
+    }, [clearRequestTimeout, options.terminalContextKey])
 
     useEffect(() => {
         options.subscribe((result) => {
@@ -57,6 +68,8 @@ export function useTerminalHistory(options: UseTerminalHistoryOptions): {
                 return
             }
 
+            clearRequestTimeout()
+            activeRequestRef.current = null
             if (result.status === 'ok') {
                 setState({ status: 'ready', entries: result.entries })
                 return
@@ -75,9 +88,12 @@ export function useTerminalHistory(options: UseTerminalHistoryOptions): {
                 message: result.status
             })
         })
-    }, [options.subscribe])
+    }, [clearRequestTimeout, options.subscribe])
+
+    useEffect(() => clearRequestTimeout, [clearRequestTimeout])
 
     const load = useCallback(() => {
+        clearRequestTimeout()
         const terminalContextKey = terminalContextKeyRef.current
         const terminalId = terminalIdRef.current
         if (!terminalContextKey || !terminalId) {
@@ -92,13 +108,25 @@ export function useTerminalHistory(options: UseTerminalHistoryOptions): {
         if (!requestRef.current(requestId, 100)) {
             activeRequestRef.current = null
             setState({ status: 'error', entries: [], message: 'request_failed' })
+            return
         }
-    }, [])
+
+        requestTimeoutRef.current = setTimeout(() => {
+            const active = activeRequestRef.current
+            if (!active || active.requestId !== requestId) {
+                return
+            }
+            requestTimeoutRef.current = null
+            activeRequestRef.current = null
+            setState({ status: 'error', entries: [], message: 'request_failed' })
+        }, HISTORY_REQUEST_TIMEOUT_MS)
+    }, [clearRequestTimeout])
 
     const close = useCallback(() => {
+        clearRequestTimeout()
         activeRequestRef.current = null
         setState({ status: 'idle', entries: [] })
-    }, [])
+    }, [clearRequestTimeout])
 
     return {
         state,
