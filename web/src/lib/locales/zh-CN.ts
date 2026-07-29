@@ -260,6 +260,8 @@ export default {
   'terminal.history.insertOnly': '仅插入 · 不执行',
   'terminal.history.count': '{count} 条命令',
   'terminal.history.searchPlaceholder': '搜索命令历史…',
+  'terminal.history.searchAction': '搜索',
+  'terminal.history.clearSearch': '清除搜索',
   'terminal.history.refresh': '刷新历史记录',
   'terminal.history.close': '关闭历史记录',
   'terminal.history.loading': '正在加载历史记录…',

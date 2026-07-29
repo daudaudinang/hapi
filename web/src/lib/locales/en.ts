@@ -256,6 +256,8 @@ const en = {
   'terminal.history.insertOnly': 'Insert only · does not run',
   'terminal.history.count': '{count} commands',
   'terminal.history.searchPlaceholder': 'Search command history…',
+  'terminal.history.searchAction': 'Search',
+  'terminal.history.clearSearch': 'Clear search',
   'terminal.history.refresh': 'Refresh history',
   'terminal.history.close': 'Close history',
   'terminal.history.loading': 'Loading history…',

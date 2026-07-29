@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import { useTranslation } from '@/lib/use-translation'
 import type { TerminalHistoryState } from './useTerminalHistory'
 
@@ -32,10 +32,11 @@ function IconButton(props: {
 
 export function TerminalHistoryPanel(props: TerminalHistoryPanelProps) {
     const { t, locale } = useTranslation()
-    const [query, setQuery] = useState('')
+    const [draftQuery, setDraftQuery] = useState('')
+    const [appliedQuery, setAppliedQuery] = useState('')
     const [insertStatus, setInsertStatus] = useState<'success' | 'error' | null>(null)
     const entries = props.state.status === 'ready' ? props.state.entries : []
-    const normalizedQuery = query.trim().toLocaleLowerCase(locale)
+    const normalizedQuery = appliedQuery.trim().toLocaleLowerCase(locale)
     const filteredEntries = useMemo(() => {
         if (!normalizedQuery) {
             return entries
@@ -57,6 +58,18 @@ export function TerminalHistoryPanel(props: TerminalHistoryPanelProps) {
         setInsertStatus('success')
         props.onInserted?.()
         props.onClose()
+    }
+
+    const applySearch = (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault()
+        setAppliedQuery(draftQuery)
+        setInsertStatus(null)
+    }
+
+    const clearSearch = () => {
+        setDraftQuery('')
+        setAppliedQuery('')
+        setInsertStatus(null)
     }
 
     const stateContent = () => {
@@ -131,26 +144,48 @@ export function TerminalHistoryPanel(props: TerminalHistoryPanelProps) {
             </header>
 
             {props.state.status === 'ready' ? (
-                <label className="shrink-0 border-b border-[var(--app-border)] p-2.5">
-                    <span className="sr-only">
-                        {t('terminal.history.searchPlaceholder')}
-                    </span>
-                    <input
-                        type="search"
-                        value={query}
-                        enterKeyHint="search"
-                        autoCapitalize="none"
-                        autoCorrect="off"
-                        spellCheck={false}
-                        aria-label={t('terminal.history.searchPlaceholder')}
-                        placeholder={t('terminal.history.searchPlaceholder')}
-                        onChange={(event) => {
-                            setQuery(event.currentTarget.value)
-                            setInsertStatus(null)
-                        }}
-                        className="min-h-11 w-full rounded-xl border border-[var(--app-border)] bg-[var(--app-secondary-bg)] px-3 text-sm text-[var(--app-fg)] outline-none placeholder:text-[var(--app-hint)] focus-visible:ring-2 focus-visible:ring-violet-500"
-                    />
-                </label>
+                <form
+                    role="search"
+                    onSubmit={applySearch}
+                    className="flex shrink-0 gap-2 border-b border-[var(--app-border)] p-2.5"
+                >
+                    <label className="relative min-w-0 flex-1">
+                        <span className="sr-only">
+                            {t('terminal.history.searchPlaceholder')}
+                        </span>
+                        <input
+                            type="search"
+                            value={draftQuery}
+                            enterKeyHint="search"
+                            autoCapitalize="none"
+                            autoCorrect="off"
+                            spellCheck={false}
+                            aria-label={t('terminal.history.searchPlaceholder')}
+                            placeholder={t('terminal.history.searchPlaceholder')}
+                            onChange={(event) => {
+                                setDraftQuery(event.currentTarget.value)
+                                setInsertStatus(null)
+                            }}
+                            className="min-h-11 w-full appearance-none rounded-xl border border-[var(--app-border)] bg-[var(--app-secondary-bg)] px-3 pr-11 text-sm text-[var(--app-fg)] outline-none placeholder:text-[var(--app-hint)] focus-visible:ring-2 focus-visible:ring-violet-500 [&::-webkit-search-cancel-button]:hidden"
+                        />
+                        {draftQuery ? (
+                            <button
+                                type="button"
+                                aria-label={t('terminal.history.clearSearch')}
+                                onClick={clearSearch}
+                                className="absolute right-1 top-1/2 grid min-h-9 min-w-9 -translate-y-1/2 place-items-center rounded-lg text-base text-[var(--app-hint)] transition-colors motion-reduce:transition-none hover:bg-[var(--app-subtle-bg)] hover:text-[var(--app-fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                            >
+                                <span aria-hidden="true">×</span>
+                            </button>
+                        ) : null}
+                    </label>
+                    <button
+                        type="submit"
+                        className="min-h-11 shrink-0 rounded-xl bg-violet-600 px-3 text-xs font-semibold text-white transition-opacity motion-reduce:transition-none hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--app-bg)]"
+                    >
+                        {t('terminal.history.searchAction')}
+                    </button>
+                </form>
             ) : null}
 
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">

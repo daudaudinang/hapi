@@ -260,6 +260,8 @@ export default {
   'terminal.history.insertOnly': 'Chỉ chèn · không thực thi',
   'terminal.history.count': '{count} lệnh',
   'terminal.history.searchPlaceholder': 'Tìm trong lịch sử lệnh…',
+  'terminal.history.searchAction': 'Tìm',
+  'terminal.history.clearSearch': 'Xoá tìm kiếm',
   'terminal.history.refresh': 'Làm mới lịch sử',
   'terminal.history.close': 'Đóng lịch sử',
   'terminal.history.loading': 'Đang tải lịch sử…',
