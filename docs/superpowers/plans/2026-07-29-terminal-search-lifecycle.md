@@ -1,8 +1,8 @@
-# Desktop Terminal Search Lifecycle Implementation Plan
+# Terminal Search Lifecycle Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Giữ nguyên phiên Search khi panel desktop chỉ bị thu gọn, nhưng xoá đúng lúc khi người dùng nhấn `×` hoặc terminal đổi ngữ cảnh.
+**Goal:** Giữ nguyên phiên Search trên mobile và desktop khi panel chỉ bị thu gọn, nhưng xoá đúng lúc khi người dùng nhấn `×` hoặc terminal đổi ngữ cảnh.
 
 **Architecture:** `SessionTerminalTabs` quản lý riêng công cụ đang hiển thị và việc một phiên Search còn tồn tại. `TerminalControlDock` giữ `TerminalSearchPanel` được mount khi phiên còn tồn tại, dùng thuộc tính `hidden` để thu gọn, và có callback riêng cho thao tác `×`.
 
@@ -235,4 +235,138 @@ Kỳ vọng: test/typecheck/build PASS; `git diff --check` không có lỗi whit
 git add web/src/components/Terminal/SessionTerminalTabs.tsx \
         web/src/components/Terminal/SessionTerminalTabs.test.tsx
 git commit -m "fix(web): retain desktop terminal searches"
+```
+
+### Task 3: Thống nhất lifecycle Search trên mobile
+
+**Files:**
+- Modify: `web/src/components/Terminal/SessionTerminalTabs.tsx`
+- Test: `web/src/components/Terminal/SessionTerminalTabs.test.tsx`
+- Modify: `web/src/components/editor/EditorTerminal.tsx`
+- Test: `web/src/components/editor/EditorTerminal.test.tsx`
+
+- [ ] **Step 1: Viết test thất bại cho session terminal mobile**
+
+Ở viewport mobile, mở Search, publish controller ready và nhập `needle`. Kiểm
+tra body tap và icon toggle:
+
+```tsx
+fireEvent.pointerDown(screen.getByTestId('terminal-surface'))
+expect(controller.clear).not.toHaveBeenCalled()
+expect(screen.getByRole('region', { name: 'Search terminal output' }))
+    .toBeVisible()
+
+fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+expect(controller.clear).not.toHaveBeenCalled()
+expect(screen.getByRole('region', {
+    name: 'Search terminal output',
+    hidden: true,
+})).toBeInTheDocument()
+
+fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+expect(screen.getByRole('textbox', {
+    name: 'Search terminal output',
+})).toHaveValue('needle')
+```
+
+Giữ kỳ vọng đổi tab, disconnect và unmount vẫn gọi `controller.clear()`.
+
+- [ ] **Step 2: Viết test thất bại cho editor terminal mobile**
+
+Đổi mock `TerminalSearchPanel` thành component có state input. Mở Search của
+machine terminal, nhập `needle`, body tap rồi toggle Search. Kỳ vọng giống
+session terminal:
+
+```tsx
+expect(controller.clear).not.toHaveBeenCalled()
+expect(searchInput).toHaveValue('needle')
+```
+
+Giữ test đổi editor tab, collapse, disconnect và unmount phải clear.
+
+- [ ] **Step 3: Chạy test để xác nhận RED**
+
+```bash
+bun run --cwd web test \
+  src/components/Terminal/SessionTerminalTabs.test.tsx \
+  src/components/editor/EditorTerminal.test.tsx
+```
+
+Kỳ vọng: FAIL vì mobile body/toggle hiện còn gọi `clearSearch`.
+
+- [ ] **Step 4: Bỏ khác biệt lifecycle theo breakpoint**
+
+Trong `SessionTerminalTabs`, đổi handler visibility thành:
+
+```tsx
+const dismissDockTool = useCallback(() => {
+    if (activeDockTool !== 'search') {
+        setActiveDockTool(null)
+    }
+}, [activeDockTool])
+
+const handleActiveDockToolChange = useCallback((tool: TerminalDockTool | null) => {
+    if (tool === 'search') {
+        setSearchMounted(true)
+    }
+    setActiveDockTool(tool)
+}, [])
+```
+
+`isDesktopTerminalViewport()` chỉ còn dùng để giới hạn `Ctrl/Cmd+F`.
+
+- [ ] **Step 5: Áp dụng cùng state model cho EditorTerminal**
+
+Thêm `searchMounted`, reset trong `clearSearch`, dùng nó cho `searchEnabled`,
+và để body chỉ thu gọn công cụ khác:
+
+```tsx
+const [searchMounted, setSearchMounted] = useState(false)
+const searchEnabled = searchMounted && searchIdentity !== null
+
+const dismissDockTool = useCallback(() => {
+    if (activeDockTool !== 'search') {
+        setActiveDockTool(null)
+    }
+}, [activeDockTool])
+```
+
+Truyền:
+
+```tsx
+searchMounted={searchMounted}
+onSearchClose={() => clearSearch()}
+```
+
+- [ ] **Step 6: Chạy test để xác nhận GREEN**
+
+```bash
+bun run --cwd web test \
+  src/components/Terminal/SessionTerminalTabs.test.tsx \
+  src/components/Terminal/TerminalControlDock.test.tsx \
+  src/components/editor/EditorTerminal.test.tsx
+```
+
+Kỳ vọng: toàn bộ test được chọn PASS.
+
+- [ ] **Step 7: Kiểm chứng toàn bộ web**
+
+```bash
+bun run --cwd web test
+bun run --cwd web typecheck
+bun run build:web
+git diff --check
+```
+
+Kỳ vọng: test/typecheck/build PASS; không có lỗi whitespace.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add docs/superpowers/plans/2026-07-29-terminal-search-lifecycle.md \
+        web/src/components/Terminal/SessionTerminalTabs.tsx \
+        web/src/components/Terminal/SessionTerminalTabs.test.tsx \
+        web/src/components/editor/EditorTerminal.tsx \
+        web/src/components/editor/EditorTerminal.test.tsx
+git commit -m "fix(web): retain mobile terminal searches"
 ```
