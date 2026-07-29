@@ -72,6 +72,19 @@ describe('AppDialog', () => {
             .toHaveAttribute('data-app-dialog-presentation', 'alert')
     })
 
+    it('disables dialog motion when the user requests reduced motion', () => {
+        render(
+            <AppDialog open>
+                <AppDialogContent data-testid="content">
+                    <AppDialogHeader title="Accessible dialog" />
+                </AppDialogContent>
+            </AppDialog>
+        )
+
+        expect(screen.getByTestId('content'))
+            .toHaveClass('motion-reduce:animate-none', 'motion-reduce:duration-0')
+    })
+
     it('renders a mobile-only handle for sheets', () => {
         render(
             <AppDialog open>

@@ -56,7 +56,7 @@ export function AppDialogContent(props: AppDialogContentProps) {
                 if (!dismissible) event.preventDefault()
             }}
             className={cn(
-                'flex max-h-[calc(100dvh-24px)] flex-col gap-0 overflow-hidden border-[var(--app-border)] bg-[var(--app-bg)] p-0',
+                'flex max-h-[calc(100dvh-24px)] flex-col gap-0 overflow-hidden border-[var(--app-border)] bg-[var(--app-bg)] p-0 motion-reduce:animate-none motion-reduce:duration-0',
                 presentationClasses[presentation],
                 className
             )}

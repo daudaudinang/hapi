@@ -48,33 +48,33 @@ export function SessionTaskListControl({ todos, compact = false }: {
                 />
                 <AppDialogBody className="overflow-y-auto px-4 pb-4">
                     <div className="session-task-progress">
-                    <div
-                        role="progressbar"
-                        aria-label={label}
-                        aria-valuemin={0}
-                        aria-valuemax={total}
-                        aria-valuenow={completed}
-                        className="session-task-progress__track"
-                    >
                         <div
-                            className={`session-task-progress__fill session-task-progress__fill--${visualState}`}
-                            style={{ width: `${Math.round((completed / total) * 100)}%` }}
-                        />
-                    </div>
+                            role="progressbar"
+                            aria-label={label}
+                            aria-valuemin={0}
+                            aria-valuemax={total}
+                            aria-valuenow={completed}
+                            className="session-task-progress__track"
+                        >
+                            <div
+                                className={`session-task-progress__fill session-task-progress__fill--${visualState}`}
+                                style={{ width: `${Math.round((completed / total) * 100)}%` }}
+                            />
+                        </div>
                     </div>
                     <ul className="session-task-timeline">
-                    {todos.map((todo, index) => (
-                        <li
-                            key={`${todo.id || 'todo'}:${index}`}
-                            className={`session-task-row session-task-row--${todo.status}`}
-                        >
-                            <span className="session-task-row__dot" aria-hidden="true" />
-                            <div className="min-w-0">
-                                <p className="break-words text-sm">{todo.content}</p>
-                                <p className="session-task-row__status">{t(`session.tasks.status.${todo.status}`)}</p>
-                            </div>
-                        </li>
-                    ))}
+                        {todos.map((todo, index) => (
+                            <li
+                                key={`${todo.id || 'todo'}:${index}`}
+                                className={`session-task-row session-task-row--${todo.status}`}
+                            >
+                                <span className="session-task-row__dot" aria-hidden="true" />
+                                <div className="min-w-0">
+                                    <p className="break-words text-sm">{todo.content}</p>
+                                    <p className="session-task-row__status">{t(`session.tasks.status.${todo.status}`)}</p>
+                                </div>
+                            </li>
+                        ))}
                     </ul>
                 </AppDialogBody>
             </AppDialogContent>
