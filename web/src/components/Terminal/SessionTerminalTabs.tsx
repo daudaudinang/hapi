@@ -176,29 +176,17 @@ export function SessionTerminalTabs(props: SessionTerminalTabsProps) {
     }, [clearSearch, searchIdentity])
 
     const dismissDockTool = useCallback(() => {
-        if (isDesktopTerminalViewport()) {
-            if (activeDockTool !== 'search') {
-                setActiveDockTool(null)
-            }
-            return
+        if (activeDockTool !== 'search') {
+            setActiveDockTool(null)
         }
-        clearSearch()
-    }, [activeDockTool, clearSearch])
+    }, [activeDockTool])
 
     const handleActiveDockToolChange = useCallback((tool: TerminalDockTool | null) => {
-        if (isDesktopTerminalViewport()) {
-            if (tool === 'search') {
-                setSearchMounted(true)
-            }
-            setActiveDockTool(tool)
-            return
-        }
-        clearSearch(false)
         if (tool === 'search') {
             setSearchMounted(true)
         }
         setActiveDockTool(tool)
-    }, [clearSearch])
+    }, [])
 
     useEffect(() => {
         if (!canUseTerminal || !interactionActive) return

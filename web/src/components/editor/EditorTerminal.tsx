@@ -94,6 +94,7 @@ function EditorTerminalBody(props: {
     const [terminalSelection, setTerminalSelection] = useState<string | null>(null)
     const [terminalMousePos, setTerminalMousePos] = useState<{ x: number; y: number } | null>(null)
     const [activeDockTool, setActiveDockTool] = useState<TerminalDockTool | null>(null)
+    const [searchMounted, setSearchMounted] = useState(false)
     const [searchState, setSearchState] = useState<TerminalSearchState>(
         EMPTY_TERMINAL_SEARCH_STATE,
     )
@@ -135,6 +136,7 @@ function EditorTerminalBody(props: {
         searchStateRef.current.controller?.clear()
         searchStateRef.current = EMPTY_TERMINAL_SEARCH_STATE
         setSearchState(EMPTY_TERMINAL_SEARCH_STATE)
+        setSearchMounted(false)
         if (closeTool) {
             setActiveDockTool(null)
         }
@@ -145,11 +147,19 @@ function EditorTerminalBody(props: {
     }, [clearSearch, searchIdentity])
 
     const handleActiveDockToolChange = useCallback((tool: TerminalDockTool | null) => {
-        clearSearch(false)
+        if (tool === 'search') {
+            setSearchMounted(true)
+        }
         setActiveDockTool(tool)
-    }, [clearSearch])
+    }, [])
 
-    const searchEnabled = activeDockTool === 'search' && searchIdentity !== null
+    const dismissDockTool = useCallback(() => {
+        if (activeDockTool !== 'search') {
+            setActiveDockTool(null)
+        }
+    }, [activeDockTool])
+
+    const searchEnabled = searchMounted && searchIdentity !== null
     const searchCallbackIdentity = searchIdentity
     const searchCallbackGeneration = searchGenerationRef.current
     const handleSearchStateChange = useCallback((nextState: TerminalSearchState) => {
@@ -335,7 +345,7 @@ function EditorTerminalBody(props: {
             <div
                 ref={terminalContainerRef}
                 data-testid="terminal-surface"
-                onPointerDownCapture={() => clearSearch()}
+                onPointerDownCapture={dismissDockTool}
                 className="relative min-h-0 flex-1 overflow-hidden p-2"
             >
                 {canUseTerminal ? (
@@ -387,7 +397,7 @@ function EditorTerminalBody(props: {
                 disabled={quickInputDisabled}
                 activeTool={activeDockTool}
                 onActiveToolChange={handleActiveDockToolChange}
-                searchMounted={activeDockTool === 'search'}
+                searchMounted={searchMounted}
                 onSearchClose={() => clearSearch()}
                 searchState={searchState}
                 ctrlActive={quickInput.ctrlActive}

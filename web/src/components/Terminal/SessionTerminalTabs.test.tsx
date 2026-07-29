@@ -628,7 +628,7 @@ describe('SessionTerminalTabs', () => {
         expect(controller.clear).not.toHaveBeenCalled()
     })
 
-    it('keeps mobile body dismissal and clears Search on tab change, disconnect, and unmount', () => {
+    it('retains mobile Search on body tap and toggle but clears on tab change, disconnect, and unmount', () => {
         setDesktopViewport(false)
         mocks.controller = makeController([state('t1'), state('t2')])
         const rendered = renderTabs()
@@ -642,12 +642,30 @@ describe('SessionTerminalTabs', () => {
         }
 
         const bodyController = openReadySearch()
+        fireEvent.change(screen.getByRole('textbox', {
+            name: 'Search terminal output',
+        }), {
+            target: { value: 'needle' },
+        })
         fireEvent.pointerDown(screen.getByTestId('terminal-surface'))
-        expect(bodyController.clear).toHaveBeenCalled()
+        expect(bodyController.clear).not.toHaveBeenCalled()
+        expect(screen.getByRole('region', { name: 'Search terminal output' }))
+            .toBeVisible()
 
-        const tabController = openReadySearch()
+        fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+        expect(bodyController.clear).not.toHaveBeenCalled()
+        expect(screen.getByRole('region', {
+            name: 'Search terminal output',
+            hidden: true,
+        }).parentElement).toHaveAttribute('hidden')
+
+        fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+        expect(screen.getByRole('textbox', {
+            name: 'Search terminal output',
+        })).toHaveValue('needle')
+
         fireEvent.click(screen.getByRole('button', { name: 't2' }))
-        expect(tabController.clear).toHaveBeenCalled()
+        expect(bodyController.clear).toHaveBeenCalled()
         expect(screen.queryByRole('region', { name: 'Search terminal output' }))
             .not.toBeInTheDocument()
 

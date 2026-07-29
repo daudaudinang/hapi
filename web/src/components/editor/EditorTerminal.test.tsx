@@ -45,18 +45,26 @@ vi.mock('@/components/Terminal/TerminalSnippetPanel', () => ({
 }))
 
 vi.mock('@/components/Terminal/TerminalSearchPanel', () => ({
-    TerminalSearchPanel: (props: {
+    TerminalSearchPanel: function TerminalSearchPanel(props: {
         state: TerminalSearchState
         onClose: () => void
-    }) => (
-        <section
-            role="region"
-            aria-label="Search terminal output"
-            data-search-status={props.state.status}
-        >
-            <button type="button" onClick={props.onClose}>Close search</button>
-        </section>
-    ),
+    }) {
+        const [query, setQuery] = useState('')
+        return (
+            <section
+                role="region"
+                aria-label="Search terminal output"
+                data-search-status={props.state.status}
+            >
+                <input
+                    aria-label="Search terminal output"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                />
+                <button type="button" onClick={props.onClose}>Close search</button>
+            </section>
+        )
+    },
 }))
 
 var mocks = {
@@ -534,7 +542,40 @@ describe('EditorTerminal', () => {
         expect(focus).not.toHaveBeenCalled()
     })
 
-    it('clears machine Search on body tap, tab switch, collapse, disconnect, and unmount', () => {
+    it('retains machine Search on mobile body tap and toggle', () => {
+        setDockViewport(true)
+        renderMachineTerminal({ mobileMode: true })
+
+        fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+        const controller = searchController()
+        act(() => mocks.terminalViewProps.at(-1)?.onSearchStateChange?.(
+            readySearchState(controller),
+        ))
+        fireEvent.change(screen.getByRole('textbox', {
+            name: 'Search terminal output',
+        }), {
+            target: { value: 'needle' },
+        })
+
+        fireEvent.pointerDown(screen.getByTestId('terminal-surface'))
+        expect(controller.clear).not.toHaveBeenCalled()
+        expect(screen.getByRole('region', { name: 'Search terminal output' }))
+            .toBeVisible()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+        expect(controller.clear).not.toHaveBeenCalled()
+        expect(screen.getByRole('region', {
+            name: 'Search terminal output',
+            hidden: true,
+        }).parentElement).toHaveAttribute('hidden')
+
+        fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+        expect(screen.getByRole('textbox', {
+            name: 'Search terminal output',
+        })).toHaveValue('needle')
+    })
+
+    it('clears machine Search on tab switch, collapse, disconnect, and unmount', () => {
         const machineTabs: EditorTab[] = [
             { id: 'term-machine-1', type: 'terminal', label: 'Terminal: bash', shell: 'bash', machineId: 'machine-1', cwd: '/repo' },
             { id: 'term-machine-2', type: 'terminal', label: 'Terminal: zsh', shell: 'zsh', machineId: 'machine-1', cwd: '/repo' },
@@ -559,10 +600,6 @@ describe('EditorTerminal', () => {
             ))
             return controller
         }
-
-        const bodyController = openReadySearch()
-        fireEvent.pointerDown(screen.getAllByTestId('terminal-surface')[0])
-        expect(bodyController.clear).toHaveBeenCalled()
 
         const tabController = openReadySearch()
         rendered.rerender(
