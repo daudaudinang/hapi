@@ -1,7 +1,7 @@
 # Live Terminal History Design
 
 **Ngày:** 2026-07-29  
-**Trạng thái:** Thiết kế đã duyệt, chờ user review spec
+**Trạng thái:** Đã triển khai và kiểm chứng tự động; chờ nghiệm thu UI trên bản chạy
 
 ## 1. Mục tiêu
 
